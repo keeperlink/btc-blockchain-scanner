@@ -38,7 +38,8 @@ public class DBConnection {
             + "&useUnicode=true"
             + "&characterEncoding=UTF-8"
             + "&rewriteBatchedStatements=true"
-            + "&defaultRowPrefetch=10000";
+            + "&defaultRowPrefetch=10000"
+            + "&sql_log_bin=OFF";
     private static String DEFAULT_DB_USER = "root";
     private static String DEFAULT_DB_PASSWORD = "password";
     private final String dbname;
@@ -64,10 +65,10 @@ public class DBConnection {
     private Connection makeJDBCConnection(String url, String user, String password) {
         try {
             Connection con = DriverManager.getConnection(url, user, password);
-            con.createStatement().execute("SET sql_log_bin=OFF");
+            //con.createStatement().execute("SET sql_log_bin=OFF");
             return con;
         } catch (SQLException e) {
-            log.error("url=" + url, e);
+            //log.error("url=" + url, e);
             throw new IllegalStateException(e);
         }
     }

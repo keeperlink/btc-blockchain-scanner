@@ -119,12 +119,16 @@ public class DbUpdateInput extends DbUpdate {
         synchronized (cacheData) {
             PK key = new PK(txInput.getTransactionId(), txInput.getPos());
             TxInput txInput2 = cacheData.queueMap.get(key);
+            boolean updatedInQueue = false;
             if (txInput2 != null) {
-                cacheData.addQueue.remove(txInput2);
-                cacheData.addQueue.add(txInput);
+                if (cacheData.addQueue.remove(txInput2)) {
+                    cacheData.addQueue.add(txInput);
+                    updatedInQueue = true;
+                }
                 cacheData.queueMap.put(key, txInput);
                 //cacheData.queueMapTx.put(key, txInput);
-            } else {
+            }
+            if (!updatedInQueue) {
                 cacheData.queueUpdate.add(txInput);
             }
         }

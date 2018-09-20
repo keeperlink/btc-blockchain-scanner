@@ -39,10 +39,10 @@ public class DbQueryAddress {
 
     public DbQueryAddress(DBConnection conn, SrcAddressType addressType) {
         this.addressType = addressType;
-        this.psFindByAddressId = conn.prepareStatement(fixTableName(SQL_FIND_BY_ADDRESS_ID));
-        this.psFindByAddress = conn.prepareStatement(fixTableName(SQL_FIND_BY_ADDRESS));
-        this.psQueryWalletId = conn.prepareStatement(fixTableName(SQL_QUERY_WALLET_ID));
-        this.psQueryLastAddressId = conn.prepareStatement(fixTableName(SQL_QUERY_LAST_ADDRESS_ID));
+        this.psFindByAddressId = conn == null ? null : conn.prepareStatement(fixTableName(SQL_FIND_BY_ADDRESS_ID));
+        this.psFindByAddress = conn == null ? null : conn.prepareStatement(fixTableName(SQL_FIND_BY_ADDRESS));
+        this.psQueryWalletId = conn == null ? null : conn.prepareStatement(fixTableName(SQL_QUERY_WALLET_ID));
+        this.psQueryLastAddressId = conn == null ? null : conn.prepareStatement(fixTableName(SQL_QUERY_LAST_ADDRESS_ID));
     }
 
     public String getTableName() {

@@ -98,17 +98,21 @@ public class DbUpdateAddressOne extends DbUpdate {
     public void updateWallet(BtcAddress btcAddress) throws SQLException {
         synchronized (cacheData) {
             BtcAddress a = cacheData.addMapId.get(btcAddress.getAddressId());
+            boolean updatedInQueue = false;
             if (a != null) {
                 if (a.getWalletId() != btcAddress.getWalletId()) {
                     if (cacheData.addQueue.remove(a)) {
                         cacheData.addQueue.add(a.toBuilder().walletId(btcAddress.getWalletId()).build());
-                    } else {
-                        cacheData.updateWalletQueue.add(btcAddress);
+                        updatedInQueue = true;
                     }
+                } else {
+                    //values not changed
+                    updatedInQueue = true;
                 }
-                return;
             }
-            cacheData.updateWalletQueue.add(btcAddress);
+            if (!updatedInQueue) {
+                cacheData.updateWalletQueue.add(btcAddress);
+            }
         }
         if (cacheData.updateWalletQueue.size() >= MAX_UPDATE_QUEUE_LENGTH) {
             executeUpdateWallet();

@@ -121,13 +121,23 @@ public class DbUpdateOutput extends DbUpdate {
     public void updateSpent(int transactionId, int pos, int status) throws SQLException {
         log.trace("updateSpent(transactionId:{},pos:{},status:{})", transactionId, pos, status);
         synchronized (cacheData) {
-            TxOutput txOutput = cacheData.queueMap.get(new PK(transactionId, pos));
+            PK pk = new PK(transactionId, pos);
+            TxOutput txOutput = cacheData.queueMap.get(pk);
+            boolean updatedInQueue = false;
             if (txOutput != null) {
                 if (txOutput.getStatus() != status) {
-                    cacheData.addQueue.remove(txOutput);
-                    cacheData.addQueue.add(txOutput.toBuilder().status(status).build());
+                    txOutput = txOutput.toBuilder().status(status).build();
+                    if (cacheData.addQueue.remove(txOutput)) {
+                        cacheData.addQueue.add(txOutput);
+                        updatedInQueue = true;
+                    }
+                } else {
+                    //value not changed
+                    updatedInQueue = true;
                 }
-            } else {
+                cacheData.queueMap.put(pk, txOutput);
+            }
+            if (!updatedInQueue) {
                 cacheData.queueUpdateSpent.add(TxOutput.builder().transactionId(transactionId).pos(pos).status(status).build());
             }
         }
@@ -139,13 +149,23 @@ public class DbUpdateOutput extends DbUpdate {
     public void updateAddress(int transactionId, int pos, int addressId) throws SQLException {
         log.trace("updateAddress(transactionId:{},pos:{},addressId:{})", transactionId, pos, addressId);
         synchronized (cacheData) {
-            TxOutput txOutput = cacheData.queueMap.get(new PK(transactionId, pos));
+            PK pk = new PK(transactionId, pos);
+            TxOutput txOutput = cacheData.queueMap.get(pk);
+            boolean updatedInQueue = false;
             if (txOutput != null) {
                 if (txOutput.getAddressId() != addressId) {
-                    cacheData.addQueue.remove(txOutput);
-                    cacheData.addQueue.add(txOutput.toBuilder().addressId(addressId).build());
+                    txOutput = txOutput.toBuilder().addressId(addressId).build();
+                    if (cacheData.addQueue.remove(txOutput)) {
+                        cacheData.addQueue.add(txOutput);
+                        updatedInQueue = true;
+                    }
+                } else {
+                    //value not changed
+                    updatedInQueue = true;
                 }
-            } else {
+                cacheData.queueMap.put(pk, txOutput);
+            }
+            if (!updatedInQueue) {
                 cacheData.queueUpdateAddress.add(TxOutput.builder().transactionId(transactionId).pos(pos).addressId(addressId).build());
             }
         }
@@ -157,13 +177,23 @@ public class DbUpdateOutput extends DbUpdate {
     public void updateAmount(int transactionId, int pos, long amount) throws SQLException {
         log.trace("updateAmount(transactionId:{},pos:{},amount:{})", transactionId, pos, amount);
         synchronized (cacheData) {
-            TxOutput txOutput = cacheData.queueMap.get(new PK(transactionId, pos));
+            PK pk = new PK(transactionId, pos);
+            TxOutput txOutput = cacheData.queueMap.get(pk);
+            boolean updatedInQueue = false;
             if (txOutput != null) {
                 if (txOutput.getAmount() != amount) {
-                    cacheData.addQueue.remove(txOutput);
-                    cacheData.addQueue.add(txOutput.toBuilder().amount(amount).build());
+                    txOutput = txOutput.toBuilder().amount(amount).build();
+                    if (cacheData.addQueue.remove(txOutput)) {
+                        cacheData.addQueue.add(txOutput);
+                        updatedInQueue = true;
+                    }
+                } else {
+                    //value not changed
+                    updatedInQueue = true;
                 }
-            } else {
+                cacheData.queueMap.put(pk, txOutput);
+            }
+            if (!updatedInQueue) {
                 cacheData.queueUpdateAmount.add(TxOutput.builder().transactionId(transactionId).pos(pos).amount(amount).build());
             }
         }

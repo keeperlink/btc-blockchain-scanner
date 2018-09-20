@@ -27,6 +27,7 @@ public class Main {
      * @param args the command line arguments
      * @throws java.lang.Exception
      */
+    @SuppressWarnings("UnnecessaryReturnStatement")
     public static void main(String[] args) throws Exception {
         if (args.length == 0) {
             printHelpAndExit();
@@ -46,9 +47,13 @@ public class Main {
                 case prepare_blocks:
                     RunPrepareBlockFiles.main(removeCmd(args));
                     return;
+                case address:
+                    RunAddress.main(removeCmd(args));
+                    return;
             }
         } catch (IllegalArgumentException e) {
-            System.out.println("Unknown command: "+args[0]);
+            System.out.println("Unknown command: " + args[0]);
+            e.printStackTrace();
             printHelpAndExit();
         }
     }
@@ -67,6 +72,7 @@ public class Main {
         update,
         update_spent,
         update_wallets,
-        prepare_blocks
+        prepare_blocks,
+        address
     }
 }

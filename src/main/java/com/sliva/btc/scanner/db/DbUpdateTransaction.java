@@ -103,17 +103,20 @@ public class DbUpdateTransaction extends DbUpdate {
         }
     }
 
+    @Deprecated
     public void updateInOut(int transactionId, int nInputs, int nOutputs) throws SQLException {
-        synchronized (cacheData) {
-            cacheData.updateInOutQueue.add(BtcTransaction.builder()
-                    .transactionId(transactionId)
-                    .nInputs(nInputs)
-                    .nOutputs(nOutputs)
-                    .build());
-        }
-        if (cacheData.updateInOutQueue.size() >= MAX_UPDATE_QUEUE_LENGTH) {
-            executeUpdateInOuts();
-        }
+        throw new UnsupportedOperationException();
+//        synchronized (cacheData) {
+//            //TODO need to check add queue first
+//            cacheData.updateInOutQueue.add(BtcTransaction.builder()
+//                    .transactionId(transactionId)
+//                    .nInputs(nInputs)
+//                    .nOutputs(nOutputs)
+//                    .build());
+//        }
+//        if (cacheData.updateInOutQueue.size() >= MAX_UPDATE_QUEUE_LENGTH) {
+//            executeUpdateInOuts();
+//        }
     }
 
     @SuppressWarnings({"UseSpecificCatch", "CallToPrintStackTrace"})
