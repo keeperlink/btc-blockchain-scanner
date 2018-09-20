@@ -11,13 +11,15 @@ The process takes few days. You can significantly reduce time (down to 8-12 hour
 Numbers are based on todays (Sep 2018) blockchain size of 212GB. Output DB size (MyISAM) with indexes ~145GB. Process ran on system with fast M2 SSD and Intel 10-cores CPU.
 
 Destination DB structure:
+<pre>
   block            (~541K records)
     transaction    (~342M)
       input        (~875M)
       output       (~931M)
         address_*  (~430M)
           wallet   (~150M)
-          
+</pre>
+
 In order to minimize DB size signatures are not stored.
 
 
