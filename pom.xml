@@ -15,7 +15,7 @@
         </contributor>
     </contributors>
     <scm>
-        <connection>https://github.com/keeperlink/btc-blockchain-scanner.git</connection>
+        <connection>scm:git:https://github.com/keeperlink/btc-blockchain-scanner.git</connection>
         <url>https://github.com/keeperlink/btc-blockchain-scanner</url>
     </scm>
     <dependencies>
