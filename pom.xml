@@ -14,28 +14,16 @@
             <organization>Sliva Co</organization>
         </contributor>
     </contributors>
+    <scm>
+        <connection>https://github.com/keeperlink/btc-blockchain-scanner.git</connection>
+        <url>https://github.com/keeperlink/btc-blockchain-scanner</url>
+    </scm>
     <dependencies>
-        <!--dependency>
-            <groupId>com.blockcypher</groupId>
-            <artifactId>java-client</artifactId>
-            <version>0.1.2-SNAPSHOT</version>
-        </dependency-->
         <dependency>
             <groupId>wf.bitcoin</groupId>
             <artifactId>JavaBitcoindRpcClient</artifactId>
             <version>0.9.19</version>
         </dependency>
-        <!--dependency>
-            <groupId>com.google</groupId>
-            <artifactId>bitcoinj</artifactId>
-            <version>0.11.3</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>com.madgag</groupId>
-                    <artifactId>sc-light-jdk15on</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency-->
         <dependency>
             <groupId>org.bitcoinj</groupId>
             <artifactId>bitcoinj-core</artifactId>
@@ -147,6 +135,29 @@
                         </goals>
                     </execution>
                 </executions>
+            </plugin>
+            <plugin>
+                <groupId>de.jutzig</groupId>
+                <artifactId>github-release-plugin</artifactId>
+                <version>1.2.0</version>
+                <configuration>
+                    <description>Description of your release</description>
+                    <releaseName>0.1.0 Final</releaseName>
+                    <tag>${project.version}</tag>
+        
+                    <!-- If your project has additional artifacts, such as ones produced by
+                    the maven-assembly-plugin, you can define the following
+                    (requires version 1.1.1 of the plugin or higher): -->
+                    <fileSets>
+                        <fileSet>
+                            <directory>${project.build.directory}</directory>
+                            <includes>
+                                <include>${project.artifactId}*.tar.gz</include>
+                                <include>${project.artifactId}*.zip</include>
+                            </includes>
+                        </fileSet>
+                    </fileSets>
+                </configuration>
             </plugin>
         </plugins>
     </build>
