@@ -18,12 +18,13 @@ package com.sliva.btc.scanner.src;
 /**
  *
  * @author Sliva Co
+ * @param <A>
  */
-public interface SrcOutput {
+public interface SrcOutput<A extends SrcAddress> {
 
     int getPos();
 
-    SrcAddress getAddress();
+    A getAddress();
 
     long getValue();
 }

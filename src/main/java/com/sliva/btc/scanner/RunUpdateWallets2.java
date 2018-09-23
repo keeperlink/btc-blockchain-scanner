@@ -17,12 +17,12 @@ package com.sliva.btc.scanner;
 
 import com.sliva.btc.scanner.db.DBConnection;
 import com.sliva.btc.scanner.db.DbAddWallet;
+import com.sliva.btc.scanner.db.DbQueries;
 import com.sliva.btc.scanner.db.DbQueryInput;
 import com.sliva.btc.scanner.db.DbQueryTransaction;
 import com.sliva.btc.scanner.db.DbQueryWallet;
 import com.sliva.btc.scanner.db.DbUpdateAddress;
 import com.sliva.btc.scanner.db.model.BtcAddress;
-import com.sliva.btc.scanner.db.model.BtcTransaction;
 import com.sliva.btc.scanner.src.SrcAddressType;
 import com.sliva.btc.scanner.util.Utils;
 import java.io.File;
@@ -30,8 +30,10 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
@@ -64,6 +66,7 @@ public class RunUpdateWallets2 {
     private final DbQueryTransaction queryTransaction;
     private final DbQueryInput queryInput;
     private final DbQueryWallet queryWallet;
+    private final DbQueries dbQueries;
     private final Collection<ThreadLocal<PreparedStatement>> psUpdateAddressWalletPerTable;
     private final int firstTransaction;
     private final int batchSize;
@@ -95,6 +98,7 @@ public class RunUpdateWallets2 {
         queryTransaction = new DbQueryTransaction(conn);
         queryInput = new DbQueryInput(conn);
         queryWallet = new DbQueryWallet(conn);
+        dbQueries = new DbQueries(conn);
         execTransactionThreads = Executors.newFixedThreadPool(txnThreads);
     }
 
@@ -103,14 +107,7 @@ public class RunUpdateWallets2 {
         try {
             try (DbUpdateAddress updateAddress = new DbUpdateAddress(conn);
                     DbAddWallet addWallet = new DbAddWallet(conn)) {
-                log.debug("Checking for missing wallet records...");
-                queryWallet.getMissingWalletRecords().stream().forEach(w -> addWallet.add(w));
-                addWallet.flushCache();
-                log.debug("Checking for unused wallet records...");
-                unusedWallets.addAll(queryWallet.getUnusedWalletRecords());
-                if (!unusedWallets.isEmpty()) {
-                    log.warn("Found {} unused wallet records: {}", unusedWallets.size(), unusedWallets);
-                }
+                initProcess(addWallet);
                 int batchFirstTransaction = firstTransaction;
                 for (int loop = 0;; loop++, batchFirstTransaction += batchSize) {
                     startFromFile.updateNumber(batchFirstTransaction);
@@ -132,50 +129,84 @@ public class RunUpdateWallets2 {
         }
     }
 
-    private void processBatch(int firstTransaction, int lastTransaction, DbUpdateAddress updateAddress, DbAddWallet addWallet) throws SQLException, InterruptedException {
-        AtomicInteger newWalletsAssigned = new AtomicInteger();
-        AtomicInteger walletsMerged = new AtomicInteger();
-        final Collection<BtcTransaction> needToProcess = new ArrayList<>();
-        execTransactionThreads.invokeAll(queryTransaction.getTxnsRangle(firstTransaction, lastTransaction).stream().filter(tx -> tx.getNInputs() != 0).map(tx -> (Callable<Object>) () -> {
-            List<BtcAddress> addresses = queryInput.getInputAddresses(tx.getTransactionId());
+    private void initProcess(DbAddWallet addWallet) throws SQLException, InterruptedException {
+        log.debug("Checking for missing wallet records...");
+        long s = System.currentTimeMillis();
+        Collection<Integer> missing = queryWallet.getMissingWalletsParallel();
+        log.debug("Missing records: {}. Runtime: {} sec.", missing.size(), (System.currentTimeMillis() - s) / 1000);
+        missing.stream().forEach(w -> addWallet.add(w));
+        addWallet.flushCache();
+        log.debug("Checking for unused wallet records...");
+        s = System.currentTimeMillis();
+        unusedWallets.addAll(queryWallet.getUnusedWalletRecordsParallel());
+        log.debug("Unused wallets: {}. Runtime {} sec.", unusedWallets.size(), (System.currentTimeMillis() - s) / 1000);
+        if (!unusedWallets.isEmpty()) {
+            log.warn("Found {} unused wallet records: {}", unusedWallets.size(), unusedWallets);
+        }
+    }
+
+    private void processBatch(int minTxn, int maxTxn, DbUpdateAddress updateAddress, DbAddWallet addWallet) throws SQLException, InterruptedException {
+        final Map<Integer, Map<Integer, Integer>> needToProcess = getNeedToProccessTxnList(minTxn, maxTxn);
+        proccessTxnList(needToProcess, updateAddress, addWallet);
+    }
+
+    private Map<Integer, Map<Integer, Integer>> getNeedToProccessTxnList(int minTxn, int maxTxn) throws SQLException, InterruptedException {
+        final Map<Integer, Map<Integer, Integer>> result = new HashMap<>();
+        execTransactionThreads.invokeAll(queryTransaction.getTxnsRangle(minTxn, maxTxn).stream().filter(tx -> tx.getNInputs() != 0).map(tx -> (Callable<Object>) () -> {
+            Collection<BtcAddress> addresses = queryInput.getInputAddresses(tx.getTransactionId());
+            //Collection<BtcAddress> addresses = dbQueries.getRelatedAddresses(tx.getTransactionId());
             if (addresses == null || addresses.isEmpty()) {
                 log.warn("Unexpected: Addresses list is empty for transactionId " + tx.getTransactionId());
             } else {
-                List<Integer> wallets = addresses.stream().map((a) -> a.getWalletId()).distinct().sorted().collect(Collectors.toList());
+                List<Integer> wallets = addresses.stream().map(BtcAddress::getWalletId).distinct().sorted().collect(Collectors.toList());
                 if (wallets.isEmpty()) {
                     log.warn("Unexpected: Wallets list is empty for transactionId " + tx.getTransactionId());
                 } else if (wallets.get(0) == 0 || wallets.size() > 1) {
-                    synchronized (needToProcess) {
-                        needToProcess.add(tx);
+                    synchronized (result) {
+                        result.put(tx.getTransactionId(), addresses.stream().collect(Collectors.toMap(BtcAddress::getAddressId, BtcAddress::getWalletId)));
                     }
                 }
             }
             return null;
         }).collect(Collectors.toList()));
-        for (BtcTransaction tx : needToProcess) {
-            List<BtcAddress> addresses = queryInput.getInputAddresses(tx.getTransactionId());
-            List<Integer> wallets = addresses.stream().map((a) -> a.getWalletId()).distinct().sorted().collect(Collectors.toList());
+        return result;
+    }
+
+    private void proccessTxnList(Map<Integer, Map<Integer, Integer>> needToProcess, DbUpdateAddress updateAddress, DbAddWallet addWallet) throws SQLException {
+        AtomicInteger newWalletsAssigned = new AtomicInteger();
+        AtomicInteger walletsMerged = new AtomicInteger();
+        for (Map.Entry<Integer, Map<Integer, Integer>> proc : new ArrayList<>(needToProcess.entrySet())) {
+            needToProcess.remove(proc.getKey());
+            Map<Integer, Integer> addresses = proc.getValue();
+            //List<BtcAddress> addresses = queryInput.getInputAddresses(proc.getKey());
+            List<Integer> wallets = addresses.values().stream().distinct().sorted().collect(Collectors.toList());
             if (!wallets.isEmpty() && wallets.get(0) == 0) {
                 //wallet is not assigned yet
                 int newWalletId = wallets.size() > 1 ? wallets.get(1) : getNextWalletId(addWallet);
-                addresses.stream().filter(a -> a.getWalletId() == 0).forEach(a -> updateAddress.updateWallet(a.getAddressId(), newWalletId));
-                updateAddress.flushCache();
+                addresses.entrySet().stream().filter(a -> a.getValue() == 0).forEach(a -> updateWallet(a.getKey(), newWalletId, needToProcess, updateAddress));
+                //updateAddress.flushCache();
                 wallets.remove(0);
                 newWalletsAssigned.incrementAndGet();
             }
             if (wallets.size() > 1) {
                 //merge multiple wallets
                 int walletToUse = wallets.get(0);
-                wallets.stream().filter(w -> w != walletToUse).forEach(w -> replaceWallet(walletToUse, w));
+                wallets.stream().filter(w -> w != walletToUse).forEach(w -> replaceWallet(walletToUse, w, needToProcess));
                 walletsMerged.addAndGet(wallets.size() - 1);
             }
         }
+        updateAddress.flushCache();
         if (newWalletsAssigned.get() != 0 || walletsMerged.get() != 0) {
             log.info("newWalletsAssigned: {}, walletsMerged={}", newWalletsAssigned, walletsMerged);
         }
     }
 
-    private int replaceWallet(int walletToUse, int walletToReplace) {
+    private void updateWallet(int addressId, int newWalletId, Map<Integer, Map<Integer, Integer>> needToProcess, DbUpdateAddress updateAddress) {
+        updateAddress.updateWallet(addressId, newWalletId);
+        updateCacheByAddress(addressId, newWalletId, needToProcess);
+    }
+
+    private int replaceWallet(int walletToUse, int walletToReplace, Map<Integer, Map<Integer, Integer>> needToProcess) {
         if (walletToUse == 0 || walletToReplace == 0 || walletToUse == walletToReplace) {
             throw new IllegalArgumentException("walletToUse=" + walletToUse + ", walletToReplace=" + walletToReplace);
         }
@@ -191,12 +222,35 @@ public class RunUpdateWallets2 {
                     throw new RuntimeException(e);
                 }
             }).collect(Collectors.toList()));
-//            log.debug("Merging wallets: ({},{})=>{}. Records updated: {}", walletToUse, walletToReplace, walletToUse, nUpdated);
+            log.debug("Merging wallets: ({},{})=>{}. Records updated: {}", walletToUse, walletToReplace, walletToUse, nUpdated);
             unusedWallets.add(walletToReplace);
+            updateCacheByWallet(walletToUse, walletToReplace, needToProcess);
             return nUpdated.get();
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    /**
+     * Update all cached addressId with new walletId.
+     *
+     * @param addressId
+     * @param newWalletId
+     * @param needToProcess
+     */
+    private void updateCacheByAddress(int addressId, int newWalletId, Map<Integer, Map<Integer, Integer>> needToProcess) {
+        needToProcess.forEach((t, m) -> m.replace(addressId, newWalletId));
+    }
+
+    /**
+     * Update all cached addresses with new walletId.
+     *
+     * @param walletToUse
+     * @param walletToReplace
+     * @param needToProcess
+     */
+    private void updateCacheByWallet(int walletToUse, int walletToReplace, Map<Integer, Map<Integer, Integer>> needToProcess) {
+        needToProcess.forEach((t, m) -> m.entrySet().stream().filter(e -> e.getValue() == walletToReplace).forEach(e -> e.setValue(walletToUse)));
     }
 
     private int getNextWalletId(DbAddWallet addWallet) throws SQLException {

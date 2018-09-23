@@ -20,12 +20,14 @@ import java.util.stream.Stream;
 /**
  *
  * @author Sliva Co
+ * @param <I>
+ * @param <O>
  */
-public interface SrcTransaction {
+public interface SrcTransaction<I extends SrcInput, O extends SrcOutput> {
 
     String getTxid();
 
-    Stream<SrcInput> getInputs();
+    Stream<I> getInputs();
 
-    Stream<SrcOutput> getOutputs();
+    Stream<O> getOutputs();
 }

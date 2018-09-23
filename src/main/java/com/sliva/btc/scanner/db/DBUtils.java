@@ -19,7 +19,9 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -31,16 +33,32 @@ public final class DBUtils {
     /**
      * Read integer values from single column result set.
      *
-     * @param ps
-     * @return
+     * @param ps PreparedStatement
+     * @return Collection
      * @throws SQLException
      */
-    public static Collection<Integer> readIntegers(PreparedStatement ps) throws SQLException {
+    public static Collection<Integer> readIntegersToSet(PreparedStatement ps) throws SQLException {
         Set<Integer> result = new HashSet<>();
         try (ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
-                Integer addressId = rs.getObject(1, Integer.class);
-                result.add(addressId);
+                result.add(rs.getObject(1, Integer.class));
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Read integer values from dual column result set.
+     *
+     * @param ps PreparedStatement
+     * @return Map
+     * @throws SQLException
+     */
+    public static Map<Integer, Integer> readIntegersToMap(PreparedStatement ps) throws SQLException {
+        Map<Integer, Integer> result = new HashMap<>();
+        try (ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                result.put(rs.getObject(1, Integer.class), rs.getObject(2, Integer.class));
             }
         }
         return result;

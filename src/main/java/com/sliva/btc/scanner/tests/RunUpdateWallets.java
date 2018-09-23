@@ -371,7 +371,7 @@ public class RunUpdateWallets {
 
     private Collection<Integer> getSpendTransactionsByAddress(int addressId) throws SQLException {
         psQuerySpendTransactionsByAddress.get().setInt(1, addressId);
-        return DBUtils.readIntegers(psQuerySpendTransactionsByAddress.get());
+        return DBUtils.readIntegersToSet(psQuerySpendTransactionsByAddress.get());
     }
 
     private int processWallet(int walletId, Collection<Integer> relatedWallets) throws SQLException, InterruptedException {
@@ -468,7 +468,7 @@ public class RunUpdateWallets {
         psQueryAddressIdsByWallet.get().setInt(2, walletId);
         psQueryAddressIdsByWallet.get().setInt(3, walletId);
         psQueryAddressIdsByWallet.get().setInt(4, walletId);
-        return DBUtils.readIntegers(psQueryAddressIdsByWallet.get());
+        return DBUtils.readIntegersToSet(psQueryAddressIdsByWallet.get());
     }
 
     private int fixWalletsByTransactions(int minTransactionId, int maxTransactionId) throws SQLException, InterruptedException {
@@ -476,7 +476,7 @@ public class RunUpdateWallets {
         psQueryTransactionsWithDifferentInputWallets.get().setInt(1, minTransactionId);
         psQueryTransactionsWithDifferentInputWallets.get().setInt(2, maxTransactionId);
         final AtomicInteger result = new AtomicInteger(0);
-        for (Integer transactionId : DBUtils.readIntegers(psQueryTransactionsWithDifferentInputWallets.get())) {
+        for (Integer transactionId : DBUtils.readIntegersToSet(psQueryTransactionsWithDifferentInputWallets.get())) {
             log.debug("Fixing transactionId: {}", transactionId);
             int nUpdated = fixTransaction(transactionId);
             result.addAndGet(nUpdated);
@@ -486,7 +486,7 @@ public class RunUpdateWallets {
 
     private int fixTransaction(int transactionId) throws SQLException, InterruptedException {
         psQueryWalletdByTransaction.get().setInt(1, transactionId);
-        Collection<Integer> wList = DBUtils.readIntegers(psQueryWalletdByTransaction.get());
+        Collection<Integer> wList = DBUtils.readIntegersToSet(psQueryWalletdByTransaction.get());
         if (wList.size() < 2) {
             log.trace("Transaction {} has been fixed already: {}", transactionId, wList);
             return 0;

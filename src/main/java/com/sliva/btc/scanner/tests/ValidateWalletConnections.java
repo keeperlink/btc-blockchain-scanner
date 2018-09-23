@@ -18,11 +18,11 @@ package com.sliva.btc.scanner.tests;
 import com.sliva.btc.scanner.db.DBConnection;
 import com.sliva.btc.scanner.db.DBUtils;
 import com.sliva.btc.scanner.db.DbQueryWallet;
+import com.sliva.btc.scanner.db.DbUpdateAddress;
 import com.sliva.btc.scanner.src.DbAddress;
 import com.sliva.btc.scanner.src.DbBlockProvider;
 import com.sliva.btc.scanner.src.DbTransaction;
 import com.sliva.btc.scanner.src.DbWallet;
-import com.sliva.btc.scanner.src.SrcAddress;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.Collection;
@@ -30,14 +30,17 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  *
  * @author whost
  */
+@Slf4j
 public class ValidateWalletConnections {
 
-    private static final int START_WALLET_ID = 1;
+    private static final int START_WALLET_ID = 39_360_000;
+    private static final boolean UPDATE_NOT_CONNECTED = false;
     private static final String QUERY_SPENT_TRANSACTIONS_BY_ADDRESS
             = "SELECT I.transaction_id FROM input I"
             + " INNER JOIN output O ON O.transaction_id=I.in_transaction_id AND O.pos=I.in_pos"
@@ -51,69 +54,99 @@ public class ValidateWalletConnections {
     private static final ThreadLocal<PreparedStatement> psQueryInputAddressesByTransactionId = conn.prepareStatement(QUERY_INPUT_ADDRESSES_BY_TRANSACTION_ID);
     private static final DbBlockProvider dbBlockProvider = new DbBlockProvider(conn);
     private static final DbQueryWallet queryWallet = new DbQueryWallet(conn);
+    private final DbUpdateAddress updateAddress;
 
     public static void main(String[] args) throws Exception {
-        final int maxWalletId = queryWallet.getMaxId();
-        System.out.println("Validating wallets [" + START_WALLET_ID + " - " + maxWalletId + "]");
-        for (int walletId = START_WALLET_ID; walletId <= maxWalletId; walletId++) {
-            testWallet(walletId);
-            if (walletId % 10000 == 0) {
-                System.out.println("Last tested walletId: " + walletId);
+        new ValidateWalletConnections().runProcess();
+    }
+
+    public ValidateWalletConnections() {
+        if (UPDATE_NOT_CONNECTED) {
+            updateAddress = new DbUpdateAddress(conn);
+        } else {
+            updateAddress = null;
+        }
+    }
+
+    private void runProcess() throws SQLException {
+        try {
+            final int maxWalletId = queryWallet.getMaxId();
+            log.info("Validating wallets [" + START_WALLET_ID + " - " + maxWalletId + "]");
+            for (int walletId = START_WALLET_ID; walletId <= maxWalletId; walletId++) {
+                testWallet(walletId);
+                if (walletId % 10000 == 0) {
+                    log.info("Last tested walletId: " + walletId);
+                }
+            }
+        } finally {
+            if (updateAddress != null) {
+                updateAddress.close();
             }
         }
     }
 
-    private static void testWallet(int walletId) {
+    private void testWallet(int walletId) {
+        if (walletId < 1) {
+            throw new IllegalArgumentException("walletId=" + walletId);
+        }
         DbWallet dbWallet = new DbWallet(dbBlockProvider, walletId, null, null);
-//        System.out.println("Loading addresses for wallet#" + walletId + "...");
-        List<SrcAddress> addresses = dbWallet.getAddresses().collect(Collectors.toList());
-//        System.out.println("Addresses loaded: " + addresses.size());
-        Set<SrcAddress> wholeSet = new HashSet<>(addresses);
-        Set<SrcAddress> disconnectedSet = new HashSet<>(addresses);
-        Set<SrcAddress> notConnectedSet = new HashSet<>();
+//        log.info("Loading addresses for wallet#" + walletId + "...");
+        List<DbAddress> addresses = dbWallet.getAddresses().collect(Collectors.toList());
+//        log.info("Addresses loaded: " + addresses.size());
+        Set<DbAddress> wholeSet = new HashSet<>(addresses);
+        Set<DbAddress> disconnectedSet = new HashSet<>(addresses);
+        Set<DbAddress> notConnectedSet = new HashSet<>();
         Set<Integer> allSpentTransactions = new HashSet<>();
-//        System.out.println("Loading spent transactions for wallet#" + walletId + "...");
+//        log.info("Loading spent transactions for wallet#" + walletId + "...");
         addresses.forEach((a) -> {
-//            System.out.println("Addr.name=" + a.getName());
+//            log.info("Addr.name=" + a.getName());
             disconnectedSet.remove(a);
-            allSpentTransactions.addAll(getSpentTransactions(((DbAddress) a).getAddressId()));
+            allSpentTransactions.addAll(getSpentTransactions(a.getAddressId()));
         });
-//        System.out.println("All spent transactions (size:" + allSpentTransactions.size() + "): " + allSpentTransactions);
+//        log.info("All spent transactions (size:" + allSpentTransactions.size() + "): " + allSpentTransactions);
         Set<Integer> transactionsWithNotConnectedAddresses = new HashSet<>();
         allSpentTransactions.forEach((transactionId) -> {
             DbTransaction tx = new DbTransaction(dbBlockProvider, transactionId, null);
-//            System.out.println("Transaction #" + tx.getTransactionId() + ": " + tx.getTxid());
+            log.trace("Transaction #{}: {}", tx.getTransactionId(), tx.getTxid());
             getInputAddresses(transactionId).forEach((addressId) -> {
-                SrcAddress a = new DbAddress(dbBlockProvider, addressId, null, -1);
+                DbAddress a = new DbAddress(dbBlockProvider, addressId, null, -1);
                 if (wholeSet.contains(a)) {
                     disconnectedSet.remove(a);
-//                    System.out.println("\t" + a.getName());
+                    if (log.isTraceEnabled()) {
+                        log.trace("\t{}", a.getName());
+                    }
                 } else {
                     notConnectedSet.add(a);
                     transactionsWithNotConnectedAddresses.add(transactionId);
-//                    System.out.println("\t" + a.getName() + " [NOT_CONNECTED]");
+                    if (log.isTraceEnabled()) {
+                        log.trace("\t{} [NOT_CONNECTED]", a.getName());
+                    }
                 }
             });
         });
         if (!disconnectedSet.isEmpty() || !notConnectedSet.isEmpty()) {
-            System.out.println("disconnectedSet(walletId:" + walletId + "): " + disconnectedSet.size());
-            System.out.println("notConnectedSet(walletId:" + walletId + "): " + notConnectedSet.size() + " in " + transactionsWithNotConnectedAddresses.size() + " transactions");
+            log.info("disconnectedSet(walletId:" + walletId + "): " + disconnectedSet.size());
+            log.info("notConnectedSet(walletId:" + walletId + "): " + notConnectedSet.size() + " in " + transactionsWithNotConnectedAddresses.size() + " transactions");
+            if (UPDATE_NOT_CONNECTED && !notConnectedSet.isEmpty()) {
+                notConnectedSet.stream().forEach(a -> updateAddress.updateWallet(a.getAddressId(), walletId));
+                //.filter(a -> a.getWalletId() == 0)
+            }
         }
     }
 
-    private static Collection<Integer> getSpentTransactions(int addressId) {
+    private Collection<Integer> getSpentTransactions(int addressId) {
         try {
             psQuerySpentTransactionsByAddress.get().setInt(1, addressId);
-            return DBUtils.readIntegers(psQuerySpentTransactionsByAddress.get());
+            return DBUtils.readIntegersToSet(psQuerySpentTransactionsByAddress.get());
         } catch (SQLException e) {
             throw new IllegalStateException(e);
         }
     }
 
-    private static Collection<Integer> getInputAddresses(int transactionId) {
+    private Collection<Integer> getInputAddresses(int transactionId) {
         try {
             psQueryInputAddressesByTransactionId.get().setInt(1, transactionId);
-            return DBUtils.readIntegers(psQueryInputAddressesByTransactionId.get());
+            return DBUtils.readIntegersToSet(psQueryInputAddressesByTransactionId.get());
         } catch (SQLException e) {
             throw new IllegalStateException(e);
         }

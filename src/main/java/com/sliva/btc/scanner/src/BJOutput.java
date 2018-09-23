@@ -28,7 +28,7 @@ import org.bitcoinj.script.ScriptOpCodes;
  * @author Sliva Co
  */
 @ToString
-public class BJOutput implements SrcOutput {
+public class BJOutput implements SrcOutput<BJAddress> {
 
     private final TransactionOutput to;
 
@@ -43,7 +43,7 @@ public class BJOutput implements SrcOutput {
 
     @Override
     @SuppressWarnings("UseSpecificCatch")
-    public SrcAddress getAddress() {
+    public BJAddress getAddress() {
         Address adr;
         try {
             adr = to.getScriptPubKey().getToAddress(BJBlockHandler.getNetworkParams(), true);

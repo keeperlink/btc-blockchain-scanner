@@ -20,12 +20,13 @@ import java.util.stream.Stream;
 /**
  *
  * @author Sliva Co
+ * @param <T>
  */
-public interface SrcBlock {
+public interface SrcBlock<T extends SrcTransaction> {
 
     String getHash();
 
     int getHeight();
 
-    Stream<SrcTransaction> getTransactions();
+    Stream<T> getTransactions();
 }

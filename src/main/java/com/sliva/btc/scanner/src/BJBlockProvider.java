@@ -26,12 +26,12 @@ import org.apache.commons.cli.Options;
  *
  * @author Sliva Co
  */
-public class BJBlockProvider implements BlockProvider {
+public class BJBlockProvider implements BlockProvider<BJBlock> {
 
     private final RpcClient client = new RpcClient();
 
     @Override
-    public SrcBlock getBlock(int height) {
+    public BJBlock getBlock(int height) {
         try {
             return new BJBlock(client.getBlock(height).hash(), height);
         } catch (IOException e) {
@@ -40,7 +40,7 @@ public class BJBlockProvider implements BlockProvider {
     }
 
     @Override
-    public SrcBlock getBlock(String hash) {
+    public BJBlock getBlock(String hash) {
         try {
             return new BJBlock(hash, client.getBlock(hash).height());
         } catch (IOException e) {

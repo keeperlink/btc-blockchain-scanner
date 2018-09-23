@@ -60,7 +60,12 @@ public class RunUpdateSpent {
         if (cmd.hasOption('h')) {
             printHelpAndExit();
         }
-        new RunUpdateSpent(cmd).runProcess();
+        log.info("START");
+        try {
+            new RunUpdateSpent(cmd).runProcess();
+        } finally {
+            log.info("FINISH");
+        }
     }
 
     public RunUpdateSpent(CommandLine cmd) {
@@ -79,9 +84,11 @@ public class RunUpdateSpent {
             startFromFile.updateNumber(i);
             psQueryOutputs.get().setInt(1, i);
             psQueryOutputs.get().setInt(2, i + batchSize);
+            int txnCount = 0;
             try (ResultSet rs = psQueryOutputs.get().executeQuery();
                     DbUpdateOutput updateOutput = new DbUpdateOutput(dbCon)) {
                 while (rs.next()) {
+                    txnCount++;
                     int transactionId = rs.getInt(1);
                     int pos = rs.getInt(2);
                     int addressId = rs.getInt(3);
@@ -97,6 +104,10 @@ public class RunUpdateSpent {
                         updateOutput.updateSpent(transactionId, pos, OutputStatus.SPENT);
                     }
                 }
+            }
+            if (txnCount == 0) {
+                log.info("Reached end of transactions table");
+                break;
             }
         }
     }

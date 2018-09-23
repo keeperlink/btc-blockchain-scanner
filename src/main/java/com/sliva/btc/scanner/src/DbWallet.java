@@ -25,13 +25,13 @@ import java.util.stream.Stream;
  *
  * @author Sliva Co
  */
-public class DbWallet implements SrcWallet {
+public class DbWallet implements SrcWallet<DbAddress> {
 
     private final DbBlockProvider blockProvider;
     private final int id;
     private String name;
     private String details;
-    private Collection<SrcAddress> addresses;
+    private Collection<DbAddress> addresses;
 
     public DbWallet(DbBlockProvider blockProvider, int id, String name, String details) {
         this.blockProvider = blockProvider;
@@ -62,7 +62,7 @@ public class DbWallet implements SrcWallet {
     }
 
     @Override
-    public Stream<SrcAddress> getAddresses() {
+    public Stream<DbAddress> getAddresses() {
         if (addresses == null) {
             try {
                 blockProvider.psQueryWalletAddresses.get().setInt(1, id);
@@ -70,7 +70,7 @@ public class DbWallet implements SrcWallet {
                 blockProvider.psQueryWalletAddresses.get().setInt(3, id);
                 blockProvider.psQueryWalletAddresses.get().setInt(4, id);
                 try (ResultSet rs = blockProvider.psQueryWalletAddresses.get().executeQuery()) {
-                    Collection<SrcAddress> t = new ArrayList<>();
+                    Collection<DbAddress> t = new ArrayList<>();
                     while (rs.next()) {
                         t.add(new DbAddress(blockProvider, rs.getInt(1), rs.getBytes(2), id));
                     }

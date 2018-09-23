@@ -135,7 +135,7 @@ public final class Utils {
         public NumberFile(String param) {
             if (StringUtils.isBlank(param)) {
                 file = null;
-                number = null;
+                number = 0L;
             } else if (StringUtils.isNumeric(param)) {
                 file = null;
                 number = Long.valueOf(param);
@@ -149,7 +149,7 @@ public final class Utils {
                         throw new RuntimeException(e);
                     }
                 } else {
-                    number = null;
+                    number = 0L;
                 }
             }
         }

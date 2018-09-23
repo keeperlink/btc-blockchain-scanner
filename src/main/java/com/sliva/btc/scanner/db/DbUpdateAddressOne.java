@@ -25,6 +25,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.spongycastle.util.encoders.Hex;
@@ -40,7 +41,7 @@ public class DbUpdateAddressOne extends DbUpdate {
     public static int MIN_BATCH_SIZE = 1;
     public static int MAX_BATCH_SIZE = 40000;
     public static int MAX_INSERT_QUEUE_LENGTH = 1000000;
-    private static int MAX_UPDATE_QUEUE_LENGTH = 1000;
+    private static int MAX_UPDATE_QUEUE_LENGTH = 10000;
     private static final String SQL_ADD = "INSERT INTO address_table_name(address_id,address,wallet_id)VALUES(?,?,?)";
     private static final String SQL_UPDATE_WALLET = "UPDATE address_table_name SET wallet_id=? WHERE address_id=?";
     private final SrcAddressType addressType;
@@ -98,17 +99,21 @@ public class DbUpdateAddressOne extends DbUpdate {
     public void updateWallet(BtcAddress btcAddress) throws SQLException {
         synchronized (cacheData) {
             BtcAddress a = cacheData.addMapId.get(btcAddress.getAddressId());
+            boolean updatedInQueue = false;
             if (a != null) {
                 if (a.getWalletId() != btcAddress.getWalletId()) {
                     if (cacheData.addQueue.remove(a)) {
                         cacheData.addQueue.add(a.toBuilder().walletId(btcAddress.getWalletId()).build());
-                    } else {
-                        cacheData.updateWalletQueue.add(btcAddress);
+                        updatedInQueue = true;
                     }
+                } else {
+                    //values not changed
+                    updatedInQueue = true;
                 }
-                return;
             }
-            cacheData.updateWalletQueue.add(btcAddress);
+            if (!updatedInQueue) {
+                cacheData.updateWalletQueue.add(btcAddress);
+            }
         }
         if (cacheData.updateWalletQueue.size() >= MAX_UPDATE_QUEUE_LENGTH) {
             executeUpdateWallet();
@@ -156,10 +161,13 @@ public class DbUpdateAddressOne extends DbUpdate {
         }
         if (temp != null) {
             synchronized (execSync) {
+                long s = System.nanoTime();
                 BatchExecutor.executeBatch(temp, psUpdateWallet.get(), (BtcAddress t, PreparedStatement ps) -> {
                     ps.setInt(1, t.getWalletId());
                     ps.setInt(2, t.getAddressId());
                 });
+                long runtime = System.nanoTime() - s;
+                log.debug("{}.executeUpdateWallet(): Updated {} records. runtime {} ms.", getTableName(), temp.size(), TimeUnit.NANOSECONDS.toMillis(runtime));
             }
         }
     }

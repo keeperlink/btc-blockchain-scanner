@@ -18,10 +18,11 @@ package com.sliva.btc.scanner.src;
 /**
  *
  * @author Sliva Co
+ * @param <B>
  */
-public interface BlockProvider {
+public interface BlockProvider<B extends SrcBlock> {
 
-    SrcBlock getBlock(int height);
+    B getBlock(int height);
 
-    SrcBlock getBlock(String hash);
+    B getBlock(String hash);
 }

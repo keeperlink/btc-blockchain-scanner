@@ -20,8 +20,9 @@ import java.util.stream.Stream;
 /**
  *
  * @author Sliva Co
+ * @param <A>
  */
-public interface SrcWallet {
+public interface SrcWallet<A extends SrcAddress> {
 
     int getId();
 
@@ -29,6 +30,6 @@ public interface SrcWallet {
 
     String getDetails();
 
-    Stream<SrcAddress> getAddresses();
+    Stream<A> getAddresses();
 
 }

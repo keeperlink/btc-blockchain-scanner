@@ -36,6 +36,8 @@ import com.sliva.btc.scanner.src.BlockProviderWithBackup;
 import com.sliva.btc.scanner.src.RpcBlockProvider;
 import com.sliva.btc.scanner.src.SrcAddress;
 import com.sliva.btc.scanner.src.SrcBlock;
+import com.sliva.btc.scanner.src.SrcInput;
+import com.sliva.btc.scanner.src.SrcOutput;
 import com.sliva.btc.scanner.src.SrcTransaction;
 import com.sliva.btc.scanner.util.Utils;
 import java.io.File;
@@ -156,7 +158,7 @@ public class RunFullScan {
                     stopFile.renameTo(new File(stopFile.getAbsoluteFile() + "1"));
                     break;
                 }
-                SrcBlock block;
+                SrcBlock<SrcTransaction<SrcInput, SrcOutput<SrcAddress>>> block;
                 if (futureBlock != null) {
                     FutureBlock fb = futureBlock.get();
                     if (fb.getBlockHeight() != blockHeight) {
@@ -260,7 +262,7 @@ public class RunFullScan {
 
     @SuppressWarnings("UseSpecificCatch")
     private Collection<TxInput> processTransactionInputs(
-            SrcTransaction t,
+            SrcTransaction<SrcInput, SrcOutput<SrcAddress>> t,
             BtcTransaction tx,
             DbUpdateInput updateInput,
             DbCachedTransaction cachedTxn,
@@ -377,7 +379,7 @@ public class RunFullScan {
      * @throws SQLException
      */
     private Collection<TxOutput> processTransactionOutputs(
-            SrcTransaction t,
+            SrcTransaction<SrcInput, SrcOutput<SrcAddress>> t,
             BtcTransaction tx,
             DbCachedTransaction cachedTxn,
             DbCachedAddress cachedAddress,
@@ -435,7 +437,7 @@ public class RunFullScan {
         return findBJTransaction(block, blockHeight, txid);
     }
 
-    private static SrcTransaction findBJTransaction(SrcBlock block, int blockHeight, String txid) throws SQLException, IOException {
+    private static SrcTransaction findBJTransaction(SrcBlock<SrcTransaction<SrcInput, SrcOutput<SrcAddress>>> block, int blockHeight, String txid) throws SQLException, IOException {
         return block.getTransactions().filter((t) -> Utils.fixDupeTxid(t.getTxid(), blockHeight).equals(txid)).findAny().orElse(null);
     }
 
@@ -457,7 +459,7 @@ public class RunFullScan {
             DbCachedOutput cachedOutput,
             DbCachedAddress cachedAddress) {
         return futureExecutor.submit(() -> {
-            SrcBlock block = blockProvider.getBlock(blockHeight);
+            SrcBlock<SrcTransaction<SrcInput, SrcOutput<SrcAddress>>> block = blockProvider.getBlock(blockHeight);
             List<Callable<Boolean>> todo = new ArrayList<>();
             block.getTransactions().forEach((t) -> {
                 todo.add(new PreProcTransaction(t, blockHeight, cachedTxn, cachedOutput, cachedAddress));
@@ -476,7 +478,7 @@ public class RunFullScan {
     @AllArgsConstructor
     private class PreProcTransaction implements Callable<Boolean> {
 
-        private final SrcTransaction t;
+        private final SrcTransaction<SrcInput, SrcOutput<SrcAddress>> t;
         private final int blockHeight;
         private final DbCachedTransaction cachedTxn;
         private final DbCachedOutput cachedOutput;

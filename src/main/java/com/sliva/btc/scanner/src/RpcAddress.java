@@ -16,40 +16,40 @@
 package com.sliva.btc.scanner.src;
 
 import com.sliva.btc.scanner.util.BJBlockHandler;
-import java.io.IOException;
-import java.util.stream.Stream;
+import com.sliva.btc.scanner.util.Utils;
 import lombok.ToString;
-import org.bitcoinj.core.Block;
+import org.bitcoinj.core.Address;
 
 /**
  *
  * @author Sliva Co
  */
 @ToString
-public class BJBlock implements SrcBlock<BJTransaction> {
+public class RpcAddress implements SrcAddress {
 
-    private final Block block;
-    private final int height;
+    private final Address address;
 
-    public BJBlock(String hash, int height) throws IOException {
-        this.block = BJBlockHandler.getBlock(hash);
-        this.height = height;
+    public static RpcAddress fromString(String a) {
+        return new RpcAddress(BJBlockHandler.getAddress(a));
+    }
+
+    public RpcAddress(Address address) {
+        this.address = address;
     }
 
     @Override
-    public String getHash() {
-        return block.getHashAsString();
+    public SrcAddressType getType() {
+        return Utils.getBtcAddressType(address.getOutputScriptType());
     }
 
     @Override
-    public int getHeight() {
-        return height;
+    public byte[] getHash() {
+        return address.getHash();
     }
 
     @Override
-    @SuppressWarnings("null")
-    public Stream<BJTransaction> getTransactions() {
-        return block.getTransactions().stream().map((t) -> new BJTransaction(t));
+    public String getName() {
+        return address.toString();
     }
 
 }

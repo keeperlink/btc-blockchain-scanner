@@ -26,13 +26,13 @@ import org.apache.commons.codec.binary.Hex;
  *
  * @author Sliva Co
  */
-public class DbTransaction implements SrcTransaction {
+public class DbTransaction implements SrcTransaction<DbInput, DbOutput> {
 
     private final DbBlockProvider blockProvider;
     private final int transactionId;
     private String txid;
-    private Collection<SrcInput> inputs;
-    private Collection<SrcOutput> outputs;
+    private Collection<DbInput> inputs;
+    private Collection<DbOutput> outputs;
 
     public DbTransaction(DbBlockProvider blockProvider, int transactionId, String txid) {
         this.blockProvider = blockProvider;
@@ -59,12 +59,12 @@ public class DbTransaction implements SrcTransaction {
     }
 
     @Override
-    public Stream<SrcInput> getInputs() {
+    public Stream<DbInput> getInputs() {
         if (inputs == null) {
             try {
                 blockProvider.psQueryTransactionInputs.get().setInt(1, transactionId);
                 try (ResultSet rs = blockProvider.psQueryTransactionInputs.get().executeQuery()) {
-                    Collection<SrcInput> t = new ArrayList<>();
+                    Collection<DbInput> t = new ArrayList<>();
                     while (rs.next()) {
                         t.add(new DbInput(blockProvider, rs.getInt(1), rs.getInt(2), rs.getInt(3)));
                     }
@@ -78,12 +78,12 @@ public class DbTransaction implements SrcTransaction {
     }
 
     @Override
-    public Stream<SrcOutput> getOutputs() {
+    public Stream<DbOutput> getOutputs() {
         if (outputs == null) {
             try {
                 blockProvider.psQueryTransactionOutputs.get().setInt(1, transactionId);
                 try (ResultSet rs = blockProvider.psQueryTransactionOutputs.get().executeQuery()) {
-                    Collection<SrcOutput> t = new ArrayList<>();
+                    Collection<DbOutput> t = new ArrayList<>();
                     while (rs.next()) {
                         t.add(new DbOutput(blockProvider, rs.getInt(1), rs.getInt(2), rs.getLong(3), rs.getInt(4)));
                     }
