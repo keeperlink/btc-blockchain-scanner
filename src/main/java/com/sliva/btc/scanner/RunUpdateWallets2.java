@@ -107,16 +107,7 @@ public class RunUpdateWallets2 {
         try {
             try (DbUpdateAddress updateAddress = new DbUpdateAddress(conn);
                     DbAddWallet addWallet = new DbAddWallet(conn)) {
-                log.debug("Checking for missing wallet records...");
-                Collection<Integer> missing = queryWallet.getMissingWalletRecords();
-                log.debug("Missing records: {}", missing.size());
-                missing.stream().forEach(w -> addWallet.add(w));
-                addWallet.flushCache();
-                log.debug("Checking for unused wallet records...");
-                unusedWallets.addAll(queryWallet.getUnusedWalletRecords());
-                if (!unusedWallets.isEmpty()) {
-                    log.warn("Found {} unused wallet records: {}", unusedWallets.size(), unusedWallets);
-                }
+                initProcess(addWallet);
                 int batchFirstTransaction = firstTransaction;
                 for (int loop = 0;; loop++, batchFirstTransaction += batchSize) {
                     startFromFile.updateNumber(batchFirstTransaction);
@@ -135,6 +126,22 @@ public class RunUpdateWallets2 {
             execAddressQueries.shutdown();
             execTransactionThreads.shutdown();
             log.info("FINISH");
+        }
+    }
+
+    private void initProcess(DbAddWallet addWallet) throws SQLException, InterruptedException {
+        log.debug("Checking for missing wallet records...");
+        long s = System.currentTimeMillis();
+        Collection<Integer> missing = queryWallet.getMissingWalletsParallel();
+        log.debug("Missing records: {}. Runtime: {} sec.", missing.size(), (System.currentTimeMillis() - s) / 1000);
+        missing.stream().forEach(w -> addWallet.add(w));
+        addWallet.flushCache();
+        log.debug("Checking for unused wallet records...");
+        s = System.currentTimeMillis();
+        unusedWallets.addAll(queryWallet.getUnusedWalletRecordsParallel());
+        log.debug("Unused wallets: {}. Runtime {} sec.", unusedWallets.size(), (System.currentTimeMillis() - s) / 1000);
+        if (!unusedWallets.isEmpty()) {
+            log.warn("Found {} unused wallet records: {}", unusedWallets.size(), unusedWallets);
         }
     }
 
