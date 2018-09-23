@@ -19,7 +19,7 @@ package com.sliva.btc.scanner.src;
  *
  * @author Sliva Co
  */
-public class DbOutput implements SrcOutput {
+public class DbOutput implements SrcOutput<DbAddress> {
 
     private final DbBlockProvider blockProvider;
     private final int pos;
@@ -46,7 +46,7 @@ public class DbOutput implements SrcOutput {
     }
 
     @Override
-    public SrcAddress getAddress() {
+    public DbAddress getAddress() {
         if (address == null) {
             address = new DbAddress(blockProvider, addressId, null, -1);
         }

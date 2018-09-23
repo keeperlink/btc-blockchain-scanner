@@ -25,7 +25,7 @@ import java.util.Map;
  *
  * @author Sliva Co
  */
-public class DbBlockProvider implements BlockProvider {
+public class DbBlockProvider implements BlockProvider<DbBlock> {
 
     private static final String SQL_QUERY_BLOCK_HASH = "SELECT hash,txn_count FROM block WHERE height=?";
     private static final String SQL_QUERY_BLOCK_HEIGHT = "SELECT height FROM block WHERE hash=?";
@@ -63,12 +63,12 @@ public class DbBlockProvider implements BlockProvider {
     }
 
     @Override
-    public SrcBlock getBlock(int height) {
+    public DbBlock getBlock(int height) {
         return new DbBlock(this, height);
     }
 
     @Override
-    public SrcBlock getBlock(String hash) {
+    public DbBlock getBlock(String hash) {
         return new DbBlock(this, hash);
     }
 

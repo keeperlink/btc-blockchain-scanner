@@ -10,7 +10,7 @@
                 <goal>org.codehaus.mojo:exec-maven-plugin:1.2.1:exec</goal>
             </goals>
             <properties>
-                <exec.args>-classpath %classpath com.sliva.btc.scanner.Main update_wallets --db-config=/etc/db.conf --threads=20 --batch-size=20000 --start-from=/tmp/update_wallets.lastTxn</exec.args>
+                <exec.args>-classpath %classpath com.sliva.btc.scanner.Main update_wallets --db-config=/etc/db.conf --threads=15 --batch-size=10000 --start-from=/tmp/update_wallets.lastTxn</exec.args>
                 <exec.executable>java</exec.executable>
             </properties>
         </action>
@@ -24,7 +24,7 @@
                 <goal>org.codehaus.mojo:exec-maven-plugin:1.2.1:exec</goal>
             </goals>
             <properties>
-                <exec.args>-Xdebug -Xrunjdwp:transport=dt_socket,server=n,address=${jpda.address} -classpath %classpath com.sliva.btc.scanner.Main update_wallets --db-config=/etc/db.conf --threads=20 --batch-size=20000 --start-from=/tmp/update_wallets.lastTxn</exec.args>
+                <exec.args>-Xdebug -Xrunjdwp:transport=dt_socket,server=n,address=${jpda.address} -classpath %classpath com.sliva.btc.scanner.Main update_wallets --db-config=/etc/db.conf --threads=15 --batch-size=10000 --start-from=/tmp/update_wallets.lastTxn</exec.args>
                 <exec.executable>java</exec.executable>
                 <jpda.listen>true</jpda.listen>
             </properties>
@@ -39,7 +39,7 @@
                 <goal>org.codehaus.mojo:exec-maven-plugin:1.2.1:exec</goal>
             </goals>
             <properties>
-                <exec.args>-classpath %classpath com.sliva.btc.scanner.Main update_wallets --db-config=/etc/db.conf --threads=20 --batch-size=20000 --start-from=/tmp/update_wallets.lastTxn</exec.args>
+                <exec.args>-classpath %classpath com.sliva.btc.scanner.Main update_wallets --db-config=/etc/db.conf --threads=15 --batch-size=10000 --start-from=/tmp/update_wallets.lastTxn</exec.args>
                 <exec.executable>java</exec.executable>
             </properties>
         </action>

@@ -96,10 +96,10 @@ public class DbQueryWallet {
     }
 
     public Collection<Integer> getMissingWalletRecords() throws SQLException {
-        return DBUtils.readIntegers(psQueryMissingWalletRecords.get());
+        return DBUtils.readIntegersToSet(psQueryMissingWalletRecords.get());
     }
 
     public Collection<Integer> getUnusedWalletRecords() throws SQLException {
-        return DBUtils.readIntegers(psQueryUnusedWallets.get());
+        return DBUtils.readIntegersToSet(psQueryUnusedWallets.get());
     }
 }

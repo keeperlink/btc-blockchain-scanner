@@ -22,6 +22,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import lombok.Builder;
 import lombok.Getter;
@@ -129,13 +131,13 @@ public class DbQueryInput {
         }
     }
 
-    public List<BtcAddress> getInputAddresses(int transactionId) throws SQLException {
+    public Collection<BtcAddress> getInputAddresses(int transactionId) throws SQLException {
         psQueryInputAddresses.get().setInt(1, transactionId);
         try (ResultSet rs = psQueryInputAddresses.get().executeQuery()) {
-            List<BtcAddress> result = null;
+            Collection<BtcAddress> result = null;
             while (rs.next()) {
                 if (result == null) {
-                    result = new ArrayList<>();
+                    result = new HashSet<>();
                 }
                 result.add(BtcAddress.builder()
                         .addressId(rs.getInt(1))

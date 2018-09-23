@@ -65,7 +65,7 @@ public class DBConnection {
     private Connection makeJDBCConnection(String url, String user, String password) {
         try {
             Connection con = DriverManager.getConnection(url, user, password);
-            //con.createStatement().execute("SET sql_log_bin=OFF");
+            con.createStatement().execute("SET sql_log_bin=OFF");
             return con;
         } catch (SQLException e) {
             //log.error("url=" + url, e);

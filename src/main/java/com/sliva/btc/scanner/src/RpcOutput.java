@@ -23,7 +23,7 @@ import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient.RawTransaction.Out;
  * @author Sliva Co
  */
 @ToString
-public class RpcOutput implements SrcOutput {
+public class RpcOutput implements SrcOutput<RpcAddress> {
 
     private final Out out;
 
@@ -37,9 +37,9 @@ public class RpcOutput implements SrcOutput {
     }
 
     @Override
-    public SrcAddress getAddress() {
+    public RpcAddress getAddress() {
         try {
-            return BJAddress.fromString(out.scriptPubKey().addresses().get(0));
+            return RpcAddress.fromString(out.scriptPubKey().addresses().get(0));
         } catch (Exception e) {
             return null;
         }

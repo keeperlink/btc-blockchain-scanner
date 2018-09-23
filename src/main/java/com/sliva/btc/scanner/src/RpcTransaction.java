@@ -26,7 +26,7 @@ import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient.RawTransaction;
  * @author Sliva Co
  */
 @ToString
-public class RpcTransaction implements SrcTransaction {
+public class RpcTransaction implements SrcTransaction<RpcInput, RpcOutput> {
 
     private final String txid;
     private RawTransaction rawTransaction;
@@ -41,7 +41,7 @@ public class RpcTransaction implements SrcTransaction {
     }
 
     @Override
-    public Stream<SrcInput> getInputs() {
+    public Stream<RpcInput> getInputs() {
         if (getRawTransaction().vIn() == null || getRawTransaction().vIn().isEmpty() || getRawTransaction().vIn().get(0).txid() == null) {
             return null;
         }
@@ -50,7 +50,7 @@ public class RpcTransaction implements SrcTransaction {
     }
 
     @Override
-    public Stream<SrcOutput> getOutputs() {
+    public Stream<RpcOutput> getOutputs() {
         return getRawTransaction().vOut().stream().map((t) -> new RpcOutput(t));
     }
 

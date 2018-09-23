@@ -27,12 +27,12 @@ import org.apache.commons.codec.binary.Hex;
  *
  * @author Sliva Co
  */
-public class DbBlock implements SrcBlock {
+public class DbBlock implements SrcBlock<DbTransaction> {
 
     private final DbBlockProvider blockProvider;
     private int height;
     private String hash;
-    private Collection<SrcTransaction> transactions;
+    private Collection<DbTransaction> transactions;
 
     public DbBlock(DbBlockProvider blockProvider, int height) {
         this(blockProvider, height, null);
@@ -85,12 +85,12 @@ public class DbBlock implements SrcBlock {
     }
 
     @Override
-    public Stream<SrcTransaction> getTransactions() {
+    public Stream<DbTransaction> getTransactions() {
         if (transactions == null) {
             try {
                 blockProvider.psQueryBlockTransactions.get().setInt(1, getHeight());
                 try (ResultSet rs = blockProvider.psQueryBlockTransactions.get().executeQuery()) {
-                    Collection<SrcTransaction> t = new ArrayList<>();
+                    Collection<DbTransaction> t = new ArrayList<>();
                     while (rs.next()) {
                         t.add(new DbTransaction(blockProvider, rs.getInt(1), Hex.encodeHexString(rs.getBytes(2), true)));
                     }

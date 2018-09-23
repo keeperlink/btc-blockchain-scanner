@@ -21,6 +21,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -38,6 +39,10 @@ public class DbQueryTransaction {
     private static final String SQL_FIND_TRANSACTION_BY_ID = "SELECT txid,block_height,nInputs,nOutputs FROM transaction WHERE transaction_id=?";
     private static final String SQL_QUERY_TRANSACTIONS_IN_BLOCK = "SELECT transaction_id,txid,nInputs,nOutputs FROM transaction WHERE block_height=?";
     private static final String SQL_FIND_LAST_TRANSACTION = "SELECT transaction_id,txid,block_height,nInputs,nOutputs FROM transaction ORDER BY transaction_id DESC LIMIT 1";
+    private static final String SQL_QUERY_SPENDING_TRANSACTIONS_BY_ADDRESS
+            = "SELECT I.transaction_id FROM input I"
+            + " INNER JOIN output O ON O.transaction_id=I.in_transaction_id AND O.pos=I.in_pos"
+            + " WHERE O.address_id=?";
     private final ThreadLocal<PreparedStatement> psQueryTxnsNoOutputs;
     private final ThreadLocal<PreparedStatement> psQueryTxnsRange;
     private final ThreadLocal<PreparedStatement> psQueryTxnsInBlock;
@@ -47,8 +52,9 @@ public class DbQueryTransaction {
     private final ThreadLocal<PreparedStatement> psFindTransactionById;
     private final ThreadLocal<PreparedStatement> psQueryTransactionsInBlock;
     private final ThreadLocal<PreparedStatement> psFindLastTransaction;
+    private final ThreadLocal<PreparedStatement> psQuerySpeninfTransactionsByAddress;
 
-    public DbQueryTransaction(DBConnection conn) throws SQLException {
+    public DbQueryTransaction(DBConnection conn) {
         this.psQueryTxnsNoOutputs = conn.prepareStatement(SQL_QUERY_TXNS_NO_OUTPUTS);
         this.psQueryTxnsRange = conn.prepareStatement(SQL_QUERY_TXNS_RANGE);
         this.psQueryTxnsInBlock = conn.prepareStatement(SQL_QUERY_TXNS_IN_BLOCK);
@@ -58,6 +64,7 @@ public class DbQueryTransaction {
         this.psFindTransactionById = conn.prepareStatement(SQL_FIND_TRANSACTION_BY_ID);
         this.psQueryTransactionsInBlock = conn.prepareStatement(SQL_QUERY_TRANSACTIONS_IN_BLOCK);
         this.psFindLastTransaction = conn.prepareStatement(SQL_FIND_LAST_TRANSACTION);
+        this.psQuerySpeninfTransactionsByAddress = conn.prepareStatement(SQL_QUERY_SPENDING_TRANSACTIONS_BY_ADDRESS);
     }
 
     public BtcTransaction findTransaction(String txid) throws SQLException {
@@ -191,5 +198,10 @@ public class DbQueryTransaction {
         try (ResultSet rs = psFindLastTransaction.get().executeQuery()) {
             return rs.next() ? rs.getInt(1) : 0;
         }
+    }
+
+    public Collection<Integer> getSpendingTransactionsByAddress(int addressId) throws SQLException {
+        psQuerySpeninfTransactionsByAddress.get().setInt(1, addressId);
+        return DBUtils.readIntegersToSet(psQuerySpeninfTransactionsByAddress.get());
     }
 }

@@ -27,10 +27,10 @@ import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient;
  * @author Sliva Co
  */
 @ToString
-public class RpcBlock implements SrcBlock {
+public class RpcBlock implements SrcBlock<RpcTransaction> {
 
     private final BitcoindRpcClient.Block block;
-    private final Map<String, SrcTransaction> cache = new HashMap<>();
+    private final Map<String, RpcTransaction> cache = new HashMap<>();
 
     public RpcBlock(int blockHeight) {
         this.block = RpcClient.getInstance().getBlock(blockHeight);
@@ -51,13 +51,13 @@ public class RpcBlock implements SrcBlock {
     }
 
     @Override
-    public Stream<SrcTransaction> getTransactions() {
+    public Stream<RpcTransaction> getTransactions() {
         return block.tx().stream().map(t -> getTx(t));
     }
 
-    private SrcTransaction getTx(String txid) {
+    private RpcTransaction getTx(String txid) {
         synchronized (cache) {
-            SrcTransaction tx = cache.get(txid);
+            RpcTransaction tx = cache.get(txid);
             if (tx == null) {
                 tx = new RpcTransaction(txid);
                 cache.put(txid, tx);

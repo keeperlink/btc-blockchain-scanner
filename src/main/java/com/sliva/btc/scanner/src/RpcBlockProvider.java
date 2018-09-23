@@ -22,15 +22,15 @@ import lombok.ToString;
  * @author Sliva Co
  */
 @ToString
-public class RpcBlockProvider implements BlockProvider {
+public class RpcBlockProvider implements BlockProvider<RpcBlock> {
 
     @Override
-    public SrcBlock getBlock(int height) {
+    public RpcBlock getBlock(int height) {
         return new RpcBlock(height);
     }
 
     @Override
-    public SrcBlock getBlock(String hash) {
+    public RpcBlock getBlock(String hash) {
         return new RpcBlock(hash);
     }
 
