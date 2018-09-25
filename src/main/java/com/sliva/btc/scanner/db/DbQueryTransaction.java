@@ -103,11 +103,8 @@ public class DbQueryTransaction {
     public List<BtcTransaction> getTxnsNoOutputs(int limit) throws SQLException {
         psQueryTxnsNoOutputs.get().setMaxRows(limit);
         try (ResultSet rs = psQueryTxnsNoOutputs.get().executeQuery()) {
-            List<BtcTransaction> result = null;
+            List<BtcTransaction> result = new ArrayList<>();
             while (rs.next()) {
-                if (result == null) {
-                    result = new ArrayList<>();
-                }
                 result.add(BtcTransaction.builder()
                         .transactionId(rs.getInt(1))
                         .txid(Utils.id2hex(rs.getBytes(2)))
@@ -124,11 +121,8 @@ public class DbQueryTransaction {
         psQueryTxnsRange.get().setInt(1, startTransactionId);
         psQueryTxnsRange.get().setInt(2, endTransactionId);
         try (ResultSet rs = psQueryTxnsRange.get().executeQuery()) {
-            List<BtcTransaction> result = null;
+            List<BtcTransaction> result = new ArrayList<>();
             while (rs.next()) {
-                if (result == null) {
-                    result = new ArrayList<>();
-                }
                 result.add(BtcTransaction.builder()
                         .transactionId(rs.getInt(1))
                         .txid(Utils.id2hex(rs.getBytes(2)))
@@ -144,11 +138,8 @@ public class DbQueryTransaction {
     public List<String> getTxnsInBlock(int blockHeight) throws SQLException {
         psQueryTxnsInBlock.get().setInt(1, blockHeight);
         try (ResultSet rs = psQueryTxnsInBlock.get().executeQuery()) {
-            List<String> result = null;
+            List<String> result = new ArrayList<>();
             while (rs.next()) {
-                if (result == null) {
-                    result = new ArrayList<>();
-                }
                 result.add(Utils.id2hex(rs.getBytes(1)));
             }
             return result;
