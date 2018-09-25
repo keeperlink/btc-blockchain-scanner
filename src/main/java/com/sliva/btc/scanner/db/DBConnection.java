@@ -38,8 +38,7 @@ public class DBConnection {
             + "&useUnicode=true"
             + "&characterEncoding=UTF-8"
             + "&rewriteBatchedStatements=true"
-            + "&defaultRowPrefetch=10000"
-            + "&sql_log_bin=OFF";
+            + "&defaultRowPrefetch=10000";
     private static String DEFAULT_DB_USER = "root";
     private static String DEFAULT_DB_PASSWORD = "password";
     private final String dbname;
