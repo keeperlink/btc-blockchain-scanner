@@ -54,13 +54,19 @@ import org.neo4j.driver.v1.Session;
 public class RunLoadNeo4jDB {
 
     private static final File uploadDir = new File("/tools/neo4j-community-3.4.7/import");
+    private static final int DEFAULT_START_TRANSACTION_ID = 1;
+    private static final int DEFAULT_BATCH_SIZE = 100_000;
+    private static final String DEFAULT_STOP_FILE_NAME = "/tmp/btc-neo4j-stop";
     private final Driver driver;
     private final DBConnection dbCon;
-    private final DbQueryAddress queryAddress;
+//    private final DbQueryAddress queryAddress;
     private final DbQueryTransaction queryTransaction;
     private final DbQueryInput queryInput;
     private final DbQueryOutput queryOutput;
     private final DbBlockProvider blockProvider;
+    private final Utils.NumberFile startFromFile;
+    private final int batchSize;
+    private final File stopFile;
 
     /**
      * @param args the command line arguments
@@ -78,10 +84,13 @@ public class RunLoadNeo4jDB {
     public RunLoadNeo4jDB(CommandLine cmd) {
         DBConnection.applyArguments(cmd);
 
+        startFromFile = new Utils.NumberFile(cmd.getOptionValue("start-from", Integer.toString(DEFAULT_START_TRANSACTION_ID)));
+        batchSize = Integer.parseInt(cmd.getOptionValue("batch-size", Integer.toString(DEFAULT_BATCH_SIZE)));
+        stopFile = new File(cmd.getOptionValue("stop-file", DEFAULT_STOP_FILE_NAME));
         Config.ConfigBuilder configBuilder = Config.build();
         driver = GraphDatabase.driver("bolt://127.0.0.1:7687", AuthTokens.basic("neo4j", "password"), configBuilder.toConfig());
         dbCon = new DBConnection();
-        queryAddress = new DbQueryAddressCombo(dbCon);
+//        queryAddress = new DbQueryAddressCombo(dbCon);
         queryTransaction = new DbQueryTransaction(dbCon);
         blockProvider = new DbBlockProvider(dbCon);
         queryInput = new DbQueryInput(dbCon);
@@ -101,13 +110,17 @@ public class RunLoadNeo4jDB {
                 session.run("CREATE CONSTRAINT ON (n:Output) ASSERT n.id IS UNIQUE");
                 session.run("CREATE CONSTRAINT ON (n:Wallet) ASSERT n.id IS UNIQUE");
             });
-            final int batchSize = 100_000;
-            final int startTransaction = 1;
-            final int endTransaction = 1_000_000;
+            final int startTransaction = startFromFile.getNumber().intValue();
+            final int endTransaction = queryTransaction.getLastTransactionId();
             CompletableFuture<PrepFiles> prepFutureNext = CompletableFuture.supplyAsync(() -> {
                 return processBatchPrepareFiles(startTransaction, startTransaction + batchSize - 1);
             }, exec);
             for (int i = startTransaction; i < endTransaction; i += batchSize) {
+                if (stopFile.exists()) {
+                    log.info("Exiting - stop file found: " + stopFile.getAbsolutePath());
+                    stopFile.renameTo(new File(stopFile.getAbsoluteFile() + "1"));
+                    break;
+                }
                 CompletableFuture<PrepFiles> prepFuture = prepFutureNext;
                 final int nextStart = i + batchSize;
                 prepFutureNext = CompletableFuture.supplyAsync(() -> {
@@ -220,6 +233,7 @@ public class RunLoadNeo4jDB {
         Options options = new Options();
         options.addOption("h", "help", false, "Print help");
         options.addOption(null, "start-from", true, "Start process from this transaction ID. Beside a number this parameter can be set to a file name that stores the numeric value updated on every batch");
+        options.addOption(null, "stop-file", true, "File to be watched on each new block to stop process. If file is present the process stops and file renamed by adding '1' to the end. Default: " + DEFAULT_STOP_FILE_NAME);
         DBConnection.addOptions(options);
         return options;
     }
