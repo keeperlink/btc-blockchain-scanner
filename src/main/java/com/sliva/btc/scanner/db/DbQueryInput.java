@@ -68,12 +68,9 @@ public class DbQueryInput {
 
     public List<TxInput> getInputs(int transactionId) throws SQLException {
         psQueryInputs.get().setInt(1, transactionId);
-        List<TxInput> result = null;
+        List<TxInput> result = new ArrayList<>();
         try (ResultSet rs = psQueryInputs.get().executeQuery()) {
             while (rs.next()) {
-                if (result == null) {
-                    result = new ArrayList<>();
-                }
                 result.add(TxInput.builder()
                         .transactionId(transactionId)
                         .pos(rs.getInt(1))
@@ -104,11 +101,8 @@ public class DbQueryInput {
     public List<TxInputOutput> getInputsWithOutput(int transactionId) throws SQLException {
         psQueryInputsWithOutput.get().setInt(1, transactionId);
         try (ResultSet rs = psQueryInputsWithOutput.get().executeQuery()) {
-            List<TxInputOutput> result = null;
+            List<TxInputOutput> result = new ArrayList<>();
             while (rs.next()) {
-                if (result == null) {
-                    result = new ArrayList<>();
-                }
                 TxInputOutput.TxInputOutputBuilder builder = TxInputOutput.builder();
                 builder.input(TxInput.builder()
                         .transactionId(transactionId)
@@ -134,11 +128,8 @@ public class DbQueryInput {
     public Collection<BtcAddress> getInputAddresses(int transactionId) throws SQLException {
         psQueryInputAddresses.get().setInt(1, transactionId);
         try (ResultSet rs = psQueryInputAddresses.get().executeQuery()) {
-            Collection<BtcAddress> result = null;
+            Collection<BtcAddress> result = new HashSet<>();
             while (rs.next()) {
-                if (result == null) {
-                    result = new HashSet<>();
-                }
                 result.add(BtcAddress.builder()
                         .addressId(rs.getInt(1))
                         .walletId(rs.getInt(2))

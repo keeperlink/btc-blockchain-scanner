@@ -43,7 +43,7 @@ public class DbQueryOutput {
     private final ThreadLocal<PreparedStatement> psQueryOutput;
     private final ThreadLocal<PreparedStatement> psQueryOutputsWithInput;
 
-    public DbQueryOutput(DBConnection conn) throws SQLException {
+    public DbQueryOutput(DBConnection conn) {
         this.psQueryOutputs = conn.prepareStatement(SQL_QUERY_OUTPUTS);
         this.psQueryOutput = conn.prepareStatement(SQL_QUERY_OUTPUT);
         this.psQueryOutputsWithInput = conn.prepareStatement(SQL_QUERY_OUTPUTS_WITH_INPUT);
@@ -52,11 +52,8 @@ public class DbQueryOutput {
     public List<TxOutput> getOutputs(int transactionId) throws SQLException {
         psQueryOutputs.get().setInt(1, transactionId);
         try (ResultSet rs = psQueryOutputs.get().executeQuery()) {
-            List<TxOutput> result = null;
+            List<TxOutput> result = new ArrayList<>();
             while (rs.next()) {
-                if (result == null) {
-                    result = new ArrayList<>();
-                }
                 result.add(TxOutput.builder()
                         .transactionId(transactionId)
                         .pos(rs.getInt(1))
@@ -86,11 +83,8 @@ public class DbQueryOutput {
     public List<TxOutputInput> getOutputsWithInput(int transactionId) throws SQLException {
         psQueryOutputsWithInput.get().setInt(1, transactionId);
         try (ResultSet rs = psQueryOutputsWithInput.get().executeQuery()) {
-            List<TxOutputInput> result = null;
+            List<TxOutputInput> result = new ArrayList<>();
             while (rs.next()) {
-                if (result == null) {
-                    result = new ArrayList<>();
-                }
                 TxOutputInput.TxOutputInputBuilder builder = TxOutputInput.builder();
                 builder.output(TxOutput.builder()
                         .transactionId(transactionId)
