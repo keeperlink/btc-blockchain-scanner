@@ -74,27 +74,20 @@ public class NeoQueries implements AutoCloseable {
     }
 
     public int getLastTransactionId() {
-//        StatementResult sr = run("MATCH (n:Transaction) RETURN n.id ORDER BY n.id DESC LIMIT 1");
-//        return sr.hasNext() ? sr.next().get("n.id", 0) : 0;
+        //return getInteger("MATCH (n:Transaction) RETURN n.id ORDER BY n.id DESC LIMIT 1").orElse(0);
+
         //Neo4j currently having issues with using inexes for ORDER or MAX
-        //do binary search as workaround
+        //do binary search as a workaround
         return findMax("MATCH (n:Transaction {id:{id}}) RETURN n.id");
     }
 
     public int findMax(String query) {
-        int val = 1;
-        for (;; val *= 2) {
-            OptionalInt o = getInteger(query, Values.parameters("id", val));
-            if (!o.isPresent()) {
-                break;
-            }
-        }
-        int minVal = val / 2;
-        int maxVal = val - 1;
+        int minVal = 0;
+        int maxVal = Integer.MAX_VALUE;
         while (minVal < maxVal) {
-            int middle = (minVal + maxVal + 1) / 2;
-            log.debug("min:{}, max:{}, middle:{}", minVal, maxVal, middle);
+            int middle = (int) ((1L + minVal + maxVal) / 2);
             OptionalInt o = getInteger(query, Values.parameters("id", middle));
+            log.trace("min:{}, max:{}, middle:{}, o:{}", minVal, maxVal, middle, o);
             if (o.isPresent()) {
                 minVal = middle;
             } else {

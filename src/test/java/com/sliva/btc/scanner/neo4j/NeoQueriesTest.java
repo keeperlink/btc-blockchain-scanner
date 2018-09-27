@@ -32,7 +32,7 @@ import org.neo4j.driver.v1.Values;
  *
  * @author whost
  */
-@Ignore
+//@Ignore
 public class NeoQueriesTest {
 
     private static NeoConnection conn;
