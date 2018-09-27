@@ -19,6 +19,7 @@ import com.sliva.btc.scanner.util.Utils;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.OptionalInt;
 import java.util.concurrent.CompletionStage;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
@@ -26,27 +27,34 @@ import org.neo4j.driver.v1.Record;
 import org.neo4j.driver.v1.Session;
 import org.neo4j.driver.v1.StatementResult;
 import org.neo4j.driver.v1.StatementResultCursor;
+import org.neo4j.driver.v1.Value;
+import org.neo4j.driver.v1.Values;
 import org.neo4j.driver.v1.summary.SummaryCounters;
 
 /**
+ * Neo4j queries. Not thread-safe.
  *
  * @author whost
  */
 @Slf4j
 public class NeoQueries implements AutoCloseable {
 
-    private final ThreadLocal<Session> session;
+    private final Session session;
 
     public NeoQueries(NeoConnection conn) {
-        session = ThreadLocal.withInitial(() -> conn.getSession());
+        session = conn.getSession();
     }
 
     public Session getSession() {
-        return session.get();
+        return session;
     }
 
     public StatementResult run(String query) {
         return getSession().run(query);
+    }
+
+    public StatementResult run(String query, Value params) {
+        return getSession().run(query, params);
     }
 
     public CompletionStage<StatementResultCursor> runAsync(String query) {
@@ -66,8 +74,44 @@ public class NeoQueries implements AutoCloseable {
     }
 
     public int getLastTransactionId() {
-        StatementResult sr = run("MATCH (n:Transaction) RETURN n.id ORDER BY n.id DESC LIMIT 1");
-        return sr.hasNext() ? sr.next().get("n.id", 0) : 0;
+//        StatementResult sr = run("MATCH (n:Transaction) RETURN n.id ORDER BY n.id DESC LIMIT 1");
+//        return sr.hasNext() ? sr.next().get("n.id", 0) : 0;
+        //Neo4j currently having issues with using inexes for ORDER or MAX
+        //do binary search as workaround
+        return findMax("MATCH (n:Transaction {id:{id}}) RETURN n.id");
+    }
+
+    public int findMax(String query) {
+        int val = 1;
+        for (;; val *= 2) {
+            OptionalInt o = getInteger(query, Values.parameters("id", val));
+            if (!o.isPresent()) {
+                break;
+            }
+        }
+        int minVal = val / 2;
+        int maxVal = val - 1;
+        while (minVal < maxVal) {
+            int middle = (minVal + maxVal + 1) / 2;
+            log.debug("min:{}, max:{}, middle:{}", minVal, maxVal, middle);
+            OptionalInt o = getInteger(query, Values.parameters("id", middle));
+            if (o.isPresent()) {
+                minVal = middle;
+            } else {
+                maxVal = middle - 1;
+            }
+        }
+        return maxVal;
+    }
+
+    public OptionalInt getInteger(String query) {
+        StatementResult sr = run(query);
+        return sr.hasNext() ? OptionalInt.of(sr.next().get(0).asInt()) : OptionalInt.empty();
+    }
+
+    public OptionalInt getInteger(String query, Value params) {
+        StatementResult sr = run(query, params);
+        return sr.hasNext() ? OptionalInt.of(sr.next().get(0).asInt()) : OptionalInt.empty();
     }
 
     public void uploadFile(File f, boolean async, String query) {
@@ -112,6 +156,6 @@ public class NeoQueries implements AutoCloseable {
 
     @Override
     public void close() throws Exception {
-        session.get().close();
+        session.close();
     }
 }

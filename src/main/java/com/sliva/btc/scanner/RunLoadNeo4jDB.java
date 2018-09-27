@@ -15,6 +15,8 @@
  */
 package com.sliva.btc.scanner;
 
+import static com.google.common.base.Preconditions.checkState;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.sliva.btc.scanner.db.DBConnection;
 import com.sliva.btc.scanner.db.DbQueryInput;
 import com.sliva.btc.scanner.db.DbQueryOutput;
@@ -25,11 +27,12 @@ import com.sliva.btc.scanner.neo4j.NeoConnection;
 import com.sliva.btc.scanner.src.DbAddress;
 import com.sliva.btc.scanner.src.DbBlockProvider;
 import com.sliva.btc.scanner.src.DbWallet;
-import com.sliva.btc.scanner.util.CustomThreadFactory;
 import com.sliva.btc.scanner.util.Utils;
 import java.io.File;
+import java.io.IOException;
 import java.io.PrintWriter;
 import java.math.BigDecimal;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Callable;
@@ -37,7 +40,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -73,9 +75,11 @@ public class RunLoadNeo4jDB {
     private final File stopFile;
     private final ExecutorService execPrepareFiles;
     private final ExecutorService execProcessTransactions;
-    private final ExecutorService execNeo;
+//    private final ExecutorService execNeo;
     private File uploadDir;
     private final NeoConnection neoConn;
+    private int startTransaction;
+    private int endTransaction;
 
     /**
      * @param args the command line arguments
@@ -87,12 +91,7 @@ public class RunLoadNeo4jDB {
         if (cmd.hasOption('h')) {
             printHelpAndExit();
         }
-        RunLoadNeo4jDB main = new RunLoadNeo4jDB(cmd);
-        try {
-            main.runProcess();
-        } finally {
-            main.shutdown();
-        }
+        new RunLoadNeo4jDB(cmd).run();
     }
 
     public RunLoadNeo4jDB(CommandLine cmd) {
@@ -109,9 +108,9 @@ public class RunLoadNeo4jDB {
         blockProvider = new DbBlockProvider(dbCon);
         queryInput = new DbQueryInput(dbCon);
         queryOutput = new DbQueryOutput(dbCon);
-        execPrepareFiles = Executors.newFixedThreadPool(2, new CustomThreadFactory("PrepareFiles", true));
-        execProcessTransactions = Executors.newFixedThreadPool(nTxnThreads, new CustomThreadFactory("ProcessTxn", true));
-        execNeo = Executors.newFixedThreadPool(2, new CustomThreadFactory("NeoUpload", true));
+        execPrepareFiles = Executors.newFixedThreadPool(1, new ThreadFactoryBuilder().setDaemon(true).setNameFormat("PrepareFiles-%d").build());
+        execProcessTransactions = Executors.newFixedThreadPool(nTxnThreads, new ThreadFactoryBuilder().setDaemon(true).setNameFormat("ProcessTxn-%d").build());
+//        execNeo = Executors.newFixedThreadPool(2, new ThreadFactoryBuilder().setDaemon(false).setNameFormat("NeoUpload-%d").build());
         neoConn = new NeoConnection();
     }
 
@@ -119,67 +118,73 @@ public class RunLoadNeo4jDB {
         log.debug("Initiating shutdown");
         execPrepareFiles.shutdown();
         execProcessTransactions.shutdown();
-        execNeo.shutdown();
+//        execNeo.shutdown();
         neoConn.close();
         log.debug("Shutdown complete.");
     }
 
-    private void runProcess() throws Exception {
+    private void run() throws Exception {
         try (NeoQueries neoQueries = new NeoQueries(neoConn)) {
-            String importDir = neoQueries.getImportDirectory();
-            log.debug("Neo4j import directory: " + importDir);
-            if (importDir == null) {
-                throw new IllegalStateException("Cannot determine Neo4j import directory");
-            }
-            uploadDir = new File(importDir);
-            if (cleanup) {
-                log.debug("Cleaning...");
-                Utils.logRuntime("Cleaned", () -> {
-                    neoQueries.run("MATCH (n:Transaction) DETACH DELETE n");
-                    neoQueries.run("MATCH (n:Output) DETACH DELETE n");
-                    neoQueries.run("MATCH (n:Wallet) DETACH DELETE n");
-                });
-            }
-            neoQueries.run("CREATE CONSTRAINT ON (n:Transaction) ASSERT n.id IS UNIQUE");
-            neoQueries.run("CREATE CONSTRAINT ON (n:Transaction) ASSERT n.hash IS UNIQUE");
-            neoQueries.run("CREATE CONSTRAINT ON (n:Output) ASSERT n.id IS UNIQUE");
-            neoQueries.run("CREATE CONSTRAINT ON (n:Wallet) ASSERT n.id IS UNIQUE");
-            final int lastTransactionId = neoQueries.getLastTransactionId();
-            final int startTransaction = lastTransactionId + 1;//startFromFile.getNumber().intValue();
-            log.debug("Getting Neo DB state...");
-            final int endTransaction = queryTransaction.getLastTransactionId();
-            log.debug("startTransaction: {}, endTransaction: {}", startTransaction, endTransaction);
-            Future<PrepFiles> prepFutureNext = execPrepareFiles.submit(() -> prepareFiles(startTransaction, startTransaction + batchSize - 1));
-            new CleanupFiles().start();
-            int nBatchesProcessed = 0;
-            long s = System.currentTimeMillis();
-            for (int i = startTransaction; i < endTransaction; i += batchSize) {
-                if (stopFile.exists()) {
-                    log.info("Exiting - stop file found: " + stopFile.getAbsolutePath());
-                    stopFile.renameTo(new File(stopFile.getAbsoluteFile() + "1"));
-                    break;
-                }
-                Future<PrepFiles> prepFuture = prepFutureNext;
-                final int nextStart = i + batchSize;
-                prepFutureNext = execPrepareFiles.submit(() -> prepareFiles(nextStart, nextStart + batchSize - 1));
-                uploadFilesToNeoDB(neoQueries, prepFuture.get());
-                nBatchesProcessed++;
-                long runtime = System.currentTimeMillis() - s;
-                log.debug("Loop#{}: Speed: {} tx/sec", nBatchesProcessed, (nBatchesProcessed * batchSize * 1000L / runtime));
-            }
+            init(neoQueries);
+            runLoop(neoQueries);
+        } finally {
+            shutdown();
         }
     }
 
-    @SuppressWarnings("UseSpecificCatch")
-    private PrepFiles prepareFiles(int startTransactionId, int endTrasnactionId) {
+    private void init(NeoQueries neoQueries) throws SQLException {
+        String importDir = neoQueries.getImportDirectory();
+        log.debug("Neo4j import directory: " + importDir);
+        checkState(importDir != null, "Cannot determine Neo4j import directory");
+        uploadDir = new File(importDir);
+        if (cleanup) {
+            log.debug("Cleaning...");
+            Utils.logRuntime("Cleaned", () -> {
+                neoQueries.run("MATCH (n:Transaction) DETACH DELETE n");
+                neoQueries.run("MATCH (n:Output) DETACH DELETE n");
+                neoQueries.run("MATCH (n:Wallet) DETACH DELETE n");
+            });
+        }
+        neoQueries.run("CREATE CONSTRAINT ON (n:Transaction) ASSERT n.id IS UNIQUE");
+        neoQueries.run("CREATE CONSTRAINT ON (n:Transaction) ASSERT n.hash IS UNIQUE");
+        neoQueries.run("CREATE CONSTRAINT ON (n:Output) ASSERT n.id IS UNIQUE");
+        neoQueries.run("CREATE CONSTRAINT ON (n:Wallet) ASSERT n.id IS UNIQUE");
+        log.debug("Getting Neo DB state...");
+        final int lastTransactionId = neoQueries.getLastTransactionId();
+        startTransaction = lastTransactionId + 1;//startFromFile.getNumber().intValue();
+        endTransaction = queryTransaction.getLastTransactionId();
+        log.debug("startTransaction: {}, endTransaction: {}", startTransaction, endTransaction);
+        new CleanupFiles().start();
+    }
+
+    private void runLoop(NeoQueries neoQueries) throws Exception {
+        Future<PrepFiles> prepFutureNext = prepareFilesFuture(startTransaction);
+        int nBatchesProcessed = 0;
+        long s = System.currentTimeMillis();
+        for (int i = startTransaction; i < endTransaction; i += batchSize) {
+            if (stopFile.exists()) {
+                log.info("Exiting - stop file found: " + stopFile.getAbsolutePath());
+                stopFile.renameTo(new File(stopFile.getAbsoluteFile() + "1"));
+                break;
+            }
+            Future<PrepFiles> prepFuture = prepFutureNext;
+            prepFutureNext = prepareFilesFuture(i + batchSize);
+            uploadFilesToNeoDB(neoQueries, prepFuture.get());
+            nBatchesProcessed++;
+            long runtime = System.currentTimeMillis() - s;
+            log.debug("Loop#{}: Speed: {} tx/sec", nBatchesProcessed, (nBatchesProcessed * batchSize * 1000L / runtime));
+        }
+    }
+
+    private Future<PrepFiles> prepareFilesFuture(int start) {
+        return execPrepareFiles.submit(() -> prepareFiles(start));
+    }
+
+    private PrepFiles prepareFiles(int startTransactionId) {
+        int endTrasnactionId = startTransactionId + batchSize - 1;
         log.debug("prepareFiles [{} - {}] STARTED", startTransactionId, endTrasnactionId);
         long s = System.currentTimeMillis();
         PrepFiles f = new PrepFiles(startTransactionId, endTrasnactionId, UUID.randomUUID().toString());
-//        log.debug("txnFile: {}", f.txnFile.toURI());
-//        txnFile.deleteOnExit();
-//        outFile.deleteOnExit();
-//        inFile.deleteOnExit();
-//        wFile.deleteOnExit();
         try {
             try (PrintWriter txnWriter = new PrintWriter(f.txnFile);
                     PrintWriter outWriter = new PrintWriter(f.outFile);
@@ -217,7 +222,7 @@ public class RunLoadNeo4jDB {
                                     }
                                 }
                             });
-                        } catch (Exception e) {
+                        } catch (SQLException e) {
                             throw new RuntimeException(e);
                         }
                         return null;
@@ -226,10 +231,8 @@ public class RunLoadNeo4jDB {
             } finally {
                 log.debug("prepareFiles [{} - {}]: FINISHED. Runtime: {} msec.", startTransactionId, endTrasnactionId, (System.currentTimeMillis() - s));
             }
-        } catch (Exception e) {
+        } catch (InterruptedException | SQLException | IOException e) {
             throw new RuntimeException(e);
-        } finally {
-//            txnFile.delete();
         }
         return f;
     }
@@ -277,7 +280,6 @@ public class RunLoadNeo4jDB {
 
     }
 
-    @Getter
     private class PrepFiles {
 
         private final int startTransactionId;
