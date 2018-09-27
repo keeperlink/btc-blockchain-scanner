@@ -125,8 +125,6 @@ public class RunLoadNeo4jDB {
     }
 
     private void runProcess() throws Exception {
-
-        Executors.defaultThreadFactory();
         try (NeoQueries neoQueries = new NeoQueries(neoConn)) {
             String importDir = neoQueries.getImportDirectory();
             log.debug("Neo4j import directory: " + importDir);
@@ -242,20 +240,20 @@ public class RunLoadNeo4jDB {
         long s = System.currentTimeMillis();
         neoQueries.uploadFile(f.txnFile, false,
                 "CREATE (t:Transaction{id:toInteger(v.id),hash:v.hash,block:toInteger(v.block),nInputs:toInteger(v.nInputs),nOutputs:toInteger(v.nOutputs)})"
-                + " RETURN count(v),count(t)");
+                + " RETURN count(v)");
         neoQueries.uploadFile(f.outFile, false,
                 "MATCH (t:Transaction {id:toInteger(v.transactionId)})"
-                + " CREATE (o:Output{id:v.transactionId+':'+v.pos,address:v.address,amount:v.amount})<-[p:output {pos:toInteger(v.pos)}]-(t)"
-                + " RETURN count(v),count(t),count(o),count(p)");
+                + " CREATE (o:Output{id:v.transactionId+':'+v.pos,address:v.address,amount:v.amount})<-[:output {pos:toInteger(v.pos)}]-(t)"
+                + " RETURN count(v)");
         neoQueries.uploadFile(f.inFile, false,
                 "MATCH (t:Transaction {id:toInteger(v.transactionId)}),(o:Output {id:v.inTransactionId+':'+v.inPos})"
-                + " CREATE (o)-[p:input {pos:toInteger(v.pos)}]->(t)"
-                + " RETURN count(v),count(t),count(o),count(p)");
+                + " CREATE (o)-[:input {pos:toInteger(v.pos)}]->(t)"
+                + " RETURN count(v)");
         neoQueries.uploadFile(f.wFile, false,
                 "MATCH (o:Output {id:v.transactionId+':'+v.pos})"
                 + " MERGE (w:Wallet{id:toInteger(v.walletId)}) ON CREATE SET w.name=v.walletName"
-                + " CREATE (o)-[p:wallet]->(w)"
-                + " RETURN count(v),count(o),count(w),count(p)");
+                + " CREATE (o)-[:wallet]->(w)"
+                + " RETURN count(v)");
         log.debug("uploadFilesToNeoDB [{} - {}] FINISHED. Runtime: {} msec.",
                 f.startTransactionId, f.endTrasnactionId, (System.currentTimeMillis() - s));
     }
@@ -301,7 +299,7 @@ public class RunLoadNeo4jDB {
 
     private class CleanupFiles extends Thread {
 
-        private static final long TTL_MSEC = 10 * 60 * 1000L;
+        private static final long TTL_MSEC = 5 * 60 * 1000L;
         private static final long CHECK_PERIOD_MSEC = 30 * 1000L;
 
         public CleanupFiles() {
