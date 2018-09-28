@@ -31,6 +31,7 @@ import java.io.File;
 import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -57,11 +58,11 @@ import org.neo4j.driver.v1.Values;
  * @author whost
  */
 @Slf4j
-public class RunLoadNeo4jDB2 {
+public class RunNeoLoader {
 
     private static final int DEFAULT_TXN_THREADS = 10;
     private static final int DEFAULT_START_TRANSACTION_ID = 1;
-    private static final int DEFAULT_BATCH_SIZE = 20000;
+    private static final int DEFAULT_BATCH_SIZE = 5000;
     private static final String DEFAULT_STOP_FILE_NAME = "/tmp/btc-neo4j2-stop";
     private final DBConnection dbCon;
 //    private final DbQueryAddress queryAddress;
@@ -90,10 +91,10 @@ public class RunLoadNeo4jDB2 {
         if (cmd.hasOption('h')) {
             printHelpAndExit();
         }
-        new RunLoadNeo4jDB2(cmd).run();
+        new RunNeoLoader(cmd).run();
     }
 
-    public RunLoadNeo4jDB2(CommandLine cmd) {
+    public RunNeoLoader(CommandLine cmd) {
         DBConnection.applyArguments(cmd);
         NeoConnection.applyArguments(cmd);
         startFromFile = new Utils.NumberFile(cmd.getOptionValue("start-from", Integer.toString(DEFAULT_START_TRANSACTION_ID)));
@@ -186,44 +187,35 @@ public class RunLoadNeo4jDB2 {
                     return (Callable<Void>) () -> {
                         try {
                             Map<String, Object> tx = new HashMap<>();
-                            synchronized (data.data) {
-                                data.data.add(tx);
-                            }
+                            data.data.add(tx);
                             tx.put("id", t.getTransactionId());
                             tx.put("txid", t.getTxid());
                             tx.put("block", t.getBlockHeight());
                             tx.put("nInputs", t.getNInputs());
-                            tx.put("block", t.getNOutputs());
-                            List<Map<String, Object>> inputs = new ArrayList<>();
+                            tx.put("nOutputs", t.getNOutputs());
+                            Collection<Map<String, Object>> inputs = Collections.synchronizedCollection(new ArrayList<>());
                             tx.put("inputs", inputs);
                             queryInput.getInputs(t.getTransactionId()).forEach(i -> {
                                 Map<String, Object> input = new HashMap<>();
-                                synchronized (inputs) {
-                                    inputs.add(input);
-                                }
+                                inputs.add(input);
                                 input.put("id", i.getInTransactionId() + ":" + i.getInPos());
                                 input.put("pos", i.getPos());
                             });
-                            List<Map<String, Object>> outputs = new ArrayList<>();
+                            Collection<Map<String, Object>> outputs = Collections.synchronizedCollection(new ArrayList<>());
                             tx.put("outputs", outputs);
                             queryOutput.getOutputs(t.getTransactionId()).forEach(o -> {
                                 DbAddress adr = o.getAddressId() == 0 ? null : new DbAddress(blockProvider, o.getAddressId(), null, -1);
-                                String address = adr == null ? "Undefined" : adr.getName();
-                                BigDecimal amount = new BigDecimal(o.getAmount()).movePointLeft(8);
                                 Map<String, Object> output = new HashMap<>();
-                                synchronized (outputs) {
-                                    outputs.add(output);
-                                }
+                                outputs.add(output);
                                 output.put("id", t.getTransactionId() + ":" + o.getPos());
                                 output.put("pos", o.getPos());
-                                output.put("address", address);
-                                output.put("amount", amount.doubleValue());
-                                int walletId = adr == null ? 0 : adr.getWalletId();
-                                if (walletId > 0) {
-                                    DbWallet w = new DbWallet(blockProvider, walletId, null, null);
-                                    String walletName = StringUtils.defaultString(w.getName(), Integer.toString(walletId)).replaceAll("\"", "\"\"");
+                                output.put("address", adr == null ? "Undefined" : adr.getName());
+                                output.put("amount", new BigDecimal(o.getAmount()).movePointLeft(8).doubleValue());
+                                if (adr != null && adr.getWalletId() > 0) {
+                                    DbWallet w = new DbWallet(blockProvider, adr.getWalletId(), null, null);
+                                    String walletName = StringUtils.defaultString(w.getName(), Integer.toString(adr.getWalletId())).replaceAll("\"", "\"\"");
                                     Map<String, Object> wallet = new HashMap<>();
-                                    wallet.put("id", walletId);
+                                    wallet.put("id", adr.getWalletId());
                                     wallet.put("name", walletName);
                                     output.put("wallets", Collections.singleton(wallet));
                                 }
@@ -278,6 +270,7 @@ public class RunLoadNeo4jDB2 {
     private static Options prepOptions() {
         Options options = new Options();
         options.addOption("h", "help", false, "Print help");
+        options.addOption(null, "batch-size", true, "Number or transactions to process in a batch. Default: " + DEFAULT_BATCH_SIZE);
         options.addOption(null, "start-from", true, "Start process from this transaction ID. Beside a number this parameter can be set to a file name that stores the numeric value updated on every batch");
         options.addOption(null, "stop-file", true, "File to be watched on each new block to stop process. If file is present the process stops and file renamed by adding '1' to the end. Default: " + DEFAULT_STOP_FILE_NAME);
         options.addOption("t", "threads", true, "Number of threads to run. Default is " + DEFAULT_TXN_THREADS + ". To disable parallel threading set value to 0");
@@ -291,12 +284,12 @@ public class RunLoadNeo4jDB2 {
 
         private final int startTransactionId;
         private final int endTrasnactionId;
-        private final List<Object> data;
+        private final Collection<Map<String, Object>> data;
 
         PrepData(int startTransactionId, int endTrasnactionId, String uuid) {
             this.startTransactionId = startTransactionId;
             this.endTrasnactionId = endTrasnactionId;
-            this.data = new ArrayList<>(batchSize);
+            this.data = Collections.synchronizedCollection(new ArrayList<>(batchSize));
         }
     }
 }

@@ -41,6 +41,15 @@ import org.neo4j.driver.v1.summary.SummaryCounters;
 @Slf4j
 public class NeoQueries implements AutoCloseable {
 
+    private static final String QUERY_INPUT_RELATIONS_COUNTS = "MATCH (t:Transaction)-[p:input]-() RETURN count(p)";
+    private static final String QUERY_OUTPUT_RELATIONS_COUNTS = "MATCH (t:Transaction)-[p:output]-() RETURN count(p)";
+    private static final String QUERY_TRANSACTIONS_COUNTS = "MATCH (t:Transaction) RETURN COUNT(t),MAX(t.id),SUM(t.nInputs),SUM(t.nOutputs)";
+    private static final String QUERY_TRANSACTIONS_MISSING_INPUT_RELATIONS = "MATCH (t:Transaction) WHERE t.nInputs>0 AND NOT (t)-[:input]-() RETURN t LIMIT 100";
+    private static final String QUERY_TRANSACTIONS_MISSING_OUTPUT_RELATIONS = "MATCH (t:Transaction) WHERE NOT (t)-[:output]-() RETURN t LIMIT 100";
+    private static final String QUERY_OUTPUTS_MISSING_OUTPUT_RELATIONS = "MATCH (o:Output) WHERE NOT (o)-[:output]-() RETURN o LIMIT 100";
+    private static final String QUERY_OUTPUTS_MISSING_WALLET_RELATIONS = "MATCH (o:Output) WHERE (o)-[:input]->() AND NOT (o)-[:wallet]->() AND o.address<>\"Undefined\" RETURN o LIMIT 100";
+    private static final String QUERY_WALLETS_WITHOUT_RELATIONS = "MATCH (w:Wallet) WHERE NOT (w)-[:wallet]-() RETURN w LIMIT 100";
+
     private final Session session;
 
     public NeoQueries(NeoConnection conn) {
@@ -81,7 +90,6 @@ public class NeoQueries implements AutoCloseable {
 
     public int getLastTransactionId() {
         //return getInteger("MATCH (n:Transaction) RETURN n.id ORDER BY n.id DESC LIMIT 1").orElse(0);
-
         //Neo4j currently having issues with using inexes for ORDER or MAX
         //do binary search as a workaround
         return findMax("MATCH (n:Transaction {id:{id}}) RETURN n.id");

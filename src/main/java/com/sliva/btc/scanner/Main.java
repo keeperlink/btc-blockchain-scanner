@@ -51,7 +51,7 @@ public class Main {
                     RunAddress.main(removeCmd(args));
                     return;
                 case load_neo4j:
-                    RunLoadNeo4jDB.main(removeCmd(args));
+                    RunNeoLoader.main(removeCmd(args));
                     return;
             }
         } catch (IllegalArgumentException e) {
