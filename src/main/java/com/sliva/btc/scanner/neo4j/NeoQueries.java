@@ -19,6 +19,7 @@ import com.sliva.btc.scanner.util.Utils;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.concurrent.CompletionStage;
 import lombok.extern.slf4j.Slf4j;
@@ -27,6 +28,7 @@ import org.neo4j.driver.v1.Record;
 import org.neo4j.driver.v1.Session;
 import org.neo4j.driver.v1.StatementResult;
 import org.neo4j.driver.v1.StatementResultCursor;
+import org.neo4j.driver.v1.Transaction;
 import org.neo4j.driver.v1.Value;
 import org.neo4j.driver.v1.Values;
 import org.neo4j.driver.v1.summary.SummaryCounters;
@@ -47,6 +49,10 @@ public class NeoQueries implements AutoCloseable {
 
     public Session getSession() {
         return session;
+    }
+
+    public Transaction beginTransaction() {
+        return getSession().beginTransaction();
     }
 
     public StatementResult run(String query) {
@@ -86,7 +92,7 @@ public class NeoQueries implements AutoCloseable {
         int maxVal = Integer.MAX_VALUE;
         while (minVal < maxVal) {
             int middle = (int) ((1L + minVal + maxVal) / 2);
-            OptionalInt o = getInteger(query, Values.parameters("id", middle));
+            OptionalInt o = NeoQueries.this.getResultAsInteger(query, Values.parameters("id", middle));
             log.trace("min:{}, max:{}, middle:{}, o:{}", minVal, maxVal, middle, o);
             if (o.isPresent()) {
                 minVal = middle;
@@ -97,14 +103,14 @@ public class NeoQueries implements AutoCloseable {
         return maxVal;
     }
 
-    public OptionalInt getInteger(String query) {
-        StatementResult sr = run(query);
-        return sr.hasNext() ? OptionalInt.of(sr.next().get(0).asInt()) : OptionalInt.empty();
+    public OptionalInt getResultAsInteger(String query) {
+        Optional<Record> r = readFirstRecord(run(query));
+        return r.isPresent() ? OptionalInt.of(r.get().get(0).asInt()) : OptionalInt.empty();
     }
 
-    public OptionalInt getInteger(String query, Value params) {
-        StatementResult sr = run(query, params);
-        return sr.hasNext() ? OptionalInt.of(sr.next().get(0).asInt()) : OptionalInt.empty();
+    public OptionalInt getResultAsInteger(String query, Value params) {
+        Optional<Record> r = readFirstRecord(run(query, params));
+        return r.isPresent() ? OptionalInt.of(r.get().get(0).asInt()) : OptionalInt.empty();
     }
 
     public void uploadFile(File f, boolean async, String query) {
@@ -115,7 +121,7 @@ public class NeoQueries implements AutoCloseable {
             log.error("File: {}", f, e);
             throw new RuntimeException(e);
         }
-        String txQuery = "USING PERIODIC COMMIT LOAD CSV WITH HEADERS FROM \"file:/" + f.getName() + "\" as v" + " " + query;
+        String txQuery = "USING PERIODIC COMMIT 1000000 LOAD CSV WITH HEADERS FROM \"file:/" + f.getName() + "\" as v" + " " + query;
         if (async) {
             long s = System.currentTimeMillis();
             runAsync(txQuery).thenAccept((c) -> {
@@ -135,6 +141,25 @@ public class NeoQueries implements AutoCloseable {
                 });
                 log.debug("Records: {}. Summary: {}", fileDataLines, toString(sr.summary().counters()));
             });
+        }
+    }
+
+    public static Optional<Record> readFirstRecord(StatementResult sr) {
+        try {
+            return sr.hasNext() ? Optional.of(sr.next()) : Optional.empty();
+        } finally {
+            sr.consume();
+        }
+    }
+
+    public static void logOutput(StatementResult sr, String logPrefix) {
+        try {
+            while (sr.hasNext()) {
+                log.debug("{}: {}", logPrefix, sr.next().asMap());
+            }
+            log.debug("{}: Summary: {}", logPrefix, toString(sr.summary().counters()));
+        } finally {
+            sr.consume();
         }
     }
 

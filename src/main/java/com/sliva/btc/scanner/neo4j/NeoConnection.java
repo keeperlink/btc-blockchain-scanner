@@ -17,8 +17,10 @@ package com.sliva.btc.scanner.neo4j;
 
 import com.sliva.btc.scanner.util.Utils;
 import java.util.Properties;
+import java.util.logging.Level;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.Options;
+import org.neo4j.driver.internal.logging.ConsoleLogging;
 import org.neo4j.driver.v1.AuthTokens;
 import org.neo4j.driver.v1.Config;
 import org.neo4j.driver.v1.Driver;
@@ -54,8 +56,11 @@ public class NeoConnection implements AutoCloseable {
 
     private static Driver getDriver(String url, String user, String password) {
         Config.ConfigBuilder configBuilder = Config.build();
+        configBuilder.withLeakedSessionsLogging();
+        //configBuilder.withMaxConnectionPoolSize(10);
+        //configBuilder.withLogging(new ConsoleLogging(Level.FINEST));
+        configBuilder.withoutEncryption();
         return GraphDatabase.driver(url, AuthTokens.basic(user, password), configBuilder.toConfig());
-
     }
 
     public static void applyArguments(CommandLine cmd) {
