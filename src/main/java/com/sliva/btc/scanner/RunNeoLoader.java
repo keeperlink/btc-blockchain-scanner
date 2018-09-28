@@ -60,7 +60,7 @@ import org.neo4j.driver.v1.Values;
 @Slf4j
 public class RunNeoLoader {
 
-    private static final int DEFAULT_TXN_THREADS = 10;
+    private static final int DEFAULT_TXN_THREADS = 5;
     private static final int DEFAULT_START_TRANSACTION_ID = 1;
     private static final int DEFAULT_BATCH_SIZE = 5000;
     private static final String DEFAULT_STOP_FILE_NAME = "/tmp/btc-neo4j2-stop";

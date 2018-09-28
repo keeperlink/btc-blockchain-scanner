@@ -17,10 +17,8 @@ package com.sliva.btc.scanner.neo4j;
 
 import com.sliva.btc.scanner.util.Utils;
 import java.util.Properties;
-import java.util.logging.Level;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.Options;
-import org.neo4j.driver.internal.logging.ConsoleLogging;
 import org.neo4j.driver.v1.AuthTokens;
 import org.neo4j.driver.v1.Config;
 import org.neo4j.driver.v1.Driver;
@@ -65,9 +63,9 @@ public class NeoConnection implements AutoCloseable {
 
     public static void applyArguments(CommandLine cmd) {
         Properties prop = Utils.loadProperties(cmd.getOptionValue("neo-config"));
-        DEFAULT_URL = cmd.getOptionValue("neo-url", prop.getProperty("db-url", DEFAULT_URL));
-        DEFAULT_USER = cmd.getOptionValue("neo-user", prop.getProperty("db-user", DEFAULT_USER));
-        DEFAULT_PASSWORD = cmd.getOptionValue("neo-password", prop.getProperty("db-password", DEFAULT_PASSWORD));
+        DEFAULT_URL = cmd.getOptionValue("neo-url", prop.getProperty("neo-url", DEFAULT_URL));
+        DEFAULT_USER = cmd.getOptionValue("neo-user", prop.getProperty("neo-user", DEFAULT_USER));
+        DEFAULT_PASSWORD = cmd.getOptionValue("neo-password", prop.getProperty("neo-password", DEFAULT_PASSWORD));
     }
 
     public static Options addOptions(Options options) {
