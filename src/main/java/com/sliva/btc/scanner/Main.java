@@ -50,6 +50,9 @@ public class Main {
                 case address:
                     RunAddress.main(removeCmd(args));
                     return;
+                case load_neo4j:
+                    RunNeoLoader.main(removeCmd(args));
+                    return;
             }
         } catch (IllegalArgumentException e) {
             System.out.println("Unknown command: " + args[0]);
@@ -73,6 +76,7 @@ public class Main {
         update_spent,
         update_wallets,
         prepare_blocks,
-        address
+        address,
+        load_neo4j
     }
 }

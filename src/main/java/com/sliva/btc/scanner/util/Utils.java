@@ -115,6 +115,12 @@ public final class Utils {
         return null;
     }
 
+    public static void logRuntime(String name, Runnable r) {
+        long s = System.currentTimeMillis();
+        r.run();
+        log.debug("{}. Runtime: {} msec.", name, System.currentTimeMillis() - s);
+    }
+
     public static Properties loadProperties(String file) {
         Properties prop = new Properties();
         if (file != null) {

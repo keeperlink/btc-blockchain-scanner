@@ -31,6 +31,7 @@ public class DbWallet implements SrcWallet<DbAddress> {
     private final int id;
     private String name;
     private String details;
+    private boolean loaded;
     private Collection<DbAddress> addresses;
 
     public DbWallet(DbBlockProvider blockProvider, int id, String name, String details) {
@@ -47,7 +48,7 @@ public class DbWallet implements SrcWallet<DbAddress> {
 
     @Override
     public String getName() {
-        if (name == null) {
+        if (name == null && !loaded) {
             loadWallet();
         }
         return name;
@@ -55,7 +56,7 @@ public class DbWallet implements SrcWallet<DbAddress> {
 
     @Override
     public String getDetails() {
-        if (details == null) {
+        if (details == null && !loaded) {
             loadWallet();
         }
         return details;
@@ -95,6 +96,8 @@ public class DbWallet implements SrcWallet<DbAddress> {
             }
         } catch (SQLException e) {
             throw new IllegalStateException(e);
+        } finally {
+            loaded = true;
         }
     }
 }
