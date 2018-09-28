@@ -15,6 +15,10 @@
  */
 package com.sliva.btc.scanner;
 
+import com.google.common.base.Optional;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.sliva.btc.scanner.db.DBConnection;
 import com.sliva.btc.scanner.db.DbQueryInput;
@@ -38,10 +42,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -80,6 +87,8 @@ public class RunNeoLoader {
     private final NeoConnection neoConn;
     private int startTransaction;
     private int endTransaction;
+    private final LoadingCache<Integer, CAddress> addressCache;
+    private final LoadingCache<Integer, Optional<String>> walletCache;
 
     /**
      * @param args the command line arguments
@@ -112,6 +121,30 @@ public class RunNeoLoader {
         execProcessTransactions = Executors.newFixedThreadPool(nTxnThreads, new ThreadFactoryBuilder().setDaemon(true).setNameFormat("ProcessTxn-%d").build());
 //        execNeo = Executors.newFixedThreadPool(2, new ThreadFactoryBuilder().setDaemon(false).setNameFormat("NeoUpload-%d").build());
         neoConn = new NeoConnection();
+        addressCache = CacheBuilder.newBuilder()
+                .concurrencyLevel(nTxnThreads)
+                .maximumSize(1_000_000)
+                .recordStats()
+                .build(
+                        new CacheLoader<Integer, CAddress>() {
+                    @Override
+                    public CAddress load(Integer addressId) {
+                        DbAddress a = new DbAddress(blockProvider, addressId, null, -1);
+                        return new CAddress(a.getName(), a.getWalletId());
+                    }
+                });
+        walletCache = CacheBuilder.newBuilder()
+                .concurrencyLevel(nTxnThreads)
+                .maximumSize(1_000_000)
+                .recordStats()
+                .build(
+                        new CacheLoader<Integer, Optional<String>>() {
+                    @Override
+                    public Optional<String> load(Integer walletId) {
+                        DbWallet w = new DbWallet(blockProvider, walletId, null, null);
+                        return Optional.fromNullable(w.getName());
+                    }
+                });
     }
 
     private void shutdown() {
@@ -142,7 +175,7 @@ public class RunNeoLoader {
             });
         }
         neoQueries.run("CREATE CONSTRAINT ON (n:Transaction) ASSERT n.id IS UNIQUE");
-        neoQueries.run("CREATE CONSTRAINT ON (n:Transaction) ASSERT n.hash IS UNIQUE");
+//        neoQueries.run("CREATE CONSTRAINT ON (n:Transaction) ASSERT n.hash IS UNIQUE");
         neoQueries.run("CREATE CONSTRAINT ON (n:Output) ASSERT n.id IS UNIQUE");
         neoQueries.run("CREATE CONSTRAINT ON (n:Wallet) ASSERT n.id IS UNIQUE");
         log.debug("Getting Neo DB state...");
@@ -167,7 +200,10 @@ public class RunNeoLoader {
             uploadDataToNeoDB(neoQueries, prepFuture.get());
             nBatchesProcessed++;
             long runtime = System.currentTimeMillis() - s;
-            log.debug("Loop#{}: Speed: {} tx/sec", nBatchesProcessed, (nBatchesProcessed * batchSize * 1000L / runtime));
+            log.debug("Loop#{}: Speed: {} tx/sec.\r\n\t\tAddressCache.stats: Hits: {}%  {}\r\n\t\tWalletCache.stats: Hits: {}%  {}",
+                    nBatchesProcessed, (nBatchesProcessed * batchSize * 1000L / runtime),
+                    Math.round(addressCache.stats().hitRate() * 100), addressCache.stats(),
+                    Math.round(walletCache.stats().hitRate() * 100), walletCache.stats());
         }
     }
 
@@ -189,35 +225,37 @@ public class RunNeoLoader {
                             Map<String, Object> tx = new HashMap<>();
                             data.data.add(tx);
                             tx.put("id", t.getTransactionId());
-                            tx.put("txid", t.getTxid());
+                            tx.put("hash", t.getTxid());
                             tx.put("block", t.getBlockHeight());
-                            tx.put("nInputs", t.getNInputs());
-                            tx.put("nOutputs", t.getNOutputs());
+                            tx.put("nInputs", (short) t.getNInputs());
+                            tx.put("nOutputs", (short) t.getNOutputs());
                             Collection<Map<String, Object>> inputs = Collections.synchronizedCollection(new ArrayList<>());
                             tx.put("inputs", inputs);
                             queryInput.getInputs(t.getTransactionId()).forEach(i -> {
                                 Map<String, Object> input = new HashMap<>();
                                 inputs.add(input);
-                                input.put("id", i.getInTransactionId() + ":" + i.getInPos());
-                                input.put("pos", i.getPos());
+                                input.put("id", i.getInTransactionId() * 10000L + i.getInPos());
+                                input.put("pos", (short) i.getPos());
                             });
                             Collection<Map<String, Object>> outputs = Collections.synchronizedCollection(new ArrayList<>());
                             tx.put("outputs", outputs);
                             queryOutput.getOutputs(t.getTransactionId()).forEach(o -> {
-                                DbAddress adr = o.getAddressId() == 0 ? null : new DbAddress(blockProvider, o.getAddressId(), null, -1);
-                                Map<String, Object> output = new HashMap<>();
-                                outputs.add(output);
-                                output.put("id", t.getTransactionId() + ":" + o.getPos());
-                                output.put("pos", o.getPos());
-                                output.put("address", adr == null ? "Undefined" : adr.getName());
-                                output.put("amount", new BigDecimal(o.getAmount()).movePointLeft(8).doubleValue());
-                                if (adr != null && adr.getWalletId() > 0) {
-                                    DbWallet w = new DbWallet(blockProvider, adr.getWalletId(), null, null);
-                                    String walletName = StringUtils.defaultString(w.getName(), Integer.toString(adr.getWalletId())).replaceAll("\"", "\"\"");
-                                    Map<String, Object> wallet = new HashMap<>();
-                                    wallet.put("id", adr.getWalletId());
-                                    wallet.put("name", walletName);
-                                    output.put("wallets", Collections.singleton(wallet));
+                                try {
+                                    CAddress adr = o.getAddressId() == 0 ? null : addressCache.get(o.getAddressId());
+                                    Map<String, Object> output = new HashMap<>();
+                                    outputs.add(output);
+                                    output.put("id", t.getTransactionId() * 10000L + o.getPos());
+                                    output.put("pos", (short) o.getPos());
+                                    output.put("address", adr == null ? "Undefined" : adr.getName());
+                                    output.put("amount", new BigDecimal(o.getAmount()).movePointLeft(8).doubleValue());
+                                    if (adr != null && adr.getWalletId() > 0) {
+                                        Map<String, Object> wallet = new HashMap<>();
+                                        wallet.put("id", adr.getWalletId());
+                                        wallet.put("name", StringUtils.defaultString(walletCache.get(adr.getWalletId()).orNull(), Integer.toString(adr.getWalletId())));
+                                        output.put("wallets", Collections.singleton(wallet));
+                                    }
+                                } catch (ExecutionException e) {
+                                    throw new RuntimeException(e);
                                 }
                             });
                         } catch (SQLException e) {
@@ -250,11 +288,11 @@ public class RunNeoLoader {
                     + " CREATE (o)-[:wallet]->(w)))"
                     + " WITH t, tx.inputs as inputs"
                     + " UNWIND inputs AS inp"
-                    + " MATCH (o:Output {id:inp.id}) CREATE (o)-[oi:input {pos:inp.pos}]->(t)"
-                    + " RETURN count(t),count(o),count(oi),count(inputs)",
+                    + " MATCH (o:Output {id:inp.id}) CREATE (o)-[oi:input {pos:inp.pos}]->(t)",
                     Values.parameters("param", data.data));
-            NeoQueries.logOutput(sr, "Output");
-            t.commitAsync().thenRun(() -> log.debug("uploadDataToNeoDB [{} - {}]: Transaction committed", data.startTransactionId, data.endTrasnactionId));
+            t.commitAsync().thenRun(() -> log.trace("uploadDataToNeoDB [{} - {}]: Transaction committed", data.startTransactionId, data.endTrasnactionId));
+            //NeoQueries.logOutput(sr, "Output");
+            sr.consume();
         }
         log.debug("uploadDataToNeoDB [{} - {}] FINISHED. Runtime: {} msec.",
                 data.startTransactionId, data.endTrasnactionId, (System.currentTimeMillis() - s));
@@ -292,4 +330,13 @@ public class RunNeoLoader {
             this.data = Collections.synchronizedCollection(new ArrayList<>(batchSize));
         }
     }
+
+    @Getter
+    @AllArgsConstructor
+    private static class CAddress {
+
+        private final String name;
+        private final int walletId;
+    }
+
 }
