@@ -55,7 +55,6 @@ import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
-import org.apache.commons.lang.StringUtils;
 import org.neo4j.driver.v1.StatementResult;
 import org.neo4j.driver.v1.Transaction;
 import org.neo4j.driver.v1.Values;
@@ -234,7 +233,7 @@ public class RunNeoLoader {
                             queryInput.getInputs(t.getTransactionId()).forEach(i -> {
                                 Map<String, Object> input = new HashMap<>();
                                 inputs.add(input);
-                                input.put("id", i.getInTransactionId() * 10000L + i.getInPos());
+                                input.put("id", toOutputId(i.getInTransactionId(), i.getInPos()));
                                 input.put("pos", (short) i.getPos());
                             });
                             Collection<Map<String, Object>> outputs = Collections.synchronizedCollection(new ArrayList<>());
@@ -244,14 +243,14 @@ public class RunNeoLoader {
                                     CAddress adr = o.getAddressId() == 0 ? null : addressCache.get(o.getAddressId());
                                     Map<String, Object> output = new HashMap<>();
                                     outputs.add(output);
-                                    output.put("id", t.getTransactionId() * 10000L + o.getPos());
+                                    output.put("id", toOutputId(t.getTransactionId(), o.getPos()));
                                     output.put("pos", (short) o.getPos());
                                     output.put("address", adr == null ? "Undefined" : adr.getName());
                                     output.put("amount", new BigDecimal(o.getAmount()).movePointLeft(8).doubleValue());
                                     if (adr != null && adr.getWalletId() > 0) {
                                         Map<String, Object> wallet = new HashMap<>();
                                         wallet.put("id", adr.getWalletId());
-                                        wallet.put("name", StringUtils.defaultString(walletCache.get(adr.getWalletId()).orNull(), Integer.toString(adr.getWalletId())));
+                                        wallet.put("name", walletCache.get(adr.getWalletId()).or(Integer.toString(adr.getWalletId())));
                                         output.put("wallets", Collections.singleton(wallet));
                                     }
                                 } catch (ExecutionException e) {
@@ -273,8 +272,7 @@ public class RunNeoLoader {
         return data;
     }
 
-    @SuppressWarnings("UseSpecificCatch")
-    private void uploadDataToNeoDB(NeoQueries neoQueries, PrepData data) throws Exception {
+    private void uploadDataToNeoDB(NeoQueries neoQueries, PrepData data) {
         log.debug("uploadDataToNeoDB [{} - {}] STARTED", data.startTransactionId, data.endTrasnactionId);
         long s = System.currentTimeMillis();
         try (Transaction t = neoQueries.beginTransaction()) {
@@ -296,6 +294,10 @@ public class RunNeoLoader {
         }
         log.debug("uploadDataToNeoDB [{} - {}] FINISHED. Runtime: {} msec.",
                 data.startTransactionId, data.endTrasnactionId, (System.currentTimeMillis() - s));
+    }
+
+    private static long toOutputId(int transactionId, int pos) {
+        return transactionId * 100000L + pos;
     }
 
     private static void printHelpAndExit() {
