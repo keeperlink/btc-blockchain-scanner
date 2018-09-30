@@ -69,7 +69,7 @@ import org.apache.commons.cli.Options;
 @Slf4j
 public class RunFullScan {
 
-    private static final boolean DEFAULT_SAFE_RUN = true;
+    private static final boolean DEFAULT_SAFE_RUN = false;
     private static final int DEFAULT_BLOCKS_BACK = 0;
     private static final boolean DEFAULT_RUN_PARALLEL = true;
     private static final boolean DEFAULT_UPDATE_SPENT = true;
@@ -104,7 +104,8 @@ public class RunFullScan {
     }
 
     public RunFullScan(CommandLine cmd) throws Exception {
-        safeRun = cmd.hasOption("start-from-block") || cmd.hasOption("blocks-back") || (!cmd.hasOption("safe-run") ? DEFAULT_SAFE_RUN : "true".equalsIgnoreCase(cmd.getOptionValue("safe-run")));
+        safeRun = cmd.hasOption("start-from-block") || cmd.hasOption("blocks-back") ? true
+                : (!cmd.hasOption("safe-run") ? DEFAULT_SAFE_RUN : "true".equalsIgnoreCase(cmd.getOptionValue("safe-run")));
         startBlock = Integer.parseInt(cmd.getOptionValue("start-from-block", "-1"));
         blocksBack = Integer.parseInt(cmd.getOptionValue("blocks-back", Integer.toString(DEFAULT_BLOCKS_BACK)));
         updateSpent = "true".equalsIgnoreCase(cmd.getOptionValue("update-spent", String.valueOf(DEFAULT_UPDATE_SPENT)));
@@ -580,11 +581,11 @@ public class RunFullScan {
     private static Options prepOptions() {
         Options options = new Options();
         options.addOption("h", "help", false, "Print help");
-        options.addOption("s", "safe-run", false, "Run in safe mode - check DB for existing records before adding new");
+        options.addOption(null, "safe-run", false, "Run in safe mode - check DB for existing records before adding new");
         options.addOption(null, "update-spent", true, "Update spent flag on outpus. Default is true. For better performance of massive update you might want to disable it and run separate process after this update is done.");
         options.addOption(null, "blocks-back", true, "Check last number of blocks. Process will run in safe mode (option -s)");
         options.addOption(null, "start-from-block", true, "Start checking from block hight provided. Process will run in safe mode (option -s)");
-        options.addOption("t", "threads", true, "Number of threads to run. Default is " + DEFAULT_TXN_THREADS + ". To disable parallel threading set value to 0");
+        options.addOption(null, "threads", true, "Number of threads to run. Default is " + DEFAULT_TXN_THREADS + ". To disable parallel threading set value to 0");
         options.addOption(null, "stop-file", true, "File to be watched on each new block to stop process. If file is present the process stops and file renamed by adding '1' to the end.");
         DBConnection.addOptions(options);
         RpcClient.addOptions(options);

@@ -19,9 +19,14 @@ import com.sliva.btc.scanner.util.Utils;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.concurrent.CompletionStage;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.neo4j.driver.v1.Record;
@@ -40,6 +45,30 @@ import org.neo4j.driver.v1.summary.SummaryCounters;
  */
 @Slf4j
 public class NeoQueries implements AutoCloseable {
+
+    private static final String QUERY_BATCH_UPLOAD = "UNWIND {param} AS tx"
+            + " CREATE (t:Transaction{id:tx.id,hash:tx.hash,block:tx.block,nInputs:tx.nInputs,nOutputs:tx.nOutputs})"
+            + " FOREACH (outp IN tx.outputs |"
+            + " CREATE (o:Output{id:outp.id,address:outp.address,amount:outp.amount})<-[:output {pos:outp.pos}]-(t)"
+            + " FOREACH (wal IN outp.wallets |"
+            + " MERGE (w:Wallet{id:wal.id}) ON CREATE SET w.name=wal.name"
+            + " CREATE (o)-[:wallet]->(w)))"
+            + " WITH t, tx.inputs as inputs"
+            + " UNWIND inputs AS inp"
+            + " MATCH (o:Output {id:inp.id})"
+            + " CREATE (o)-[oi:input {pos:inp.pos}]->(t)";
+    private static final String QUERY_BATCH_UPLOAD_SAFE = "UNWIND {param} AS tx"
+            + " MERGE (t:Transaction{id:tx.id}) ON CREATE SET t.hash=tx.hash,t.block=tx.block,t.nInputs=tx.nInputs,t.nOutputs=tx.nOutputs"
+            + " FOREACH (outp IN tx.outputs |"
+            + " MERGE (o:Output{id:outp.id}) ON CREATE SET o.address=outp.address,o.amount=outp.amount"
+            + " MERGE (o)<-[:output {pos:outp.pos}]-(t)"
+            + " FOREACH (wal IN outp.wallets |"
+            + " MERGE (w:Wallet{id:wal.id}) ON CREATE SET w.name=wal.name"
+            + " MERGE (o)-[:wallet]->(w)))"
+            + " WITH t, tx.inputs as inputs"
+            + " UNWIND inputs AS inp"
+            + " MATCH (o:Output {id:inp.id})"
+            + " MERGE (o)-[oi:input {pos:inp.pos}]->(t)";
 
     private static final String QUERY_INPUT_RELATIONS_COUNTS = "MATCH (t:Transaction)-[p:input]-() RETURN count(p)";
     private static final String QUERY_OUTPUT_RELATIONS_COUNTS = "MATCH (t:Transaction)-[p:output]-() RETURN count(p)";
@@ -121,6 +150,15 @@ public class NeoQueries implements AutoCloseable {
         return r.isPresent() ? OptionalInt.of(r.get().get(0).asInt()) : OptionalInt.empty();
     }
 
+    public void uploadBatch(PrepData data, boolean safeRun) {
+        try (Transaction t = beginTransaction()) {
+            StatementResult sr = t.run(safeRun ? QUERY_BATCH_UPLOAD_SAFE : QUERY_BATCH_UPLOAD, Values.parameters("param", data.data));
+            t.commitAsync().thenRun(() -> log.trace("uploadDataToNeoDB [{} - {}]: Transaction committed", data.startTransactionId, data.endTrasnactionId));
+            logOutput(sr, "Output");
+            sr.consume();
+        }
+    }
+
     public void uploadFile(File f, boolean async, String query) {
         int fileDataLines;
         try {
@@ -184,4 +222,19 @@ public class NeoQueries implements AutoCloseable {
     public void close() throws Exception {
         session.close();
     }
+
+    @Getter
+    public static class PrepData {
+
+        private final int startTransactionId;
+        private final int endTrasnactionId;
+        private final Collection<Map<String, Object>> data;
+
+        public PrepData(int startTransactionId, int endTrasnactionId) {
+            this.startTransactionId = startTransactionId;
+            this.endTrasnactionId = endTrasnactionId;
+            this.data = Collections.synchronizedCollection(new ArrayList<>(endTrasnactionId - startTransactionId + 1));
+        }
+    }
+
 }

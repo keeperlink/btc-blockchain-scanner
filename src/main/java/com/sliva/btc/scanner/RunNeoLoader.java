@@ -24,9 +24,9 @@ import com.sliva.btc.scanner.db.DBConnection;
 import com.sliva.btc.scanner.db.DbQueryInput;
 import com.sliva.btc.scanner.db.DbQueryOutput;
 import com.sliva.btc.scanner.db.DbQueryTransaction;
-import com.sliva.btc.scanner.db.model.BtcTransaction;
 import com.sliva.btc.scanner.neo4j.NeoQueries;
 import com.sliva.btc.scanner.neo4j.NeoConnection;
+import com.sliva.btc.scanner.neo4j.NeoQueries.PrepData;
 import com.sliva.btc.scanner.src.DbAddress;
 import com.sliva.btc.scanner.src.DbBlockProvider;
 import com.sliva.btc.scanner.src.DbWallet;
@@ -38,9 +38,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -55,9 +53,6 @@ import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
-import org.neo4j.driver.v1.StatementResult;
-import org.neo4j.driver.v1.Transaction;
-import org.neo4j.driver.v1.Values;
 
 /**
  *
@@ -66,6 +61,8 @@ import org.neo4j.driver.v1.Values;
 @Slf4j
 public class RunNeoLoader {
 
+    private static final boolean DEFAULT_SAFE_RUN = false;
+    private static final boolean DEFAULT_CLEANUP = false;
     private static final int DEFAULT_TXN_THREADS = 5;
     private static final int DEFAULT_START_TRANSACTION_ID = 1;
     private static final int DEFAULT_BATCH_SIZE = 5000;
@@ -77,6 +74,7 @@ public class RunNeoLoader {
     private final DbQueryOutput queryOutput;
     private final DbBlockProvider blockProvider;
     private final Utils.NumberFile startFromFile;
+    private final boolean safeRun;
     private final int batchSize;
     private final boolean cleanup;
     private final File stopFile;
@@ -84,6 +82,7 @@ public class RunNeoLoader {
     private final ExecutorService execProcessTransactions;
 //    private final ExecutorService execNeo;
     private final NeoConnection neoConn;
+    private final int recordsBack;
     private int startTransaction;
     private int endTransaction;
     private final LoadingCache<Integer, CAddress> addressCache;
@@ -105,10 +104,13 @@ public class RunNeoLoader {
     public RunNeoLoader(CommandLine cmd) {
         DBConnection.applyArguments(cmd);
         NeoConnection.applyArguments(cmd);
-        startFromFile = new Utils.NumberFile(cmd.getOptionValue("start-from", Integer.toString(DEFAULT_START_TRANSACTION_ID)));
+        startFromFile = cmd.hasOption("start-from") ? new Utils.NumberFile(cmd.getOptionValue("start-from", Integer.toString(DEFAULT_START_TRANSACTION_ID))) : null;
         batchSize = Integer.parseInt(cmd.getOptionValue("batch-size", Integer.toString(DEFAULT_BATCH_SIZE)));
         stopFile = new File(cmd.getOptionValue("stop-file", DEFAULT_STOP_FILE_NAME));
-        cleanup = false;
+        cleanup = (!cmd.hasOption("cleanup")) ? DEFAULT_CLEANUP : "true".equalsIgnoreCase(cmd.getOptionValue("cleanup"));
+        recordsBack = cmd.hasOption("records-back") ? Integer.parseInt(cmd.getOptionValue("records-back")) : 0;
+        safeRun = cmd.hasOption("start-from") || recordsBack > 0 ? true
+                : (!cmd.hasOption("safe-run") ? DEFAULT_SAFE_RUN : "true".equalsIgnoreCase(cmd.getOptionValue("safe-run")));
         int nTxnThreads = Integer.parseInt(cmd.getOptionValue("threads", Integer.toString(DEFAULT_TXN_THREADS)));
         dbCon = new DBConnection();
 //        queryAddress = new DbQueryAddressCombo(dbCon);
@@ -174,12 +176,17 @@ public class RunNeoLoader {
             });
         }
         neoQueries.run("CREATE CONSTRAINT ON (n:Transaction) ASSERT n.id IS UNIQUE");
-//        neoQueries.run("CREATE CONSTRAINT ON (n:Transaction) ASSERT n.hash IS UNIQUE");
         neoQueries.run("CREATE CONSTRAINT ON (n:Output) ASSERT n.id IS UNIQUE");
         neoQueries.run("CREATE CONSTRAINT ON (n:Wallet) ASSERT n.id IS UNIQUE");
+//        neoQueries.run("CREATE CONSTRAINT ON (n:Transaction) ASSERT n.hash IS UNIQUE");
+//        neoQueries.run("CREATE INDEX ON :Output(address)");
         log.debug("Getting Neo DB state...");
-        final int lastTransactionId = neoQueries.getLastTransactionId();
-        startTransaction = lastTransactionId + 1;//startFromFile.getNumber().intValue();
+        if (startFromFile != null && startFromFile.getNumber() != null) {
+            startTransaction = startFromFile.getNumber().intValue();
+        } else {
+            final int lastTransactionId = neoQueries.getLastTransactionId();
+            startTransaction = lastTransactionId + 1 - recordsBack;
+        }
         endTransaction = queryTransaction.getLastTransactionId();
         log.debug("startTransaction: {}, endTransaction: {}", startTransaction, endTransaction);
     }
@@ -194,12 +201,17 @@ public class RunNeoLoader {
                 stopFile.renameTo(new File(stopFile.getAbsoluteFile() + "1"));
                 break;
             }
+            if (startFromFile != null) {
+                startFromFile.updateNumber(i);
+            }
             Future<PrepData> prepFuture = prepFutureNext;
             prepFutureNext = prepareDataFuture(i + batchSize);
             uploadDataToNeoDB(neoQueries, prepFuture.get());
             nBatchesProcessed++;
             long runtime = System.currentTimeMillis() - s;
-            log.debug("Loop#{}: Speed: {} tx/sec.\r\n\t\tAddressCache.stats: Hits: {}%  {}\r\n\t\tWalletCache.stats: Hits: {}%  {}",
+            log.debug("Loop#{}: Speed: {} tx/sec.\r\n"
+                    + "\t\tAddressCache.stats: Hits: {}%  {}\r\n"
+                    + "\t\tWalletCache.stats:  Hits: {}%  {}",
                     nBatchesProcessed, (nBatchesProcessed * batchSize * 1000L / runtime),
                     Math.round(addressCache.stats().hitRate() * 100), addressCache.stats(),
                     Math.round(walletCache.stats().hitRate() * 100), walletCache.stats());
@@ -210,25 +222,24 @@ public class RunNeoLoader {
         return execPrepareFiles.submit(() -> prepareData(start));
     }
 
-    private PrepData prepareData(int startTransactionId) {
-        int endTrasnactionId = startTransactionId + batchSize - 1;
-        log.debug("prepareData [{} - {}] STARTED", startTransactionId, endTrasnactionId);
+    private PrepData prepareData(int start) {
+        int end = start + batchSize - 1;
+        log.debug("prepareData [{} - {}] STARTED", start, end);
         long s = System.currentTimeMillis();
-        PrepData data = new PrepData(startTransactionId, endTrasnactionId, UUID.randomUUID().toString());
+        PrepData data = new PrepData(start, end);
         try {
             try {
-                List<BtcTransaction> txList = queryTransaction.getTxnsRangle(startTransactionId, endTrasnactionId);
-                execProcessTransactions.invokeAll(txList.stream().map((t) -> {
+                execProcessTransactions.invokeAll(queryTransaction.getTxnsRangle(start, end).stream().map(t -> {
                     return (Callable<Void>) () -> {
                         try {
                             Map<String, Object> tx = new HashMap<>();
-                            data.data.add(tx);
+                            data.getData().add(tx);
                             tx.put("id", t.getTransactionId());
                             tx.put("hash", t.getTxid());
                             tx.put("block", t.getBlockHeight());
                             tx.put("nInputs", (short) t.getNInputs());
                             tx.put("nOutputs", (short) t.getNOutputs());
-                            Collection<Map<String, Object>> inputs = Collections.synchronizedCollection(new ArrayList<>());
+                            Collection<Map<String, Object>> inputs = new ArrayList<>();
                             tx.put("inputs", inputs);
                             queryInput.getInputs(t.getTransactionId()).forEach(i -> {
                                 Map<String, Object> input = new HashMap<>();
@@ -236,7 +247,7 @@ public class RunNeoLoader {
                                 input.put("id", toOutputId(i.getInTransactionId(), i.getInPos()));
                                 input.put("pos", (short) i.getPos());
                             });
-                            Collection<Map<String, Object>> outputs = Collections.synchronizedCollection(new ArrayList<>());
+                            Collection<Map<String, Object>> outputs = new ArrayList<>();
                             tx.put("outputs", outputs);
                             queryOutput.getOutputs(t.getTransactionId()).forEach(o -> {
                                 try {
@@ -250,7 +261,10 @@ public class RunNeoLoader {
                                     if (adr != null && adr.getWalletId() > 0) {
                                         Map<String, Object> wallet = new HashMap<>();
                                         wallet.put("id", adr.getWalletId());
-                                        wallet.put("name", walletCache.get(adr.getWalletId()).or(Integer.toString(adr.getWalletId())));
+                                        Optional<String> name = walletCache.get(adr.getWalletId());
+                                        if (name.isPresent()) {
+                                            wallet.put("name", name.get());
+                                        }
                                         output.put("wallets", Collections.singleton(wallet));
                                     }
                                 } catch (ExecutionException e) {
@@ -264,7 +278,7 @@ public class RunNeoLoader {
                     };
                 }).collect(Collectors.toList()));
             } finally {
-                log.debug("prepareData [{} - {}]: FINISHED. Runtime: {} msec.", startTransactionId, endTrasnactionId, (System.currentTimeMillis() - s));
+                log.debug("prepareData [{} - {}]: FINISHED. Runtime: {} msec.", start, end, (System.currentTimeMillis() - s));
             }
         } catch (InterruptedException | SQLException e) {
             throw new RuntimeException(e);
@@ -273,27 +287,11 @@ public class RunNeoLoader {
     }
 
     private void uploadDataToNeoDB(NeoQueries neoQueries, PrepData data) {
-        log.debug("uploadDataToNeoDB [{} - {}] STARTED", data.startTransactionId, data.endTrasnactionId);
+        log.debug("uploadDataToNeoDB [{} - {}] STARTED", data.getStartTransactionId(), data.getEndTrasnactionId());
         long s = System.currentTimeMillis();
-        try (Transaction t = neoQueries.beginTransaction()) {
-            StatementResult sr = t.run(
-                    "UNWIND {param} AS tx"
-                    + " CREATE (t:Transaction {id:tx.id,hash:tx.hash,block:tx.block,nInputs:tx.nInputs,nOutputs:tx.nOutputs})"
-                    + " FOREACH (outp IN tx.outputs |"
-                    + " CREATE (o:Output{id:outp.id,address:outp.address,amount:outp.amount})<-[:output {pos:outp.pos}]-(t)"
-                    + " FOREACH (wal IN outp.wallets |"
-                    + " MERGE (w:Wallet{id:wal.id}) ON CREATE SET w.name=wal.name"
-                    + " CREATE (o)-[:wallet]->(w)))"
-                    + " WITH t, tx.inputs as inputs"
-                    + " UNWIND inputs AS inp"
-                    + " MATCH (o:Output {id:inp.id}) CREATE (o)-[oi:input {pos:inp.pos}]->(t)",
-                    Values.parameters("param", data.data));
-            t.commitAsync().thenRun(() -> log.trace("uploadDataToNeoDB [{} - {}]: Transaction committed", data.startTransactionId, data.endTrasnactionId));
-            //NeoQueries.logOutput(sr, "Output");
-            sr.consume();
-        }
+        neoQueries.uploadBatch(data, safeRun);
         log.debug("uploadDataToNeoDB [{} - {}] FINISHED. Runtime: {} msec.",
-                data.startTransactionId, data.endTrasnactionId, (System.currentTimeMillis() - s));
+                data.getStartTransactionId(), data.getEndTrasnactionId(), (System.currentTimeMillis() - s));
     }
 
     private static long toOutputId(int transactionId, int pos) {
@@ -310,27 +308,17 @@ public class RunNeoLoader {
     private static Options prepOptions() {
         Options options = new Options();
         options.addOption("h", "help", false, "Print help");
+        options.addOption(null, "safe-run", false, "Run in safe mode - check DB for existing records before adding new. Default: " + DEFAULT_SAFE_RUN);
+        options.addOption(null, "cleanup", false, "Clean DB on start. Default: " + DEFAULT_CLEANUP);
         options.addOption(null, "batch-size", true, "Number or transactions to process in a batch. Default: " + DEFAULT_BATCH_SIZE);
         options.addOption(null, "start-from", true, "Start process from this transaction ID. Beside a number this parameter can be set to a file name that stores the numeric value updated on every batch");
+        options.addOption(null, "records-back", true, "Check last number of trasnactions. Process will run in safe mode (--safe-run=true)");
         options.addOption(null, "stop-file", true, "File to be watched on each new block to stop process. If file is present the process stops and file renamed by adding '1' to the end. Default: " + DEFAULT_STOP_FILE_NAME);
         options.addOption("t", "threads", true, "Number of threads to run. Default is " + DEFAULT_TXN_THREADS + ". To disable parallel threading set value to 0");
         DBConnection.addOptions(options);
         NeoConnection.addOptions(options);
         return options;
 
-    }
-
-    private class PrepData {
-
-        private final int startTransactionId;
-        private final int endTrasnactionId;
-        private final Collection<Map<String, Object>> data;
-
-        PrepData(int startTransactionId, int endTrasnactionId, String uuid) {
-            this.startTransactionId = startTransactionId;
-            this.endTrasnactionId = endTrasnactionId;
-            this.data = Collections.synchronizedCollection(new ArrayList<>(batchSize));
-        }
     }
 
     @Getter

@@ -149,7 +149,6 @@ public final class Utils {
                 file = new File(param);
                 if (file.exists()) {
                     try {
-                        "12,345".replaceAll("[^\\d.]", "");
                         number = Long.valueOf(FileUtils.readFileToString(file, StandardCharsets.ISO_8859_1).replaceAll("[^\\d.]", ""));
                     } catch (Exception e) {
                         throw new RuntimeException(e);
