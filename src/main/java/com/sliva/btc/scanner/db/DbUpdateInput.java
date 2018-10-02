@@ -16,7 +16,7 @@
 package com.sliva.btc.scanner.db;
 
 import static com.sliva.btc.scanner.db.DbUpdate.waitFullQueue;
-import com.sliva.btc.scanner.db.model.PK;
+import com.sliva.btc.scanner.db.model.InOutKey;
 import com.sliva.btc.scanner.db.model.TxInput;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -87,7 +87,7 @@ public class DbUpdateInput extends DbUpdate {
         waitFullQueue(cacheData.addQueue, MAX_INSERT_QUEUE_LENGTH);
         synchronized (cacheData) {
             cacheData.addQueue.add(txInput);
-            cacheData.queueMap.put(new PK(txInput.getTransactionId(), txInput.getPos()), txInput);
+            cacheData.queueMap.put(new InOutKey(txInput.getTransactionId(), txInput.getPos()), txInput);
             List<TxInput> list = cacheData.queueMapTx.get(txInput.getTransactionId());
             if (list == null) {
                 cacheData.queueMapTx.put(txInput.getTransactionId(), list = new ArrayList<>());
@@ -103,7 +103,7 @@ public class DbUpdateInput extends DbUpdate {
             psDelete.get().setInt(2, txInput.getPos());
             psDelete.get().execute();
             cacheData.addQueue.remove(txInput);
-            cacheData.queueMap.remove(new PK(txInput.getTransactionId(), txInput.getPos()));
+            cacheData.queueMap.remove(new InOutKey(txInput.getTransactionId(), txInput.getPos()));
             List<TxInput> l = cacheData.queueMapTx.get(txInput.getTransactionId());
             if (l != null) {
                 l.remove(txInput);
@@ -117,7 +117,7 @@ public class DbUpdateInput extends DbUpdate {
     public void update(TxInput txInput) throws SQLException {
         log.trace("update(txInput:{})", txInput);
         synchronized (cacheData) {
-            PK key = new PK(txInput.getTransactionId(), txInput.getPos());
+            InOutKey key = new InOutKey(txInput.getTransactionId(), txInput.getPos());
             TxInput txInput2 = cacheData.queueMap.get(key);
             boolean updatedInQueue = false;
             if (txInput2 != null) {
@@ -162,7 +162,7 @@ public class DbUpdateInput extends DbUpdate {
                 });
                 synchronized (cacheData) {
                     for (TxInput t : temp) {
-                        cacheData.queueMap.remove(new PK(t.getTransactionId(), t.getPos()));
+                        cacheData.queueMap.remove(new InOutKey(t.getTransactionId(), t.getPos()));
                         cacheData.queueMapTx.remove(t.getTransactionId());
                     }
                 }
@@ -201,7 +201,7 @@ public class DbUpdateInput extends DbUpdate {
     public static class CacheData {
 
         private final Collection<TxInput> addQueue = new LinkedHashSet<>();
-        private final Map<PK, TxInput> queueMap = new HashMap<>();
+        private final Map<InOutKey, TxInput> queueMap = new HashMap<>();
         private final Map<Integer, List<TxInput>> queueMapTx = new HashMap<>();
         private final Collection<TxInput> queueUpdate = new ArrayList<>();
     }

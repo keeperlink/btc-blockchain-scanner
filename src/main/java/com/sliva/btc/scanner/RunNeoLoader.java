@@ -314,7 +314,7 @@ public class RunNeoLoader {
         options.addOption(null, "start-from", true, "Start process from this transaction ID. Beside a number this parameter can be set to a file name that stores the numeric value updated on every batch");
         options.addOption(null, "records-back", true, "Check last number of trasnactions. Process will run in safe mode (--safe-run=true)");
         options.addOption(null, "stop-file", true, "File to be watched on each new block to stop process. If file is present the process stops and file renamed by adding '1' to the end. Default: " + DEFAULT_STOP_FILE_NAME);
-        options.addOption("t", "threads", true, "Number of threads to run. Default is " + DEFAULT_TXN_THREADS + ". To disable parallel threading set value to 0");
+        options.addOption(null, "threads", true, "Number of threads to run. Default is " + DEFAULT_TXN_THREADS + ". To disable parallel threading set value to 0");
         DBConnection.addOptions(options);
         NeoConnection.addOptions(options);
         return options;

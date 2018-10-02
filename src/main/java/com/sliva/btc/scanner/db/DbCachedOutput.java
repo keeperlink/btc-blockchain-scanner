@@ -15,7 +15,7 @@
  */
 package com.sliva.btc.scanner.db;
 
-import com.sliva.btc.scanner.db.model.PK;
+import com.sliva.btc.scanner.db.model.InOutKey;
 import com.sliva.btc.scanner.db.model.TxOutput;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -143,7 +143,7 @@ public class DbCachedOutput implements AutoCloseable {
             updateCache(transactionId);
             return result;
         }
-        result = updateOutput.getCacheData().getQueueMap().get(new PK(transactionId, pos));
+        result = updateOutput.getCacheData().getQueueMap().get(new InOutKey(transactionId, pos));
         if (result != null) {
             updateCache(transactionId);
             return result;

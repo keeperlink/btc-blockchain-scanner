@@ -46,7 +46,7 @@ public class DbQueryAddress {
     }
 
     public String getTableName() {
-        return "address_" + addressType.name().toLowerCase();
+        return getTableName(addressType);
     }
 
     public BtcAddress findByAddressId(int addressId) throws SQLException {
@@ -91,7 +91,14 @@ public class DbQueryAddress {
     }
 
     private String fixTableName(String sql) {
-        return sql.replaceAll("address_table_name", getTableName());
+        return updateQueryTableName(sql, addressType);
     }
 
+    public static String getTableName(SrcAddressType addressType) {
+        return "address_" + addressType.name().toLowerCase();
+    }
+
+    public static String updateQueryTableName(String query, SrcAddressType addressType) {
+        return query.replaceAll("address_table_name", getTableName(addressType));
+    }
 }
