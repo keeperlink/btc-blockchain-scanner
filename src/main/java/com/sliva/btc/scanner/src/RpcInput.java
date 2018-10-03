@@ -16,6 +16,8 @@
 package com.sliva.btc.scanner.src;
 
 import lombok.ToString;
+import org.apache.commons.codec.binary.Hex;
+import org.bitcoinj.core.TransactionInput;
 import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient.RawTransaction.In;
 
 /**
@@ -26,10 +28,18 @@ import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient.RawTransaction.In;
 public class RpcInput implements SrcInput {
 
     private final In in;
+    private final TransactionInput txin;
     private final int pos;
 
     public RpcInput(In in, int pos) {
         this.in = in;
+        this.txin = null;
+        this.pos = pos;
+    }
+
+    public RpcInput(TransactionInput txin, int pos) {
+        this.in = null;
+        this.txin = txin;
         this.pos = pos;
     }
 
@@ -39,13 +49,19 @@ public class RpcInput implements SrcInput {
     }
 
     @Override
+    @SuppressWarnings("null")
     public String getInTxid() {
-        return in.txid();
+        return txin != null ? Hex.encodeHexString(txin.getOutpoint().getHash().getBytes(), true) : in.txid();
     }
 
     @Override
+    @SuppressWarnings("null")
     public int getInPos() {
-        return in.vout();
+        return txin != null ? (int) txin.getOutpoint().getIndex() : in.vout();
+    }
+
+    public In getIn() {
+        return in;
     }
 
 }

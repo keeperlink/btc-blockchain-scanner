@@ -19,15 +19,20 @@ import com.sliva.btc.scanner.util.BitcoinPaymentURI;
 import java.text.DecimalFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.DefaultParser;
 import org.apache.commons.cli.Options;
+import org.apache.commons.cli.ParseException;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import static org.junit.Assert.*;
+import org.junit.Ignore;
 import wf.bitcoin.javabitcoindrpcclient.BitcoinJSONRPCClient;
 import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient;
 import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient.BlockChainInfo;
@@ -40,14 +45,14 @@ import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient.WalletInfo;
 public class RpcClientTest {
 
     private static final String CONF_FILE = "/etc/rpc.conf";
+    private final RpcClient instance = new RpcClient();
 
     public RpcClientTest() {
     }
 
     @BeforeClass
-    public static void setUpClass() throws Exception {
-        CommandLine cmd = new DefaultParser().parse(RpcClient.addOptions(new Options()), new String[]{"--rpc-config=" + CONF_FILE});
-        RpcClient.applyArguments(cmd);
+    public static void setUpClass() {
+        init();
     }
 
     @AfterClass
@@ -60,6 +65,15 @@ public class RpcClientTest {
 
     @After
     public void tearDown() {
+    }
+
+    public static void init() {
+        try {
+            CommandLine cmd = new DefaultParser().parse(RpcClient.addOptions(new Options()), new String[]{"--rpc-config=" + CONF_FILE});
+            RpcClient.applyArguments(cmd);
+        } catch (ParseException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     /**
@@ -79,7 +93,6 @@ public class RpcClientTest {
     @Test
     public void testGetClient() {
         System.out.println("getClient");
-        RpcClient instance = new RpcClient();
         BitcoinJSONRPCClient result = instance.getClient();
         System.out.println("result=" + result);
         assertNotNull(result);
@@ -92,7 +105,6 @@ public class RpcClientTest {
     public void testGetBlock_int() {
         System.out.println("getBlock");
         int height = 123;
-        RpcClient instance = new RpcClient();
         BitcoindRpcClient.Block result = instance.getBlock(height);
         System.out.println("result=" + result);
         assertNotNull(result);
@@ -106,7 +118,6 @@ public class RpcClientTest {
     public void testGetBlock_String() {
         System.out.println("getBlock");
         String hash = "00000000a3bbe4fd1da16a29dbdaba01cc35d6fc74ee17f794cf3aab94f7aaa0";
-        RpcClient instance = new RpcClient();
         BitcoindRpcClient.Block result = instance.getBlock(hash);
         System.out.println("result=" + result);
         assertNotNull(result);
@@ -120,7 +131,6 @@ public class RpcClientTest {
     public void testGetRawTransaction() {
         System.out.println("getRawTransaction");
         String txId = "b944ef8c77f9b5f4a4276880f17256988bba4d0125abc54391548061a688ae09";
-        RpcClient instance = new RpcClient();
         BitcoindRpcClient.RawTransaction result = instance.getRawTransaction(txId);
         System.out.println("result=" + result);
         assertNotNull(result);
@@ -133,7 +143,6 @@ public class RpcClientTest {
     @Test
     public void testGetBlocksNumber() {
         System.out.println("getBlocksNumber");
-        RpcClient instance = new RpcClient();
         int result = instance.getBlocksNumber();
         System.out.println("result=" + result);
         assertTrue(result > 0);
@@ -165,7 +174,6 @@ public class RpcClientTest {
     @Test
     public void testPayment() {
         System.out.println("testPayment");
-        RpcClient instance = new RpcClient();
         BitcoinJSONRPCClient client = instance.getClient();
         BlockChainInfo blockChainInfo = client.getBlockChainInfo();
         System.out.println("blockChainInfo=" + blockChainInfo);
@@ -196,7 +204,6 @@ public class RpcClientTest {
     @Test
     public void testQRCode() throws Exception {
         System.out.println("testQRCode");
-        RpcClient instance = new RpcClient();
         BitcoinJSONRPCClient client = instance.getClient();
         List<String> addresses = client.getAddressesByAccount("");
         String address = addresses.get(addresses.size() - 1);
@@ -210,5 +217,55 @@ public class RpcClientTest {
 //        BitMatrix bitMatrix = qrCodeWriter.encode(qrText, BarcodeFormat.QR_CODE, 350, 350);
 //        Path path = FileSystems.getDefault().getPath("test-qr.png");
 //        MatrixToImageWriter.writeToPath(bitMatrix, "PNG", path);
+    }
+
+    /**
+     * Test of getBlockHash method, of class RpcClient.
+     */
+    @Test
+    public void testGetBlockHash() {
+        System.out.println("getBlockHash");
+        int height = 123456;
+        String expResult = "0000000000002917ed80650c6174aac8dfc46f5fe36480aaef682ff6cd83c3ca";
+        String result = instance.getBlockHash(height);
+        System.out.println("result=" + result);
+        assertEquals(expResult, result);
+    }
+
+    /**
+     * Test of getRawBlock method, of class RpcClient.
+     */
+    @Test
+    public void testGetRawBlock_int() {
+        System.out.println("getRawBlock");
+        int height = 123456;
+        String result = instance.getRawBlock(height);
+        assertEquals(8358, result.length());
+    }
+
+    /**
+     * Test of getRawBlock method, of class RpcClient.
+     */
+    @Test
+    public void testGetRawBlock_String() {
+        System.out.println("getRawBlock");
+        String hash = "0000000000002917ed80650c6174aac8dfc46f5fe36480aaef682ff6cd83c3ca";
+        String result = instance.getRawBlock(hash);
+        assertEquals(8358, result.length());
+    }
+
+    @Test
+    @Ignore
+    public void testPerformance() throws InterruptedException {
+        long s = System.currentTimeMillis();
+        ExecutorService exec = Executors.newFixedThreadPool(20);
+        for (int i = 500000; i < 500500; i++) {
+            final int height = i;
+            //exec.submit(() -> instance.getRawBlock(height));
+            exec.submit(() -> instance.getClient().query("getblock", instance.getBlockHash(height), 0));
+        }
+        exec.shutdown();
+        exec.awaitTermination(1, TimeUnit.HOURS);
+        System.out.println("Runtime: " + (System.currentTimeMillis() - s) + " ms.");
     }
 }

@@ -16,6 +16,7 @@
 package com.sliva.btc.scanner.src;
 
 import lombok.ToString;
+import org.bitcoinj.core.TransactionOutput;
 import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient.RawTransaction.Out;
 
 /**
@@ -26,20 +27,27 @@ import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient.RawTransaction.Out;
 public class RpcOutput implements SrcOutput<RpcAddress> {
 
     private final Out out;
+    private final TransactionOutput txout;
 
     public RpcOutput(Out out) {
         this.out = out;
+        this.txout = null;
+    }
+
+    public RpcOutput(TransactionOutput txout) {
+        this.out = null;
+        this.txout = txout;
     }
 
     @Override
     public int getPos() {
-        return out.n();
+        return txout != null ? txout.getIndex() : out.n();
     }
 
     @Override
     public RpcAddress getAddress() {
         try {
-            return RpcAddress.fromString(out.scriptPubKey().addresses().get(0));
+            return RpcAddress.fromString(txout != null ? new BJOutput(txout).getAddress().getName() : out.scriptPubKey().addresses().get(0));
         } catch (Exception e) {
             return null;
         }
@@ -47,7 +55,7 @@ public class RpcOutput implements SrcOutput<RpcAddress> {
 
     @Override
     public long getValue() {
-        return Math.round(out.value() * 1e8);
+        return txout != null ? txout.getValue().getValue() : Math.round(out.value() * 1e8);
     }
 
 }

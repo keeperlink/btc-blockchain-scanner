@@ -53,10 +53,14 @@ public final class BJBlockHandler {
             throw new IllegalArgumentException("File not found: " + f.getAbsolutePath());
         }
         try {
-            return bitcoinSerializer.get().makeBlock(FileUtils.readFileToByteArray(f));
+            return parseBlcok(FileUtils.readFileToByteArray(f));
         } catch (org.bitcoinj.core.ProtocolException e) {
             throw new IOException("blockHash=" + blockHash, e);
         }
+    }
+
+    public static Block parseBlcok(byte[] rawBlockData) {
+        return bitcoinSerializer.get().makeBlock(rawBlockData);
     }
 
     public static Address getAddress(String address) {

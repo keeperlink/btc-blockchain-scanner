@@ -30,6 +30,7 @@ import com.sliva.btc.scanner.db.model.OutputStatus;
 import com.sliva.btc.scanner.db.model.TxInput;
 import com.sliva.btc.scanner.db.model.TxOutput;
 import com.sliva.btc.scanner.rpc.RpcClient;
+import com.sliva.btc.scanner.rpc.RpcClientDirect;
 import com.sliva.btc.scanner.src.BJBlockProvider;
 import com.sliva.btc.scanner.src.BlockProvider;
 import com.sliva.btc.scanner.src.BlockProviderWithBackup;
@@ -116,6 +117,7 @@ public class RunFullScan {
         DBConnection.applyArguments(cmd);
         BJBlockProvider.applyArguments(cmd);
         RpcClient.applyArguments(cmd);
+        RpcClientDirect.applyArguments(cmd);
         dbCon = new DBConnection();
         queryBlock = new DbQueryBlock(dbCon);
         queryInput = new DbQueryInput(dbCon);

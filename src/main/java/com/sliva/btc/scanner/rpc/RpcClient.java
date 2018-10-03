@@ -54,12 +54,21 @@ public class RpcClient {
         return client;
     }
 
+    public String getBlockHash(int height) {
+        long s = System.currentTimeMillis();
+        try {
+            return getClient().getBlockHash(height);
+        } finally {
+            log.trace("BtcClient.getBlockHash({}): Runtime={} ms.", height, System.currentTimeMillis() - s);
+        }
+    }
+
     public Block getBlock(int height) {
         long s = System.currentTimeMillis();
         try {
             return getClient().getBlock(height);
         } finally {
-            log.trace("BtcClient.getBlock(" + height + "): Runtime=" + (System.currentTimeMillis() - s) + " ms.");
+            log.trace("BtcClient.getBlock({}): Runtime={} ms.", height, System.currentTimeMillis() - s);
         }
     }
 
@@ -68,7 +77,25 @@ public class RpcClient {
         try {
             return getClient().getBlock(hash);
         } finally {
-            log.trace("BtcClient.getBlock(" + hash + "): Runtime=" + (System.currentTimeMillis() - s) + " ms.");
+            log.trace("BtcClient.getBlock({}): Runtime={} ms.", hash, System.currentTimeMillis() - s);
+        }
+    }
+
+    public String getRawBlock(int height) {
+        long s = System.currentTimeMillis();
+        try {
+            return getRawBlock(getBlockHash(height));
+        } finally {
+            log.trace("BtcClient.getRawBlock({}): Runtime={} ms.", height, System.currentTimeMillis() - s);
+        }
+    }
+
+    public String getRawBlock(String hash) {
+        long s = System.currentTimeMillis();
+        try {
+            return getClient().getRawBlock(hash);
+        } finally {
+            log.trace("BtcClient.getRawBlock({}): Runtime={} ms.", hash, System.currentTimeMillis() - s);
         }
     }
 

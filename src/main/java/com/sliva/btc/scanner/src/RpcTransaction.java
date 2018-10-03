@@ -21,23 +21,31 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 import lombok.ToString;
+import org.bitcoinj.core.Transaction;
 import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient;
 import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient.RawTransaction;
+import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient.RawTransaction.In;
 
 /**
  *
  * @author Sliva Co
  */
-@ToString
+@ToString(doNotUseGetters = true)
 public class RpcTransaction implements SrcTransaction<RpcInput, RpcOutput> {
 
     public static final String TRANSACTION_ZERO = "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b";
 
     private final String txid;
+    private Transaction tran;
     private RawTransaction rawTransaction;
 
     public RpcTransaction(String txid) {
         this.txid = txid;
+    }
+
+    public RpcTransaction(Transaction tran) {
+        this.tran = tran;
+        this.txid = tran.getHashAsString();
     }
 
     @Override
@@ -47,12 +55,26 @@ public class RpcTransaction implements SrcTransaction<RpcInput, RpcOutput> {
 
     @Override
     public Stream<RpcInput> getInputs() {
-        if (TRANSACTION_ZERO.equalsIgnoreCase(txid) || getRawTransaction().vIn() == null
-                || getRawTransaction().vIn().isEmpty() || getRawTransaction().vIn().get(0).txid() == null) {
+        if (TRANSACTION_ZERO.equalsIgnoreCase(txid)) {
+            //Bitcoin Core RPC does not return first transaction - generate it here
             return null;
         }
+        if (tran != null) {
+            if (tran.isCoinBase()) {
+                return null;
+            }
+        } else {
+            List<In> ins = getRawTransaction().vIn();
+            if (ins == null || ins.isEmpty() || ins.get(0).txid() == null) {
+                return null;
+            }
+        }
         final AtomicInteger pos = new AtomicInteger(0);
-        return getRawTransaction().vIn().stream().map((t) -> new RpcInput(t, pos.getAndIncrement()));
+        if (tran != null) {
+            return tran.getInputs().stream().map((t) -> new RpcInput(t, pos.getAndIncrement()));
+        } else {
+            return getRawTransaction().vIn().stream().map((t) -> new RpcInput(t, pos.getAndIncrement()));
+        }
     }
 
     @Override
@@ -111,7 +133,11 @@ public class RpcTransaction implements SrcTransaction<RpcInput, RpcOutput> {
                 }
             })).stream();
         }
-        return getRawTransaction().vOut().stream().map((t) -> new RpcOutput(t));
+        if (tran != null) {
+            return tran.getOutputs().stream().map(t -> new RpcOutput(t));
+        } else {
+            return getRawTransaction().vOut().stream().map(t -> new RpcOutput(t));
+        }
     }
 
     private RawTransaction getRawTransaction() {
