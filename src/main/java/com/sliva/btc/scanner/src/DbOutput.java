@@ -22,13 +22,13 @@ package com.sliva.btc.scanner.src;
 public class DbOutput implements SrcOutput<DbAddress> {
 
     private final DbBlockProvider blockProvider;
-    private final int pos;
+    private final short pos;
     private final int addressId;
     private final long amount;
-    private final int spent;
+    private final byte spent;
     private DbAddress address;
 
-    public DbOutput(DbBlockProvider blockProvider, int pos, int addressId, long amount, int spent) {
+    public DbOutput(DbBlockProvider blockProvider, short pos, int addressId, long amount, byte spent) {
         this.blockProvider = blockProvider;
         this.pos = pos;
         this.addressId = addressId;
@@ -41,7 +41,7 @@ public class DbOutput implements SrcOutput<DbAddress> {
     }
 
     @Override
-    public int getPos() {
+    public short getPos() {
         return pos;
     }
 
@@ -62,7 +62,7 @@ public class DbOutput implements SrcOutput<DbAddress> {
         return addressId;
     }
 
-    public int getSpent() {
+    public byte getSpent() {
         return spent;
     }
 

@@ -21,10 +21,10 @@ package com.sliva.btc.scanner.db.model;
  */
 public class OutputStatus {
 
-    public static final int UNSPENT = 0;
-    public static final int SPENT = 1;
-    public static final int UNDEFINED = 2;
-    public static final int UNSPENDABLE = 3;
-    public static final int UNSPENDABLE_OP_RETURN = 4;
-    public static final int UNSPENDABLE_BAD_SCRIPT = 5;
+    public static final byte UNSPENT = 0;
+    public static final byte SPENT = 1;
+    public static final byte UNDEFINED = 2;
+    public static final byte UNSPENDABLE = 3;
+    public static final byte UNSPENDABLE_OP_RETURN = 4;
+    public static final byte UNSPENDABLE_BAD_SCRIPT = 5;
 }

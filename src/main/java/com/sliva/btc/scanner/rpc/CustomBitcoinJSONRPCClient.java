@@ -22,6 +22,7 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 import org.apache.commons.httpclient.HttpClient;
 import org.apache.commons.httpclient.methods.PostMethod;
 import org.apache.commons.httpclient.methods.StringRequestEntity;
@@ -39,6 +40,7 @@ public class CustomBitcoinJSONRPCClient extends BitcoinJSONRPCClient {
     private static final ThreadLocal<HttpClient> clientPool = ThreadLocal.withInitial(() -> new HttpClient());
     private final String url;
     private final String auth;
+    private final AtomicLong reqCounter = new AtomicLong();
 
     public CustomBitcoinJSONRPCClient(String url, String user, String password) {
         this.url = url;
@@ -47,7 +49,7 @@ public class CustomBitcoinJSONRPCClient extends BitcoinJSONRPCClient {
 
     @Override
     public Object query(String method, Object... o) throws GenericRpcException {
-        final String reqId = "1";
+        final String reqId = Long.toString(reqCounter.incrementAndGet());
         String req = JSON.stringify(new LinkedHashMap() {
             {
                 put("method", method);

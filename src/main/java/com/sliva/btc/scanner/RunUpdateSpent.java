@@ -90,7 +90,7 @@ public class RunUpdateSpent {
                 while (rs.next()) {
                     txnCount++;
                     int transactionId = rs.getInt(1);
-                    int pos = rs.getInt(2);
+                    short pos = rs.getShort(2);
                     int addressId = rs.getInt(3);
                     int spent = rs.getInt(4);
                     Object input = rs.getObject(5);

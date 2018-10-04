@@ -23,7 +23,7 @@
         <level value="DEBUG"/>
     </logger>
     <logger name="com.sliva.btc.scanner.db.DbUpdate$DBUpdateCall" additivity="true">
-        <level value="INFO"/>
+        <level value="DEBUG"/>
     </logger>
     <logger name="com.sliva.btc.scanner.db.DbQueryInput" additivity="true">
         <level value="DEBUG"/>

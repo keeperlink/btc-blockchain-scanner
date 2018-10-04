@@ -17,29 +17,27 @@ package com.sliva.btc.scanner.src;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import lombok.AllArgsConstructor;
 import org.apache.commons.codec.binary.Hex;
 
 /**
  *
  * @author Sliva Co
  */
+@AllArgsConstructor
 public class DbInput implements SrcInput {
 
     private final DbBlockProvider blockProvider;
-    private final int pos;
-    private final int inPos;
+    private final short pos;
+    private final short inPos;
     private final int inTransactionId;
     private String inTxid;
-
-    public DbInput(DbBlockProvider blockProvider, int pos, int inPos, int inTransactionId) {
-        this.blockProvider = blockProvider;
-        this.pos = pos;
-        this.inPos = inPos;
-        this.inTransactionId = inTransactionId;
-    }
+    private final byte sighashType;
+    private final boolean segwit;
+    private final boolean multisig;
 
     @Override
-    public int getPos() {
+    public short getPos() {
         return pos;
     }
 
@@ -62,8 +60,23 @@ public class DbInput implements SrcInput {
     }
 
     @Override
-    public int getInPos() {
+    public short getInPos() {
         return inPos;
+    }
+
+    @Override
+    public byte getSighashType() {
+        return sighashType;
+    }
+
+    @Override
+    public boolean isSegwit() {
+        return segwit;
+    }
+
+    @Override
+    public boolean isMultisig() {
+        return multisig;
     }
 
     public int getInTransactionId() {

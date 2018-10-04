@@ -23,13 +23,18 @@ import com.sliva.btc.scanner.db.DbCachedOutput;
 import com.sliva.btc.scanner.db.DbCachedTransaction;
 import com.sliva.btc.scanner.db.DbQueryBlock;
 import com.sliva.btc.scanner.db.DbQueryInput;
+import com.sliva.btc.scanner.db.DbQueryInputSpecial;
+import com.sliva.btc.scanner.db.DbUpdateInputSpecial;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.db.model.BtcBlock;
 import com.sliva.btc.scanner.db.model.BtcTransaction;
 import com.sliva.btc.scanner.db.model.OutputStatus;
+import com.sliva.btc.scanner.db.model.SighashType;
 import com.sliva.btc.scanner.db.model.TxInput;
+import com.sliva.btc.scanner.db.model.TxInputSpecial;
 import com.sliva.btc.scanner.db.model.TxOutput;
 import com.sliva.btc.scanner.rpc.RpcClient;
+import com.sliva.btc.scanner.rpc.RpcClientDirect;
 import com.sliva.btc.scanner.src.BJBlockProvider;
 import com.sliva.btc.scanner.src.BlockProvider;
 import com.sliva.btc.scanner.src.BlockProviderWithBackup;
@@ -69,7 +74,7 @@ import org.apache.commons.cli.Options;
 @Slf4j
 public class RunFullScan {
 
-    private static final boolean DEFAULT_SAFE_RUN = true;
+    private static final boolean DEFAULT_SAFE_RUN = false;
     private static final int DEFAULT_BLOCKS_BACK = 0;
     private static final boolean DEFAULT_RUN_PARALLEL = true;
     private static final boolean DEFAULT_UPDATE_SPENT = true;
@@ -85,6 +90,7 @@ public class RunFullScan {
     private final DBConnection dbCon;
     private final DbQueryBlock queryBlock;
     private final DbQueryInput queryInput;
+    private final DbQueryInputSpecial queryInputSpecial;
     private final BlockProvider blockProvider;
     private final int startBlock;
     private final int blocksBack;
@@ -104,7 +110,8 @@ public class RunFullScan {
     }
 
     public RunFullScan(CommandLine cmd) throws Exception {
-        safeRun = cmd.hasOption("start-from-block") || cmd.hasOption("blocks-back") || (!cmd.hasOption("safe-run") ? DEFAULT_SAFE_RUN : "true".equalsIgnoreCase(cmd.getOptionValue("safe-run")));
+        safeRun = cmd.hasOption("start-from-block") || cmd.hasOption("blocks-back") ? true
+                : (!cmd.hasOption("safe-run") ? DEFAULT_SAFE_RUN : "true".equalsIgnoreCase(cmd.getOptionValue("safe-run")));
         startBlock = Integer.parseInt(cmd.getOptionValue("start-from-block", "-1"));
         blocksBack = Integer.parseInt(cmd.getOptionValue("blocks-back", Integer.toString(DEFAULT_BLOCKS_BACK)));
         updateSpent = "true".equalsIgnoreCase(cmd.getOptionValue("update-spent", String.valueOf(DEFAULT_UPDATE_SPENT)));
@@ -115,9 +122,11 @@ public class RunFullScan {
         DBConnection.applyArguments(cmd);
         BJBlockProvider.applyArguments(cmd);
         RpcClient.applyArguments(cmd);
+        RpcClientDirect.applyArguments(cmd);
         dbCon = new DBConnection();
         queryBlock = new DbQueryBlock(dbCon);
         queryInput = new DbQueryInput(dbCon);
+        queryInputSpecial = new DbQueryInputSpecial(dbCon);
         if (cmd.hasOption("full-blocks-path")) {
             BlockProvider primaryBlockProvider = new BJBlockProvider();
             BlockProvider backupBlockProvider = new RpcBlockProvider();
@@ -131,6 +140,7 @@ public class RunFullScan {
         log.info("Execution STARTED");
         try (DbAddBlock addBlock = new DbAddBlock(dbCon);
                 DbUpdateInput updateInput = new DbUpdateInput(dbCon);
+                DbUpdateInputSpecial updateInputSpecial = new DbUpdateInputSpecial(dbCon);
                 DbCachedTransaction cachedTxn = new DbCachedTransaction(dbCon);
                 DbCachedAddress cachedAddress = new DbCachedAddress(dbCon);
                 DbCachedOutput cachedOutput = new DbCachedOutput(dbCon)) {
@@ -185,7 +195,7 @@ public class RunFullScan {
                 }
                 List<BtcTransaction> listTxn = safeRun ? cachedTxn.getTransactionsInBlock(blockHeight) : null;
                 for (SrcTransaction t : block.getTransactions().collect(Collectors.toList())) {
-                    processTransaction(t, blockHeight, listTxn, updateInput, cachedTxn, cachedAddress, cachedOutput);
+                    processTransaction(t, blockHeight, listTxn, updateInput, updateInputSpecial, cachedTxn, cachedAddress, cachedOutput);
                 }
                 if (listTxn != null && !listTxn.isEmpty()) {
                     log.debug("Found wrong transactions in block: " + listTxn);
@@ -219,6 +229,7 @@ public class RunFullScan {
     private TxnProcessOutput processTransaction(
             int transactionId,
             DbUpdateInput updateInput,
+            DbUpdateInputSpecial updateInputSpecial,
             DbCachedTransaction cachedTxn,
             DbCachedAddress cachedAddress,
             DbCachedOutput cachedOutput) throws SQLException {
@@ -226,7 +237,7 @@ public class RunFullScan {
         log.debug("processTransaction({}): intx={}", transactionId, intx);
         List<BtcTransaction> listTxn = safeRun ? cachedTxn.getTransactionsInBlock(intx.getBlockHeight()) : null;
         try {
-            return processTransaction(findBJTransaction(intx.getBlockHeight(), intx.getTxid()), intx.getBlockHeight(), listTxn, updateInput, cachedTxn, cachedAddress, cachedOutput);
+            return processTransaction(findBJTransaction(intx.getBlockHeight(), intx.getTxid()), intx.getBlockHeight(), listTxn, updateInput, updateInputSpecial, cachedTxn, cachedAddress, cachedOutput);
         } catch (IOException e) {
             throw new IllegalStateException(e);
         }
@@ -237,6 +248,7 @@ public class RunFullScan {
             int blockHeight,
             List<BtcTransaction> listTxn,
             DbUpdateInput updateInput,
+            DbUpdateInputSpecial updateInputSpecial,
             DbCachedTransaction cachedTxn,
             DbCachedAddress cachedAddress,
             DbCachedOutput cachedOutput) throws SQLException {
@@ -255,7 +267,7 @@ public class RunFullScan {
         }//TODO validate
         return TxnProcessOutput.builder()
                 .tx(btcTx)
-                .badInputs(processTransactionInputs(t, btcTx, updateInput, cachedTxn, cachedAddress, cachedOutput))
+                .badInputs(processTransactionInputs(t, btcTx, updateInput, updateInputSpecial, cachedTxn, cachedAddress, cachedOutput))
                 .badOutputs(processTransactionOutputs(t, btcTx, cachedTxn, cachedAddress, cachedOutput))
                 .build();
     }
@@ -265,6 +277,7 @@ public class RunFullScan {
             SrcTransaction<SrcInput, SrcOutput<SrcAddress>> t,
             BtcTransaction tx,
             DbUpdateInput updateInput,
+            DbUpdateInputSpecial updateInputSpecial,
             DbCachedTransaction cachedTxn,
             DbCachedAddress cachedAddress,
             DbCachedOutput cachedOutput) throws SQLException {
@@ -281,7 +294,7 @@ public class RunFullScan {
         }
         t.getInputs().forEach(ti -> {
             String inTxid = ti.getInTxid();
-            final int inPos = ti.getInPos();
+            final short inPos = ti.getInPos();
             log.trace("In.Outpoint: {}:{}", inTxid, inPos);
             try {
                 final BtcTransaction inTxn = cachedTxn.getTransaction(inTxid);
@@ -311,7 +324,7 @@ public class RunFullScan {
                                 log.info("Transaction referenced from input does not exists: " + in2.getTransactionId());
                                 updateInput.delete(in2);
                             } else {
-                                TxnProcessOutput out = processTransaction(in2.getTransactionId(), updateInput, cachedTxn, cachedAddress, cachedOutput);
+                                TxnProcessOutput out = processTransaction(in2.getTransactionId(), updateInput, updateInputSpecial, cachedTxn, cachedAddress, cachedOutput);
                                 //updateInput.delete(in2);
 //                        if (out.badInputs != null && out.badInputs.contains(in2)) {
 //                            //it was a bad input - proceed
@@ -338,7 +351,7 @@ public class RunFullScan {
 //                            txInput = inputToAdd;
                             } else {
                                 try {
-                                    TxnProcessOutput out = processTransaction(txInput.getInTransactionId(), updateInput, cachedTxn, cachedAddress, cachedOutput);
+                                    TxnProcessOutput out = processTransaction(txInput.getInTransactionId(), updateInput, updateInputSpecial, cachedTxn, cachedAddress, cachedOutput);
                                     log.info("out={}", out);
                                 } catch (Exception e) {
                                     log.debug(e.getMessage(), e);
@@ -349,6 +362,28 @@ public class RunFullScan {
                                 //throw new IllegalStateException("Error validating input \n" + inputToAdd + ". In DB found another input record with different data: \n" + txInput);
                             }
                         }
+                    }
+                }
+                if (ti.isMultisig() || ti.getSighashType() != SighashType.SIGHASH_ALL) {
+                    //non-default SIGHASH_TYPE
+                    TxInputSpecial newInputSpecial = TxInputSpecial.builder()
+                            .transactionId(tx.getTransactionId())
+                            .pos(ti.getPos())
+                            .sighashType(ti.getSighashType())
+                            .segwit(ti.isSegwit())
+                            .multisig(ti.isMultisig())
+                            .build();
+                    if (safeRun) {
+                        TxInputSpecial c = queryInputSpecial.getInput(tx.getTransactionId(), ti.getPos());
+                        if (c == null) {
+                            updateInputSpecial.add(newInputSpecial);
+                        } else if (c.getSighashType() != newInputSpecial.getSighashType()
+                                || c.isSegwit() != newInputSpecial.isSegwit()
+                                || c.isMultisig() != newInputSpecial.isMultisig()) {
+                            updateInputSpecial.update(newInputSpecial);
+                        }
+                    } else {
+                        updateInputSpecial.add(newInputSpecial);
                     }
                 }
                 if (updateSpent && txOutput.getStatus() != OutputStatus.SPENT) {
@@ -580,11 +615,11 @@ public class RunFullScan {
     private static Options prepOptions() {
         Options options = new Options();
         options.addOption("h", "help", false, "Print help");
-        options.addOption("s", "safe-run", false, "Run in safe mode - check DB for existing records before adding new");
+        options.addOption(null, "safe-run", false, "Run in safe mode - check DB for existing records before adding new");
         options.addOption(null, "update-spent", true, "Update spent flag on outpus. Default is true. For better performance of massive update you might want to disable it and run separate process after this update is done.");
         options.addOption(null, "blocks-back", true, "Check last number of blocks. Process will run in safe mode (option -s)");
         options.addOption(null, "start-from-block", true, "Start checking from block hight provided. Process will run in safe mode (option -s)");
-        options.addOption("t", "threads", true, "Number of threads to run. Default is " + DEFAULT_TXN_THREADS + ". To disable parallel threading set value to 0");
+        options.addOption(null, "threads", true, "Number of threads to run. Default is " + DEFAULT_TXN_THREADS + ". To disable parallel threading set value to 0");
         options.addOption(null, "stop-file", true, "File to be watched on each new block to stop process. If file is present the process stops and file renamed by adding '1' to the end.");
         DBConnection.addOptions(options);
         RpcClient.addOptions(options);

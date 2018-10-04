@@ -31,7 +31,10 @@ public class DbBlockProvider implements BlockProvider<DbBlock> {
     private static final String SQL_QUERY_BLOCK_HEIGHT = "SELECT height FROM block WHERE hash=?";
     private static final String SQL_QUERY_BLOCK_TRANSACTIONS = "SELECT transaction_id,txid FROM transaction WHERE block_height=?";
     private static final String SQL_QUERY_TRANSACTION_HASH = "SELECT txid FROM transaction WHERE transaction_id=?";
-    private static final String SQL_QUERY_TRANSACTION_INPUTS = "SELECT pos,in_transaction_id,in_pos FROM input WHERE transaction_id=? ORDER BY pos";
+    private static final String SQL_QUERY_TRANSACTION_INPUTS = "SELECT I.pos,I.in_transaction_id,I.in_pos,S.sighash_type,S.segwit,S.multisig"
+            + " FROM input I"
+            + " LEFT JOIN input_special S ON S.transaction_id=I.transaction_id AND S.pos=I.pos"
+            + " WHERE I.transaction_id=? ORDER BY I.pos";
     private static final String SQL_QUERY_TRANSACTION_OUTPUTS = "SELECT pos,address_id,amount,spent FROM output WHERE transaction_id=? ORDER BY pos";
     private static final String SQL_QUERY_ADDRESS = "SELECT address,wallet_id FROM address_table_name WHERE address_id=?";
     private static final String SQL_QUERY_WALLET = "SELECT name,details FROM wallet WHERE wallet_id=?";

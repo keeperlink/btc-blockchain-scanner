@@ -15,7 +15,8 @@
  */
 package com.sliva.btc.scanner.db.model;
 
-import lombok.Builder;
+import com.google.common.collect.ComparisonChain;
+import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.ToString;
@@ -25,20 +26,19 @@ import lombok.ToString;
  * @author Sliva Co
  */
 @Getter
-@Builder(toBuilder = true)
+@AllArgsConstructor
+@EqualsAndHashCode
 @ToString
-@EqualsAndHashCode(of = {"transactionId", "pos"})
-public class TxOutput implements Comparable<TxOutput> {
+public class InOutKey implements Comparable<InOutKey> {
 
     private final int transactionId;
-    private final short pos;
-    private final int addressId;
-    private final long amount;
-    private final byte status;
+    private final int pos;
 
     @Override
-    public int compareTo(TxOutput o) {
-        int c = Integer.compare(transactionId, o.transactionId);
-        return c != 0 ? c : Integer.compare(pos, o.pos);
+    public int compareTo(InOutKey o) {
+        return ComparisonChain.start()
+                .compare(transactionId, o.transactionId)
+                .compare(pos, o.pos)
+                .result();
     }
 }

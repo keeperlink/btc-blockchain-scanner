@@ -15,12 +15,13 @@
  */
 package com.sliva.btc.scanner.src;
 
-import com.sliva.btc.scanner.rpc.RpcClient;
-import java.util.HashMap;
-import java.util.Map;
+import com.sliva.btc.scanner.rpc.RpcClientDirect;
+import com.sliva.btc.scanner.util.BJBlockHandler;
+import java.io.IOException;
 import java.util.stream.Stream;
 import lombok.ToString;
-import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient;
+import org.bitcoinj.core.Block;
+import org.spongycastle.util.encoders.Hex;
 
 /**
  *
@@ -29,40 +30,49 @@ import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient;
 @ToString
 public class RpcBlock implements SrcBlock<RpcTransaction> {
 
-    private final BitcoindRpcClient.Block block;
-    private final Map<String, RpcTransaction> cache = new HashMap<>();
+    private final Block block;
+    private Integer blockHeight;
 
     public RpcBlock(int blockHeight) {
-        this.block = RpcClient.getInstance().getBlock(blockHeight);
+        try {
+            this.block = getBlock(RpcClientDirect.getInstance().getBlockHash(blockHeight));
+            this.blockHeight = blockHeight;
+        } catch (IOException e) {
+            throw new RuntimeException("blockHeight=" + blockHeight, e);
+        }
     }
 
     public RpcBlock(String hash) {
-        this.block = RpcClient.getInstance().getBlock(hash);
+        this.block = getBlock(hash);
+    }
+
+    private final Block getBlock(String hash) {
+        try {
+            return BJBlockHandler.parseBlcok(Hex.decode(RpcClientDirect.getInstance().getRawBlock(hash)));
+        } catch (IOException e) {
+            throw new RuntimeException("blockHash=" + hash, e);
+        }
     }
 
     @Override
     public String getHash() {
-        return block.hash();
+        return block.getHashAsString();
     }
 
     @Override
     public int getHeight() {
-        return block.height();
+        if (blockHeight == null) {
+            try {
+                blockHeight = RpcClientDirect.getInstance().getBlockHeight(block.getHashAsString());
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+        return blockHeight;
     }
 
     @Override
     public Stream<RpcTransaction> getTransactions() {
-        return block.tx().stream().map(t -> getTx(t));
-    }
-
-    private RpcTransaction getTx(String txid) {
-        synchronized (cache) {
-            RpcTransaction tx = cache.get(txid);
-            if (tx == null) {
-                tx = new RpcTransaction(txid);
-                cache.put(txid, tx);
-            }
-            return tx;
-        }
+        return block.getTransactions().stream().map(t -> new RpcTransaction(t));
     }
 }

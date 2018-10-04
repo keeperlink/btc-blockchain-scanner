@@ -22,7 +22,7 @@ package com.sliva.btc.scanner.src;
  */
 public interface SrcOutput<A extends SrcAddress> {
 
-    int getPos();
+    short getPos();
 
     A getAddress();
 

@@ -37,8 +37,8 @@ public class BJOutput implements SrcOutput<BJAddress> {
     }
 
     @Override
-    public int getPos() {
-        return to.getIndex();
+    public short getPos() {
+        return (short)to.getIndex();
     }
 
     @Override

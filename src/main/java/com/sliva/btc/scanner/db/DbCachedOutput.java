@@ -15,7 +15,7 @@
  */
 package com.sliva.btc.scanner.db;
 
-import com.sliva.btc.scanner.db.model.PK;
+import com.sliva.btc.scanner.db.model.InOutKey;
 import com.sliva.btc.scanner.db.model.TxOutput;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -73,7 +73,7 @@ public class DbCachedOutput implements AutoCloseable {
         }
     }
 
-    public void updateStatus(int transactionId, int pos, int status) throws SQLException {
+    public void updateStatus(int transactionId, short pos, byte status) throws SQLException {
         synchronized (cacheData) {
             updateOutput.updateSpent(transactionId, pos, status);
             OutputsList ol = cacheData.cacheMap.get(transactionId);
@@ -86,7 +86,7 @@ public class DbCachedOutput implements AutoCloseable {
         }
     }
 
-    public void updateAddress(int transactionId, int pos, int addressId) throws SQLException {
+    public void updateAddress(int transactionId, short pos, int addressId) throws SQLException {
         synchronized (cacheData) {
             updateOutput.updateAddress(transactionId, pos, addressId);
             OutputsList ol = cacheData.cacheMap.get(transactionId);
@@ -99,7 +99,7 @@ public class DbCachedOutput implements AutoCloseable {
         }
     }
 
-    public void updateAmount(int transactionId, int pos, long amount) throws SQLException {
+    public void updateAmount(int transactionId, short pos, long amount) throws SQLException {
         synchronized (cacheData) {
             updateOutput.updateAmount(transactionId, pos, amount);
             OutputsList ol = cacheData.cacheMap.get(transactionId);
@@ -136,14 +136,14 @@ public class DbCachedOutput implements AutoCloseable {
         return lt;
     }
 
-    public TxOutput getOutput(int transactionId, int pos) throws SQLException {
+    public TxOutput getOutput(int transactionId, short pos) throws SQLException {
         OutputsList ol = cacheData.cacheMap.get(transactionId);
         TxOutput result = ol == null ? null : ol.find(pos);
         if (result != null) {
             updateCache(transactionId);
             return result;
         }
-        result = updateOutput.getCacheData().getQueueMap().get(new PK(transactionId, pos));
+        result = updateOutput.getCacheData().getQueueMap().get(new InOutKey(transactionId, pos));
         if (result != null) {
             updateCache(transactionId);
             return result;
@@ -235,7 +235,7 @@ public class DbCachedOutput implements AutoCloseable {
             this.complete = complete;
         }
 
-        TxOutput find(int pos) {
+        TxOutput find(short pos) {
             synchronized (list) {
                 return list.stream().filter((t) -> t.getPos() == pos).findAny().orElse(null);
             }

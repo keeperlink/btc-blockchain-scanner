@@ -55,8 +55,8 @@ import org.apache.commons.cli.Options;
 public class RunUpdateWallets2 {
 
     private static final int DEFAULT_TXN_THREADS = 20;
-    private static final int DEFAULT_FIRST_TRANSACTION = 2_200_000;
-    private static final int DEFAULT_BATCH_SIZE = 10000;
+    private static final int DEFAULT_FIRST_TRANSACTION = 1;
+    private static final int DEFAULT_BATCH_SIZE = 20000;
     private static final String DEFAULT_STOP_FILE_NAME = "/tmp/btc-update-wallet-stop";
     private static final String SQL_UPDATE_ADDRESS_WALLET
             = "UPDATE address_table_name SET wallet_id=? WHERE wallet_id=?";
@@ -108,8 +108,9 @@ public class RunUpdateWallets2 {
             try (DbUpdateAddress updateAddress = new DbUpdateAddress(conn);
                     DbAddWallet addWallet = new DbAddWallet(conn)) {
                 initProcess(addWallet);
+                int endTransaction = queryTransaction.getLastTransactionId();
                 int batchFirstTransaction = firstTransaction;
-                for (int loop = 0;; loop++, batchFirstTransaction += batchSize) {
+                for (int loop = 0; batchFirstTransaction <= endTransaction; loop++, batchFirstTransaction += batchSize) {
                     startFromFile.updateNumber(batchFirstTransaction);
                     if (stopFile.exists()) {
                         log.info("Exiting - stop file found: " + stopFile.getAbsolutePath());

@@ -15,6 +15,7 @@
  */
 package com.sliva.btc.scanner.src;
 
+import com.sliva.btc.scanner.util.SigUtils;
 import lombok.ToString;
 import org.bitcoinj.core.TransactionInput;
 
@@ -26,15 +27,15 @@ import org.bitcoinj.core.TransactionInput;
 public class BJInput implements SrcInput {
 
     private final TransactionInput ti;
-    private final int pos;
+    private final short pos;
 
-    public BJInput(TransactionInput ti, int pos) {
+    public BJInput(TransactionInput ti, short pos) {
         this.ti = ti;
         this.pos = pos;
     }
 
     @Override
-    public int getPos() {
+    public short getPos() {
         return pos;
     }
 
@@ -44,8 +45,23 @@ public class BJInput implements SrcInput {
     }
 
     @Override
-    public int getInPos() {
-        return (int) ti.getOutpoint().getIndex();
+    public short getInPos() {
+        return (short) ti.getOutpoint().getIndex();
+    }
+
+    @Override
+    public byte getSighashType() {
+        return SigUtils.getSighashType(ti);
+    }
+
+    @Override
+    public boolean isSegwit() {
+        return ti.hasWitness();
+    }
+
+    @Override
+    public boolean isMultisig() {
+        return SigUtils.isMultisig(ti);
     }
 
 }
