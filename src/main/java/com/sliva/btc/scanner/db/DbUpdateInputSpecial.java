@@ -156,7 +156,7 @@ public class DbUpdateInputSpecial extends DbUpdate {
                 BatchExecutor.executeBatch(temp, psAdd.get(), (TxInputSpecial t, PreparedStatement ps) -> {
                     ps.setInt(1, t.getTransactionId());
                     ps.setInt(2, t.getPos());
-                    ps.setInt(3, t.getSighashType());
+                    ps.setInt(3, Byte.toUnsignedInt(t.getSighashType()));
                     ps.setBoolean(4, t.isSegwit());
                     ps.setBoolean(5, t.isMultisig());
                 });
