@@ -34,7 +34,7 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class DbCachedOutput implements AutoCloseable {
 
-    private static final int MAX_CACHE_SIZE = 50000;
+    private static final int MAX_CACHE_SIZE = 200000;
     private final DbUpdateOutput updateOutput;
     private final DbQueryOutput queryOutput;
     private final CacheData cacheData;
