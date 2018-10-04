@@ -71,9 +71,9 @@ public class RpcTransaction implements SrcTransaction<RpcInput, RpcOutput> {
         }
         final AtomicInteger pos = new AtomicInteger(0);
         if (tran != null) {
-            return tran.getInputs().stream().map((t) -> new RpcInput(t, pos.getAndIncrement()));
+            return tran.getInputs().stream().map((t) -> new RpcInput(t, (short) pos.getAndIncrement()));
         } else {
-            return getRawTransaction().vIn().stream().map((t) -> new RpcInput(t, pos.getAndIncrement()));
+            return getRawTransaction().vIn().stream().map((t) -> new RpcInput(t, (short) pos.getAndIncrement()));
         }
     }
 

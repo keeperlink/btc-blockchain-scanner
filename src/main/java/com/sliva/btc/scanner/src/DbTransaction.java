@@ -66,7 +66,7 @@ public class DbTransaction implements SrcTransaction<DbInput, DbOutput> {
                 try (ResultSet rs = blockProvider.psQueryTransactionInputs.get().executeQuery()) {
                     Collection<DbInput> t = new ArrayList<>();
                     while (rs.next()) {
-                        t.add(new DbInput(blockProvider, rs.getInt(1), rs.getInt(2), rs.getInt(3)));
+                        t.add(new DbInput(blockProvider, rs.getShort(1), rs.getShort(2), rs.getInt(3), null, rs.getByte(4), rs.getBoolean(5), rs.getBoolean(6)));
                     }
                     inputs = t;
                 }
@@ -85,7 +85,7 @@ public class DbTransaction implements SrcTransaction<DbInput, DbOutput> {
                 try (ResultSet rs = blockProvider.psQueryTransactionOutputs.get().executeQuery()) {
                     Collection<DbOutput> t = new ArrayList<>();
                     while (rs.next()) {
-                        t.add(new DbOutput(blockProvider, rs.getInt(1), rs.getInt(2), rs.getLong(3), rs.getInt(4)));
+                        t.add(new DbOutput(blockProvider, rs.getShort(1), rs.getInt(2), rs.getLong(3), rs.getByte(4)));
                     }
                     outputs = t;
                 }

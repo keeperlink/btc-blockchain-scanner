@@ -15,6 +15,8 @@
  */
 package com.sliva.btc.scanner.src;
 
+import com.sliva.btc.scanner.db.model.SighashType;
+import com.sliva.btc.scanner.util.SigUtils;
 import lombok.ToString;
 import org.apache.commons.codec.binary.Hex;
 import org.bitcoinj.core.TransactionInput;
@@ -29,22 +31,22 @@ public class RpcInput implements SrcInput {
 
     private final In in;
     private final TransactionInput txin;
-    private final int pos;
+    private final short pos;
 
-    public RpcInput(In in, int pos) {
+    public RpcInput(In in, short pos) {
         this.in = in;
         this.txin = null;
         this.pos = pos;
     }
 
-    public RpcInput(TransactionInput txin, int pos) {
+    public RpcInput(TransactionInput txin, short pos) {
         this.in = null;
         this.txin = txin;
         this.pos = pos;
     }
 
     @Override
-    public int getPos() {
+    public short getPos() {
         return pos;
     }
 
@@ -56,12 +58,26 @@ public class RpcInput implements SrcInput {
 
     @Override
     @SuppressWarnings("null")
-    public int getInPos() {
-        return txin != null ? (int) txin.getOutpoint().getIndex() : in.vout();
+    public short getInPos() {
+        return txin != null ? (short) txin.getOutpoint().getIndex() : (short) in.vout();
+    }
+
+    @Override
+    public byte getSighashType() {
+        return txin != null ? SigUtils.getSighashType(txin) : SighashType.UNDEFINED;
+    }
+
+    @Override
+    public boolean isSegwit() {
+        return txin != null ? txin.hasWitness() : in.scriptSig().containsKey("witness");
+    }
+
+    @Override
+    public boolean isMultisig() {
+        return txin != null ? SigUtils.isMultisig(txin) : in.scriptSig().size() > 1;
     }
 
     public In getIn() {
         return in;
     }
-
 }

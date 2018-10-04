@@ -44,7 +44,7 @@ public class BJTransaction implements SrcTransaction<BJInput, BJOutput> {
             return null;
         }
         final AtomicInteger pos = new AtomicInteger(0);
-        return t.getInputs().stream().map((i) -> new BJInput(i, pos.getAndIncrement()));
+        return t.getInputs().stream().map((i) -> new BJInput(i, (short)pos.getAndIncrement()));
     }
 
     @Override

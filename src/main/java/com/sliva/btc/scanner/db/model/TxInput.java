@@ -31,9 +31,9 @@ import lombok.ToString;
 public class TxInput implements Comparable<TxInput> {
 
     private final int transactionId;
-    private final int pos;
+    private final short pos;
     private final int inTransactionId;
-    private final int inPos;
+    private final short inPos;
 
     @Override
     public int compareTo(TxInput o) {

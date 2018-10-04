@@ -69,17 +69,17 @@ public class DbQueryOutput {
             while (rs.next()) {
                 result.add(TxOutput.builder()
                         .transactionId(transactionId)
-                        .pos(rs.getInt(1))
+                        .pos(rs.getShort(1))
                         .addressId(rs.getInt(2))
                         .amount(rs.getLong(3))
-                        .status(rs.getInt(4))
+                        .status(rs.getByte(4))
                         .build());
             }
             return result;
         }
     }
 
-    public TxOutput getOutput(int transactionId, int pos) throws SQLException {
+    public TxOutput getOutput(int transactionId, short pos) throws SQLException {
         psQueryOutput.get().setInt(1, transactionId);
         psQueryOutput.get().setInt(2, pos);
         try (ResultSet rs = psQueryOutput.get().executeQuery()) {
@@ -88,7 +88,7 @@ public class DbQueryOutput {
                     .pos(pos)
                     .addressId(rs.getInt(1))
                     .amount(rs.getLong(2))
-                    .status(rs.getInt(3))
+                    .status(rs.getByte(3))
                     .build() : null;
         }
     }
@@ -101,17 +101,17 @@ public class DbQueryOutput {
                 TxOutputInput.TxOutputInputBuilder builder = TxOutputInput.builder();
                 builder.output(TxOutput.builder()
                         .transactionId(transactionId)
-                        .pos(rs.getInt(1))
+                        .pos(rs.getShort(1))
                         .addressId(rs.getInt(2))
                         .amount(rs.getLong(3))
-                        .status(rs.getInt(4))
+                        .status(rs.getByte(4))
                         .build());
                 if (rs.getObject(5) != null) {
                     builder.input(TxInput.builder()
                             .transactionId(rs.getInt(5))
-                            .pos(rs.getInt(6))
+                            .pos(rs.getShort(6))
                             .inTransactionId(transactionId)
-                            .inPos(rs.getInt(1))
+                            .inPos(rs.getShort(1))
                             .build());
                 }
                 result.add(builder.build());
@@ -135,7 +135,7 @@ public class DbQueryOutput {
                         .pos(rs.getShort(2))
                         .addressId(rs.getInt(3))
                         .amount(rs.getLong(4))
-                        .status(rs.getShort(5))
+                        .status(rs.getByte(5))
                         .walletId(rs.getInt(6))
                         .walletName(rs.getString(7))
                         .build());
@@ -163,7 +163,7 @@ public class DbQueryOutput {
         private final short pos;
         private final int addressId;
         private final long amount;
-        private final short status;
+        private final byte status;
         private final int walletId;
         private final String walletName;
     }

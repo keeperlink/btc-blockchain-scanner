@@ -21,9 +21,15 @@ package com.sliva.btc.scanner.src;
  */
 public interface SrcInput {
 
-    int getPos();
+    short getPos();
 
     String getInTxid();
 
-    int getInPos();
+    short getInPos();
+
+    byte getSighashType();
+
+    boolean isSegwit();
+
+    boolean isMultisig();
 }

@@ -73,9 +73,9 @@ public class DbQueryInput {
             while (rs.next()) {
                 result.add(TxInput.builder()
                         .transactionId(transactionId)
-                        .pos(rs.getInt(1))
+                        .pos(rs.getShort(1))
                         .inTransactionId(rs.getInt(2))
-                        .inPos(rs.getInt(3))
+                        .inPos(rs.getShort(3))
                         .build());
             }
         }
@@ -83,13 +83,13 @@ public class DbQueryInput {
         return result;
     }
 
-    public TxInput findInputByOutTx(int inTransactionId, int inPos) throws SQLException {
+    public TxInput findInputByOutTx(int inTransactionId, short inPos) throws SQLException {
         psFindInputByOutTx.get().setInt(1, inTransactionId);
         psFindInputByOutTx.get().setInt(2, inPos);
         try (ResultSet rs = psFindInputByOutTx.get().executeQuery()) {
             TxInput result = rs.next() ? TxInput.builder()
                     .transactionId(rs.getInt(1))
-                    .pos(rs.getInt(2))
+                    .pos(rs.getShort(2))
                     .inTransactionId(inTransactionId)
                     .inPos(inPos)
                     .build() : null;
@@ -106,17 +106,17 @@ public class DbQueryInput {
                 TxInputOutput.TxInputOutputBuilder builder = TxInputOutput.builder();
                 builder.input(TxInput.builder()
                         .transactionId(transactionId)
-                        .pos(rs.getInt(1))
+                        .pos(rs.getShort(1))
                         .inTransactionId(rs.getInt(2))
-                        .inPos(rs.getInt(3))
+                        .inPos(rs.getShort(3))
                         .build());
                 if (rs.getObject(4) != null) {
                     builder.output(TxOutput.builder()
                             .transactionId(rs.getInt(2))
-                            .pos(rs.getInt(3))
+                            .pos(rs.getShort(3))
                             .addressId(rs.getInt(4))
                             .amount(rs.getLong(5))
-                            .status(rs.getInt(6))
+                            .status(rs.getByte(6))
                             .build());
                 }
                 result.add(builder.build());

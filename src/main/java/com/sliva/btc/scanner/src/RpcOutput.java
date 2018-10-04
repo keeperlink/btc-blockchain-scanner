@@ -40,8 +40,8 @@ public class RpcOutput implements SrcOutput<RpcAddress> {
     }
 
     @Override
-    public int getPos() {
-        return txout != null ? txout.getIndex() : out.n();
+    public short getPos() {
+        return txout != null ? (short) txout.getIndex() : (short) out.n();
     }
 
     @Override

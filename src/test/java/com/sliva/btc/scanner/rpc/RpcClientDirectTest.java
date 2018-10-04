@@ -15,7 +15,10 @@
  */
 package com.sliva.btc.scanner.rpc;
 
+import com.sliva.btc.scanner.db.model.SighashType;
 import com.sliva.btc.scanner.util.BJBlockHandler;
+import java.util.ArrayList;
+import java.util.List;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.DefaultParser;
 import org.apache.commons.cli.Options;
@@ -25,6 +28,7 @@ import org.bitcoinj.core.Transaction;
 import org.bitcoinj.core.TransactionInput;
 import org.bitcoinj.core.TransactionWitness;
 import org.bitcoinj.script.Script;
+import org.bitcoinj.script.ScriptChunk;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -147,6 +151,7 @@ public class RpcClientDirectTest {
      * @throws java.lang.Exception
      */
     @Test
+    @SuppressWarnings("null")
     public void testGetRawBlock2() throws Exception {
         System.out.println("getRawBlock");
         String hash = "00000000000000000009f4678c46acd33844910f572af82eee3ca1204af9313f";
@@ -154,17 +159,55 @@ public class RpcClientDirectTest {
         System.out.println("result.size=" + result.length());
         assertNotNull(result);
         Block block = BJBlockHandler.parseBlcok(Hex.decode(result));
-        System.out.println("block=" + block);
+        //System.out.println("block=" + block);
         Transaction tran = block.getTransactions().stream().filter(t -> "ed6ad1f896ff8221cfca585acf365c64b346dfc124fd9105de48e9fd22148d7b".equalsIgnoreCase(t.getHashAsString())).findAny().get();
+        printTx(tran);
+//        printTx(block.getTransactions().get(1));
+//        printTx(block.getTransactions().get(2));
+        block.getTransactions().forEach(t -> printTx(t));
+    }
+
+    private void printTx(Transaction tran) {
         System.out.println("tran=" + tran);
-        TransactionInput inp = tran.getInputs().get(0);
-        System.out.println("inp=" + inp);
-        System.out.println("inp.isOptInFullRBF=" + inp.isOptInFullRBF());
-        Script scriptSig = inp.getScriptSig();
-        System.out.println("scriptSig=" + scriptSig);
-        TransactionWitness witness = inp.getWitness();
-        System.out.println("witness=" + witness);
-        System.out.println("witness.pushCount=" + witness.getPushCount());
+        for (TransactionInput inp : tran.getInputs()) {
+            System.out.println("inp=" + inp);
+            if (inp.isCoinBase()) {
+                return;
+            }
+            System.out.println("inp.isOptInFullRBF=" + inp.isOptInFullRBF());
+            Script scriptSig = inp.getScriptSig();
+            System.out.println("scriptSig=" + scriptSig);
+            TransactionWitness witness = inp.getWitness();
+            if (witness != null && witness.getPushCount() > 0) {
+                System.out.println("witness=" + witness);
+                System.out.println("witness.pushCount=" + witness.getPushCount());
+                byte[] hashsig = findHashsig(witness);
+                System.out.println("witness.hashsig=" + Hex.toHexString(hashsig));
+                System.out.println("sighashType=" + SighashType.toHexString(hashsig[hashsig.length - 1]));
+            } else {
+                System.out.println("scriptSig.chunks=" + scriptSig.getChunks());
+                for (byte[] hashsig : findHashsig(scriptSig)) {
+                    System.out.println("witness.hashsig=" + Hex.toHexString(hashsig));
+                    System.out.println("sighashType=" + SighashType.toHexString(hashsig[hashsig.length - 1]));
+                }
+            }
+        }
+    }
+
+    private byte[] findHashsig(TransactionWitness witness) {
+        for (int i = 0; i < witness.getPushCount(); i++) {
+            byte[] push = witness.getPush(i);
+            if (push != null && push.length > 0 && push[0] == 0x30) {
+                return push;
+            }
+        }
+        return null;
+    }
+
+    private List<byte[]> findHashsig(Script scriptSig) {
+        List<byte[]> result = new ArrayList<>();
+        scriptSig.getChunks().stream().filter(c -> (c.isPushData())).map(c -> c.data).filter(p -> (p != null && p.length > 0 && p[0] == 0x30)).forEachOrdered((push) -> result.add(push));
+        return result;
     }
 
     /**

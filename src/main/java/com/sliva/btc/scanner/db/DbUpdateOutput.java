@@ -118,7 +118,7 @@ public class DbUpdateOutput extends DbUpdate {
         }
     }
 
-    public void updateSpent(int transactionId, int pos, int status) throws SQLException {
+    public void updateSpent(int transactionId, short pos, byte status) throws SQLException {
         log.trace("updateSpent(transactionId:{},pos:{},status:{})", transactionId, pos, status);
         synchronized (cacheData) {
             InOutKey pk = new InOutKey(transactionId, pos);
@@ -146,7 +146,7 @@ public class DbUpdateOutput extends DbUpdate {
         }
     }
 
-    public void updateAddress(int transactionId, int pos, int addressId) throws SQLException {
+    public void updateAddress(int transactionId, short pos, int addressId) throws SQLException {
         log.trace("updateAddress(transactionId:{},pos:{},addressId:{})", transactionId, pos, addressId);
         synchronized (cacheData) {
             InOutKey pk = new InOutKey(transactionId, pos);
@@ -174,7 +174,7 @@ public class DbUpdateOutput extends DbUpdate {
         }
     }
 
-    public void updateAmount(int transactionId, int pos, long amount) throws SQLException {
+    public void updateAmount(int transactionId, short pos, long amount) throws SQLException {
         log.trace("updateAmount(transactionId:{},pos:{},amount:{})", transactionId, pos, amount);
         synchronized (cacheData) {
             InOutKey pk = new InOutKey(transactionId, pos);
