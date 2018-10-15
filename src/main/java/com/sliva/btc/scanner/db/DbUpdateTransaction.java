@@ -40,7 +40,7 @@ public class DbUpdateTransaction extends DbUpdate {
 
     private static int MIN_BATCH_SIZE = 1;
     public static int MAX_BATCH_SIZE = 20000;
-    private static int MAX_INSERT_QUEUE_LENGTH = 1000000;
+    public static int MAX_INSERT_QUEUE_LENGTH = 1000000;
     private static int MAX_UPDATE_QUEUE_LENGTH = 1000;
     private static final String TABLE_NAME = "transaction";
     private static final String SQL_ADD = "INSERT INTO transaction(transaction_id,txid,block_height,nInputs,nOutputs)VALUES(?,?,?,?,?)";

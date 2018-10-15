@@ -28,7 +28,10 @@ import com.sliva.btc.scanner.db.DbCachedTransaction;
 import com.sliva.btc.scanner.db.DbQueryBlock;
 import com.sliva.btc.scanner.db.DbQueryInput;
 import com.sliva.btc.scanner.db.DbQueryInputSpecial;
+import com.sliva.btc.scanner.db.DbUpdateAddressOne;
 import com.sliva.btc.scanner.db.DbUpdateInputSpecial;
+import com.sliva.btc.scanner.db.DbUpdateOutput;
+import com.sliva.btc.scanner.db.DbUpdateTransaction;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.db.model.BtcBlock;
 import com.sliva.btc.scanner.db.model.BtcTransaction;
@@ -116,6 +119,12 @@ public class RunFullScan {
     }
 
     public RunFullScan(CommandLine cmd) throws Exception {
+        DbUpdateAddressOne.MAX_INSERT_QUEUE_LENGTH = 5000;
+        DbUpdateInput.MAX_INSERT_QUEUE_LENGTH = 5000;
+        DbUpdateInputSpecial.MAX_INSERT_QUEUE_LENGTH = 5000;
+        DbUpdateOutput.MAX_INSERT_QUEUE_LENGTH = 5000;
+        DbUpdateTransaction.MAX_INSERT_QUEUE_LENGTH = 5000;
+
         safeRun = cmd.hasOption("start-from-block") || cmd.hasOption("blocks-back") ? true
                 : (!cmd.hasOption("safe-run") ? DEFAULT_SAFE_RUN : "true".equalsIgnoreCase(cmd.getOptionValue("safe-run")));
         startBlock = Integer.parseInt(cmd.getOptionValue("start-from-block", "-1"));
