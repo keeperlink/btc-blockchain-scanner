@@ -103,19 +103,26 @@ public class RunFullScan {
     private final int startBlock;
     private final int blocksBack;
     private final LoadingCache<Integer, Collection<TxInput>> inputsCache;
+    private static boolean terminateLoop;
 
     /**
      * @param args the command line arguments
      * @throws java.lang.Exception
      */
-    @SuppressWarnings({"null", "CallToPrintStackTrace", "UseSpecificCatch"})
+    @SuppressWarnings({"SleepWhileInLoop"})
     public static void main(String[] args) throws Exception {
         CommandLineParser parser = new DefaultParser();
         CommandLine cmd = parser.parse(prepOptions(), args);
         if (cmd.hasOption('h')) {
             printHelpAndExit();
         }
-        new RunFullScan(cmd).runProcess();
+        int loopTime = cmd.hasOption("loop") ? Integer.parseInt(cmd.getOptionValue("loop")) : 0;
+        do {
+            new RunFullScan(cmd).runProcess();
+            if (loopTime > 0 && !terminateLoop) {
+                Thread.sleep(loopTime * 1000L);
+            }
+        } while (loopTime > 0 && !terminateLoop);
     }
 
     public RunFullScan(CommandLine cmd) throws Exception {
@@ -182,6 +189,7 @@ public class RunFullScan {
             }
             for (int blockHeight = lastBlockHeight + 1; blockHeight <= numBlocks; blockHeight++) {
                 if (stopFile.exists()) {
+                    terminateLoop = true;
                     log.info("Exiting - stop file found: " + stopFile.getAbsolutePath());
                     if (futureBlock != null) {
                         futureBlock.get();
@@ -646,6 +654,7 @@ public class RunFullScan {
         options.addOption(null, "start-from-block", true, "Start checking from block hight provided. Process will run in safe mode (option -s)");
         options.addOption(null, "threads", true, "Number of threads to run. Default is " + DEFAULT_TXN_THREADS + ". To disable parallel threading set value to 0");
         options.addOption(null, "stop-file", true, "File to be watched on each new block to stop process. If file is present the process stops and file renamed by adding '1' to the end.");
+        options.addOption(null, "loop", true, "Repeat update every provided number of seconds");
         DBConnection.addOptions(options);
         RpcClient.addOptions(options);
         BJBlockProvider.addOptions(options);
