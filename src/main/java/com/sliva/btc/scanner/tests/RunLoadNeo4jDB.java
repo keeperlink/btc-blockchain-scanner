@@ -23,8 +23,8 @@ import com.sliva.btc.scanner.db.DbQueryInput;
 import com.sliva.btc.scanner.db.DbQueryOutput;
 import com.sliva.btc.scanner.db.DbQueryTransaction;
 import com.sliva.btc.scanner.db.model.BtcTransaction;
-import com.sliva.btc.scanner.neo4j.NeoQueries;
 import com.sliva.btc.scanner.neo4j.NeoConnection;
+import com.sliva.btc.scanner.neo4j.NeoQueries;
 import com.sliva.btc.scanner.src.DbAddress;
 import com.sliva.btc.scanner.src.DbBlockProvider;
 import com.sliva.btc.scanner.src.DbWallet;
@@ -47,7 +47,7 @@ import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 
 /**
  *

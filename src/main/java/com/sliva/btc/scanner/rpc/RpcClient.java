@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +15,11 @@
  */
 package com.sliva.btc.scanner.rpc;
 
+import com.sliva.btc.scanner.util.CommandLineUtils;
+import static com.sliva.btc.scanner.util.CommandLineUtils.buildOption;
 import com.sliva.btc.scanner.util.Utils;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Properties;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.cli.CommandLine;
@@ -36,6 +40,12 @@ public class RpcClient {
     public static String RPC_URL = "http://localhost:17955";
     public static String RPC_USER = "user";
     public static String RPC_PASSWORD = "password";
+
+    public static final Collection<CommandLineUtils.CmdOption> CMD_OPTS = new ArrayList<>();
+    public static final CommandLineUtils.CmdOption rpcUrlOpt = buildOption(CMD_OPTS, "r", "rpc-url", true, "RPC URL to running bitcoin core. Default is '" + RpcClient.RPC_URL + "'.");
+    public static final CommandLineUtils.CmdOption rpcUserOpt = buildOption(CMD_OPTS, "x", "rpc-user", true, "RPC user name.");
+    public static final CommandLineUtils.CmdOption rpcPasswordOpt = buildOption(CMD_OPTS, "y", "rpc-password", true, "RPC password.");
+    public static final CommandLineUtils.CmdOption rpcConfigOpt = buildOption(CMD_OPTS, null, "rpc-config", true, "Configuration file name with RPC url, user and password values.");
 
     private static final ThreadLocal<RpcClient> clientThreaded = ThreadLocal.withInitial(() -> new RpcClient());
 
@@ -116,18 +126,24 @@ public class RpcClient {
         return bci.blocks();
     }
 
-    public static void applyArguments(CommandLine cmd) {
-        Properties prop = Utils.loadProperties(cmd.getOptionValue("rpc-config"));
-        RPC_URL = cmd.getOptionValue("rpc-url", prop.getProperty("rpc-url", RPC_URL));
-        RPC_USER = cmd.getOptionValue("rpc-user", prop.getProperty("rpc-user", RPC_USER));
-        RPC_PASSWORD = cmd.getOptionValue("rpc-password", prop.getProperty("rpc-password", RPC_PASSWORD));
+    public static void applyArguments(CommandLineUtils.CmdArguments cmdArguments) {
+        Properties prop = Utils.loadProperties(cmdArguments.getOption(rpcConfigOpt).orElse(null));
+        RPC_URL = cmdArguments.getOption(rpcUrlOpt).orElseGet(() -> prop.getProperty(rpcUrlOpt.getLongOpt(), RPC_URL));
+        RPC_USER = cmdArguments.getOption(rpcUserOpt).orElseGet(() -> prop.getProperty(rpcUserOpt.getLongOpt(), RPC_USER));
+        RPC_PASSWORD = cmdArguments.getOption(rpcPasswordOpt).orElseGet(() -> prop.getProperty(rpcPasswordOpt.getLongOpt(), RPC_PASSWORD));
     }
 
+    @Deprecated
+    public static void applyArguments(CommandLine cmd) {
+        Properties prop = Utils.loadProperties(cmd.getOptionValue(rpcConfigOpt.getLongOpt()));
+        RPC_URL = cmd.getOptionValue(rpcUrlOpt.getLongOpt(), prop.getProperty(rpcUrlOpt.getLongOpt(), RPC_URL));
+        RPC_USER = cmd.getOptionValue(rpcUserOpt.getLongOpt(), prop.getProperty(rpcUserOpt.getLongOpt(), RPC_USER));
+        RPC_PASSWORD = cmd.getOptionValue(rpcPasswordOpt.getLongOpt(), prop.getProperty(rpcPasswordOpt.getLongOpt(), RPC_PASSWORD));
+    }
+
+    @Deprecated
     public static Options addOptions(Options options) {
-        options.addOption("r", "rpc-url", true, "RPC URL to running bitcoin core. Default is '" + RpcClient.RPC_URL + "'.");
-        options.addOption("x", "rpc-user", true, "RPC user name.");
-        options.addOption("y", "rpc-password", true, "RPC password.");
-        options.addOption(null, "rpc-config", true, "Configuration file name with RPC url, user and password values.");
+        CMD_OPTS.forEach(o -> options.addOption(o.getOpt(), o.getLongOpt(), o.isHasArg(), o.getDescription()));
         return options;
     }
 }

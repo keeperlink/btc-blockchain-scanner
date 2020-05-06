@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,12 +15,17 @@
  */
 package com.sliva.btc.scanner.db;
 
+import com.sliva.btc.scanner.util.CommandLineUtils;
+import com.sliva.btc.scanner.util.CommandLineUtils.CmdArguments;
+import static com.sliva.btc.scanner.util.CommandLineUtils.buildOption;
 import com.sliva.btc.scanner.util.Utils;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Properties;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.cli.CommandLine;
@@ -41,6 +46,13 @@ public class DBConnection {
             + "&defaultRowPrefetch=10000";
     private static String DEFAULT_DB_USER = "root";
     private static String DEFAULT_DB_PASSWORD = "password";
+
+    public static final Collection<CommandLineUtils.CmdOption> CMD_OPTS = new ArrayList<>();
+    public static final CommandLineUtils.CmdOption dbUrlOpt = buildOption(CMD_OPTS, null, "db-url", true, "DB URL, i.e. 'jdbc:mysql://localhost:3306/'.");
+    public static final CommandLineUtils.CmdOption dbUserOpt = buildOption(CMD_OPTS, null, "db-user", true, "DB user name.");
+    public static final CommandLineUtils.CmdOption dbPasswordOpt = buildOption(CMD_OPTS, null, "db-password", true, "DB password.");
+    public static final CommandLineUtils.CmdOption dbConfigOpt = buildOption(CMD_OPTS, null, "db-config", true, "Configuration file name with db url, user and password values.");
+
     private final String dbname;
     private final ThreadLocal<Connection> conn;
 
@@ -86,18 +98,24 @@ public class DBConnection {
         });
     }
 
-    public static void applyArguments(CommandLine cmd) {
-        Properties prop = Utils.loadProperties(cmd.getOptionValue("db-config"));
-        DEFAULT_CONN_URL = cmd.getOptionValue("db-url", prop.getProperty("db-url", DEFAULT_CONN_URL));
-        DEFAULT_DB_USER = cmd.getOptionValue("db-user", prop.getProperty("db-user", DEFAULT_DB_USER));
-        DEFAULT_DB_PASSWORD = cmd.getOptionValue("db-password", prop.getProperty("db-password", DEFAULT_DB_PASSWORD));
+    public static void applyArguments(CmdArguments cmdArguments) {
+        Properties prop = Utils.loadProperties(cmdArguments.getOption(dbConfigOpt).orElse(null));
+        DEFAULT_CONN_URL = cmdArguments.getOption(dbUrlOpt).orElseGet(() -> prop.getProperty(dbUrlOpt.getLongOpt(), DEFAULT_CONN_URL));
+        DEFAULT_DB_USER = cmdArguments.getOption(dbUserOpt).orElseGet(() -> prop.getProperty(dbUserOpt.getLongOpt(), DEFAULT_DB_USER));
+        DEFAULT_DB_PASSWORD = cmdArguments.getOption(dbPasswordOpt).orElseGet(() -> prop.getProperty(dbPasswordOpt.getLongOpt(), DEFAULT_DB_PASSWORD));
     }
 
+    @Deprecated
+    public static void applyArguments(CommandLine cmd) {
+        Properties prop = Utils.loadProperties(cmd.getOptionValue(dbConfigOpt.getLongOpt()));
+        DEFAULT_CONN_URL = cmd.getOptionValue(dbUrlOpt.getLongOpt(), prop.getProperty(dbUrlOpt.getLongOpt(), DEFAULT_CONN_URL));
+        DEFAULT_DB_USER = cmd.getOptionValue(dbUserOpt.getLongOpt(), prop.getProperty(dbUserOpt.getLongOpt(), DEFAULT_DB_USER));
+        DEFAULT_DB_PASSWORD = cmd.getOptionValue(dbPasswordOpt.getLongOpt(), prop.getProperty(dbPasswordOpt.getLongOpt(), DEFAULT_DB_PASSWORD));
+    }
+
+    @Deprecated
     public static Options addOptions(Options options) {
-        options.addOption(null, "db-url", true, "DB URL, i.e. 'jdbc:mysql://localhost:3306/'.");
-        options.addOption(null, "db-user", true, "DB user name.");
-        options.addOption(null, "db-password", true, "DB password.");
-        options.addOption(null, "db-config", true, "Configuration file name with db url, user and password values.");
+        CMD_OPTS.forEach(o -> options.addOption(o.getOpt(), o.getLongOpt(), o.isHasArg(), o.getDescription()));
         return options;
     }
 }

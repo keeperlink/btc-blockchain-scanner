@@ -51,6 +51,10 @@ import com.sliva.btc.scanner.src.SrcBlock;
 import com.sliva.btc.scanner.src.SrcInput;
 import com.sliva.btc.scanner.src.SrcOutput;
 import com.sliva.btc.scanner.src.SrcTransaction;
+import com.sliva.btc.scanner.util.CommandLineUtils;
+import com.sliva.btc.scanner.util.CommandLineUtils.CmdArguments;
+import com.sliva.btc.scanner.util.CommandLineUtils.CmdOption;
+import static com.sliva.btc.scanner.util.CommandLineUtils.buildOption;
 import com.sliva.btc.scanner.util.Utils;
 import java.io.File;
 import java.io.IOException;
@@ -58,6 +62,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -67,13 +72,9 @@ import java.util.stream.Collectors;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
+import lombok.SneakyThrows;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.cli.CommandLine;
-import org.apache.commons.cli.CommandLineParser;
-import org.apache.commons.cli.DefaultParser;
-import org.apache.commons.cli.HelpFormatter;
-import org.apache.commons.cli.Options;
 
 /**
  *
@@ -84,10 +85,25 @@ public class RunFullScan {
 
     private static final boolean DEFAULT_SAFE_RUN = false;
     private static final int DEFAULT_BLOCKS_BACK = 0;
-    private static final boolean DEFAULT_RUN_PARALLEL = true;
     private static final boolean DEFAULT_UPDATE_SPENT = true;
     private static final String DEFAULT_STOP_FILE_NAME = "/tmp/btc-scan-stop";
     private static final int DEFAULT_TXN_THREADS = 70;
+
+    public static final Collection<CmdOption> CMD_OPTS = new ArrayList<>();
+    private static final CmdOption safeRunOpt = buildOption(CMD_OPTS, null, "safe-run", true, "Run in safe mode - check DB for existing records before adding new");
+    private static final CmdOption updateSpentOpt = buildOption(CMD_OPTS, null, "update-spent", true, "Update spent flag on outpus. Default is true. For better performance of massive update you might want to disable it and run separate process after this update is done.");
+    private static final CmdOption blocksBackOpt = buildOption(CMD_OPTS, null, "blocks-back", true, "Check last number of blocks. Process will run in safe mode (option --safe-run=true)");
+    private static final CmdOption startFromBlockOpt = buildOption(CMD_OPTS, null, "start-from-block", true, "Start checking from block hight provided. Process will run in safe mode (option --safe-run=true)");
+    private static final CmdOption runToBlockOpt = buildOption(CMD_OPTS, null, "run-to-block", true, "Last block number to run");
+    private static final CmdOption threadsOpt = buildOption(CMD_OPTS, null, "threads", true, "Number of threads to run. Default is " + DEFAULT_TXN_THREADS + ". To disable parallel threading set value to 0");
+    private static final CmdOption stopFileOpt = buildOption(CMD_OPTS, null, "stop-file", true, "File to be watched on each new block to stop process. If file is present the process stops and file renamed by adding '1' to the end.");
+    private static final CmdOption loopOpt = buildOption(CMD_OPTS, null, "loop", true, "Repeat update every provided number of seconds");
+
+    static {
+        CMD_OPTS.addAll(DBConnection.CMD_OPTS);
+        CMD_OPTS.addAll(RpcClient.CMD_OPTS);
+        CMD_OPTS.addAll(BJBlockProvider.CMD_OPTS);
+    }
 
     private final File stopFile;
     private final boolean safeRun;
@@ -100,7 +116,8 @@ public class RunFullScan {
     private final DbQueryInput queryInput;
     private final DbQueryInputSpecial queryInputSpecial;
     private final BlockProvider blockProvider;
-    private final int startBlock;
+    private final Optional<Integer> startBlock;
+    private final Optional<Integer> lastBlock;
     private final int blocksBack;
     private final LoadingCache<Integer, Collection<TxInput>> inputsCache;
     private static boolean terminateLoop;
@@ -112,41 +129,37 @@ public class RunFullScan {
     @SuppressWarnings({"SleepWhileInLoop"})
     public static void main(String[] args) throws Exception {
         try {
-            CommandLineParser parser = new DefaultParser();
-            CommandLine cmd = parser.parse(prepOptions(), args);
-            if (cmd.hasOption('h')) {
-                printHelpAndExit();
-            }
-            int loopTime = cmd.hasOption("loop") ? Integer.parseInt(cmd.getOptionValue("loop")) : 0;
+            CmdArguments cmd = CommandLineUtils.buildCmdArguments(args, Main.Command.update.name(), CMD_OPTS);
+            Integer loopTime = cmd.getOption(loopOpt).map(Integer::parseInt).orElse(null);
             do {
                 new RunFullScan(cmd).runProcess();
-                if (loopTime > 0 && !terminateLoop) {
+                if (loopTime != null && loopTime > 0 && !terminateLoop) {
                     log.info("Execution finished. Sleeping for " + loopTime + " sec...");
                     Thread.sleep(loopTime * 1000L);
                 }
-            } while (loopTime > 0 && !terminateLoop);
+            } while (loopTime != null && !terminateLoop);
         } catch (Exception e) {
             log.error(null, e);
         }
     }
 
-    public RunFullScan(CommandLine cmd) throws Exception {
+    public RunFullScan(CmdArguments cmd) throws Exception {
         DbUpdateAddressOne.MAX_INSERT_QUEUE_LENGTH = 5000;
         DbUpdateInput.MAX_INSERT_QUEUE_LENGTH = 5000;
         DbUpdateInputSpecial.MAX_INSERT_QUEUE_LENGTH = 5000;
         DbUpdateOutput.MAX_INSERT_QUEUE_LENGTH = 5000;
         DbUpdateTransaction.MAX_INSERT_QUEUE_LENGTH = 5000;
 
-        safeRun = cmd.hasOption("safe-run") ? "true".equalsIgnoreCase(cmd.getOptionValue("safe-run"))
-                : cmd.hasOption("start-from-block") || cmd.hasOption("blocks-back") ? true
-                : DEFAULT_SAFE_RUN;
-        startBlock = Integer.parseInt(cmd.getOptionValue("start-from-block", "-1"));
-        blocksBack = Integer.parseInt(cmd.getOptionValue("blocks-back", Integer.toString(DEFAULT_BLOCKS_BACK)));
-        updateSpent = "true".equalsIgnoreCase(cmd.getOptionValue("update-spent", String.valueOf(DEFAULT_UPDATE_SPENT)));
-        stopFile = new File(cmd.getOptionValue("stop-file", DEFAULT_STOP_FILE_NAME));
+        safeRun = cmd.getOption(safeRunOpt).map(Boolean::valueOf)
+                .orElse(cmd.hasOption(startFromBlockOpt) || cmd.hasOption(blocksBackOpt) || DEFAULT_SAFE_RUN);
+        startBlock = cmd.getOption(startFromBlockOpt).map(Integer::valueOf);
+        lastBlock = cmd.getOption(runToBlockOpt).map(Integer::valueOf);
+        blocksBack = cmd.getOption(blocksBackOpt).map(Integer::parseInt).orElse(DEFAULT_BLOCKS_BACK);
+        updateSpent = cmd.getOption(updateSpentOpt).map(Boolean::valueOf).orElse(DEFAULT_UPDATE_SPENT);
+        stopFile = new File(cmd.getOption(stopFileOpt).orElse(DEFAULT_STOP_FILE_NAME));
         futureExecutor = Executors.newFixedThreadPool(2, new ThreadFactoryBuilder().setDaemon(true).setNameFormat("BlockReader-%d").build());
-        runParallel = !cmd.hasOption("threads") ? DEFAULT_RUN_PARALLEL : !"0".equals(cmd.getOptionValue("threads"));
-        int nExecTxnThreads = Integer.parseInt(cmd.getOptionValue("threads", Integer.toString(DEFAULT_TXN_THREADS)));
+        int nExecTxnThreads = cmd.getOption(threadsOpt).map(Integer::parseInt).orElse(DEFAULT_TXN_THREADS);
+        runParallel = nExecTxnThreads != 0;
         execTxn = runParallel ? Executors.newFixedThreadPool(nExecTxnThreads,
                 new ThreadFactoryBuilder().setDaemon(true).setNameFormat("ExecTxn-%d").build()) : null;
         DBConnection.applyArguments(cmd);
@@ -157,10 +170,8 @@ public class RunFullScan {
         queryBlock = new DbQueryBlock(dbCon);
         queryInput = new DbQueryInput(dbCon);
         queryInputSpecial = new DbQueryInputSpecial(dbCon);
-        if (cmd.hasOption("full-blocks-path")) {
-            BlockProvider primaryBlockProvider = new BJBlockProvider();
-            BlockProvider backupBlockProvider = new RpcBlockProvider();
-            blockProvider = new BlockProviderWithBackup(primaryBlockProvider, backupBlockProvider);
+        if (cmd.hasOption(BJBlockProvider.fullBlocksPathOpt)) {
+            blockProvider = new BlockProviderWithBackup(new BJBlockProvider(), new RpcBlockProvider());
         } else {
             blockProvider = new RpcBlockProvider();
         }
@@ -185,15 +196,15 @@ public class RunFullScan {
                 DbCachedTransaction cachedTxn = new DbCachedTransaction(dbCon);
                 DbCachedAddress cachedAddress = new DbCachedAddress(dbCon);
                 DbCachedOutput cachedOutput = new DbCachedOutput(dbCon)) {
-            int numBlocks = new RpcClient().getBlocksNumber();
-            int lastBlockHeight = startBlock >= 0 ? startBlock : queryBlock.findLastHeight() - blocksBack;//230_000;//queryBlock.findLastHeight() - BLOCKS_BACK;
-            log.info("lastBlockHeight={}, numBlocks={}", lastBlockHeight, numBlocks);
+            int firstBlockToProcess = startBlock.orElseGet(() -> getFirstUnprocessedBlockFromDB() - blocksBack);
+            int lastBlockToProcess = lastBlock.orElseGet(() -> new RpcClient().getBlocksNumber());
+            log.info("firstBlockToProcess={}, lastBlockToProcess={}", firstBlockToProcess, lastBlockToProcess);
             Future<FutureBlock> futureBlock = null, futureBlock2 = null;
             if (runParallel) {
-                futureBlock = getFutureBlock(lastBlockHeight + 1, null, cachedTxn, cachedOutput, cachedAddress);
-                futureBlock2 = getFutureBlock(lastBlockHeight + 2, futureBlock, cachedTxn, cachedOutput, cachedAddress);
+                futureBlock = getFutureBlock(firstBlockToProcess, null, cachedTxn, cachedOutput, cachedAddress);
+                futureBlock2 = getFutureBlock(firstBlockToProcess + 1, futureBlock, cachedTxn, cachedOutput, cachedAddress);
             }
-            for (int blockHeight = lastBlockHeight + 1; blockHeight <= numBlocks; blockHeight++) {
+            for (int blockHeight = firstBlockToProcess; blockHeight <= lastBlockToProcess; blockHeight++) {
                 if (stopFile.exists()) {
                     terminateLoop = true;
                     log.info("Exiting - stop file found: " + stopFile.getAbsolutePath());
@@ -256,6 +267,11 @@ public class RunFullScan {
             }
             log.info("Execution FINISHED");
         }
+    }
+
+    @SneakyThrows(SQLException.class)
+    private int getFirstUnprocessedBlockFromDB() {
+        return queryBlock.findLastHeight() + 1;
     }
 
     @Getter
@@ -642,29 +658,6 @@ public class RunFullScan {
             }
         }
         return null;
-    }
-
-    private static void printHelpAndExit() {
-        System.out.println("Available options:");
-        HelpFormatter formatter = new HelpFormatter();
-        formatter.printHelp("java <jar> " + Main.Command.update + " [options]", prepOptions());
-        System.exit(1);
-    }
-
-    private static Options prepOptions() {
-        Options options = new Options();
-        options.addOption("h", "help", false, "Print help");
-        options.addOption(null, "safe-run", true, "Run in safe mode - check DB for existing records before adding new");
-        options.addOption(null, "update-spent", true, "Update spent flag on outpus. Default is true. For better performance of massive update you might want to disable it and run separate process after this update is done.");
-        options.addOption(null, "blocks-back", true, "Check last number of blocks. Process will run in safe mode (option --safe-run=true)");
-        options.addOption(null, "start-from-block", true, "Start checking from block hight provided. Process will run in safe mode (option --safe-run=true)");
-        options.addOption(null, "threads", true, "Number of threads to run. Default is " + DEFAULT_TXN_THREADS + ". To disable parallel threading set value to 0");
-        options.addOption(null, "stop-file", true, "File to be watched on each new block to stop process. If file is present the process stops and file renamed by adding '1' to the end.");
-        options.addOption(null, "loop", true, "Repeat update every provided number of seconds");
-        DBConnection.addOptions(options);
-        RpcClient.addOptions(options);
-        BJBlockProvider.addOptions(options);
-        return options;
     }
 
     @Getter

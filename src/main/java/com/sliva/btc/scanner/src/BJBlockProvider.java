@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,8 +17,12 @@ package com.sliva.btc.scanner.src;
 
 import com.sliva.btc.scanner.rpc.RpcClient;
 import com.sliva.btc.scanner.util.BJBlockHandler;
+import com.sliva.btc.scanner.util.CommandLineUtils;
+import static com.sliva.btc.scanner.util.CommandLineUtils.buildOption;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collection;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.Options;
 
@@ -27,6 +31,9 @@ import org.apache.commons.cli.Options;
  * @author Sliva Co
  */
 public class BJBlockProvider implements BlockProvider<BJBlock> {
+
+    public static final Collection<CommandLineUtils.CmdOption> CMD_OPTS = new ArrayList<>();
+    public static final CommandLineUtils.CmdOption fullBlocksPathOpt = buildOption(CMD_OPTS, null, "full-blocks-path", true, "Path to pre-loaded full blocks. Reading from pre-loaded full blocks is much faster than calling Bitcoin Core RPC. Helpful for massive update");
 
     private final RpcClient client = new RpcClient();
 
@@ -48,12 +55,18 @@ public class BJBlockProvider implements BlockProvider<BJBlock> {
         }
     }
 
-    public static void applyArguments(CommandLine cmd) {
-        BJBlockHandler.FULL_BLOCKS_PATH = new File(cmd.getOptionValue("full-blocks-path", BJBlockHandler.FULL_BLOCKS_PATH.getAbsolutePath()));
+    public static void applyArguments(CommandLineUtils.CmdArguments cmdArguments) {
+        cmdArguments.getOption(fullBlocksPathOpt).map(File::new).ifPresent(f -> BJBlockHandler.FULL_BLOCKS_PATH = f);
     }
 
+    @Deprecated
+    public static void applyArguments(CommandLine cmd) {
+        BJBlockHandler.FULL_BLOCKS_PATH = new File(cmd.getOptionValue(fullBlocksPathOpt.getLongOpt(), BJBlockHandler.FULL_BLOCKS_PATH.getAbsolutePath()));
+    }
+
+    @Deprecated
     public static Options addOptions(Options options) {
-        options.addOption(null, "full-blocks-path", true, "Path to pre-loaded full blocks. Reading from pre-loaded full blocks is much faster than calling Bitcoin Core RPC. Helpful for massive update");
+        CMD_OPTS.forEach(o -> options.addOption(o.getOpt(), o.getLongOpt(), o.isHasArg(), o.getDescription()));
         return options;
     }
 }

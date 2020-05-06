@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,7 +27,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.DecoderException;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.bitcoinj.script.Script;
 
 /**

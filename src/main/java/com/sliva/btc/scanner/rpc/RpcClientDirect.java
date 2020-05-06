@@ -16,7 +16,12 @@
 package com.sliva.btc.scanner.rpc;
 
 import com.google.gson.Gson;
+import static com.sliva.btc.scanner.rpc.RpcClient.rpcConfigOpt;
+import static com.sliva.btc.scanner.rpc.RpcClient.rpcPasswordOpt;
+import static com.sliva.btc.scanner.rpc.RpcClient.rpcUrlOpt;
+import static com.sliva.btc.scanner.rpc.RpcClient.rpcUserOpt;
 import static com.sliva.btc.scanner.rpc.RpcMethod.*;
+import com.sliva.btc.scanner.util.CommandLineUtils;
 import com.sliva.btc.scanner.util.Utils;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -98,6 +103,14 @@ public class RpcClientDirect {
         return response.get("result");
     }
 
+    public static void applyArguments(CommandLineUtils.CmdArguments cmdArguments) {
+        Properties prop = Utils.loadProperties(cmdArguments.getOption(rpcConfigOpt).orElse(null));
+        RPC_URL = cmdArguments.getOption(rpcUrlOpt).orElseGet(() -> prop.getProperty(rpcUrlOpt.getLongOpt(), RPC_URL));
+        RPC_USER = cmdArguments.getOption(rpcUserOpt).orElseGet(() -> prop.getProperty(rpcUserOpt.getLongOpt(), RPC_USER));
+        RPC_PASSWORD = cmdArguments.getOption(rpcPasswordOpt).orElseGet(() -> prop.getProperty(rpcPasswordOpt.getLongOpt(), RPC_PASSWORD));
+    }
+
+    @Deprecated
     public static void applyArguments(CommandLine cmd) {
         Properties prop = Utils.loadProperties(cmd.getOptionValue("rpc-config"));
         RPC_URL = cmd.getOptionValue("rpc-url", prop.getProperty("rpc-url", RPC_URL));
@@ -106,6 +119,7 @@ public class RpcClientDirect {
         log.trace("applyArguments(): url={}, user={}, password=*****", RPC_URL, RPC_USER);
     }
 
+    @Deprecated
     public static Options addOptions(Options options) {
         options.addOption("r", "rpc-url", true, "RPC URL to running bitcoin core. Default is '" + RpcClient.RPC_URL + "'.");
         options.addOption("x", "rpc-user", true, "RPC user name.");
