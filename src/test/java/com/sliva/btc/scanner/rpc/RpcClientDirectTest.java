@@ -16,6 +16,7 @@
 package com.sliva.btc.scanner.rpc;
 
 import com.sliva.btc.scanner.db.model.SighashType;
+import static com.sliva.btc.scanner.rpc.RpcMethod.getblock;
 import com.sliva.btc.scanner.util.BJBlockHandler;
 import java.util.ArrayList;
 import java.util.List;
@@ -28,13 +29,12 @@ import org.bitcoinj.core.Transaction;
 import org.bitcoinj.core.TransactionInput;
 import org.bitcoinj.core.TransactionWitness;
 import org.bitcoinj.script.Script;
-import org.bitcoinj.script.ScriptChunk;
 import org.junit.After;
 import org.junit.AfterClass;
+import static org.junit.Assert.*;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import static org.junit.Assert.*;
 import org.spongycastle.util.encoders.Hex;
 
 /**
@@ -106,7 +106,7 @@ public class RpcClientDirectTest {
     @Test
     public void testQuery() throws Exception {
         System.out.println("query");
-        String method = "getblock";
+        RpcMethod method = getblock;
         Object[] params = new Object[]{"0000000000002917ed80650c6174aac8dfc46f5fe36480aaef682ff6cd83c3ca", 1};
         Object result = instance.query(method, params);
         System.out.println("result=" + result);

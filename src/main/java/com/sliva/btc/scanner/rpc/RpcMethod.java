@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 Sliva Co.
+ * Copyright 2020 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,16 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.sliva.btc.scanner.src;
+package com.sliva.btc.scanner.rpc;
 
 /**
  *
- * @author Sliva Co
- * @param <B>
+ * @author whost
  */
-public interface BlockProvider<B extends SrcBlock> {
-
-    B getBlock(int height);
-
-    B getBlock(String hash);
+public enum RpcMethod {
+    getblock,
+    getblockcount,
+    getblockhash
 }

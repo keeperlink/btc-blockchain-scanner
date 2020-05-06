@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -55,7 +55,7 @@ public class RpcOutput implements SrcOutput<RpcAddress> {
 
     @Override
     public long getValue() {
-        return txout != null ? txout.getValue().getValue() : Math.round(out.value() * 1e8);
+        return txout != null ? txout.getValue().getValue() : out.value().movePointRight(8).longValueExact();
     }
 
 }

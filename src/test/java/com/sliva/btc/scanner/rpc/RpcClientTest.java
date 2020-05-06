@@ -16,7 +16,6 @@
 package com.sliva.btc.scanner.rpc;
 
 import com.sliva.btc.scanner.util.BitcoinPaymentURI;
-import java.text.DecimalFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -28,11 +27,11 @@ import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.junit.After;
 import org.junit.AfterClass;
+import static org.junit.Assert.*;
 import org.junit.Before;
 import org.junit.BeforeClass;
-import org.junit.Test;
-import static org.junit.Assert.*;
 import org.junit.Ignore;
+import org.junit.Test;
 import wf.bitcoin.javabitcoindrpcclient.BitcoinJSONRPCClient;
 import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient;
 import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient.BlockChainInfo;
@@ -195,10 +194,10 @@ public class RpcClientTest {
 //        String newAddress = client.getNewAddress();
 //        System.out.println("newAddress=" + newAddress);
 //        System.out.println("addresses=" + client.getAddressesByAccount(""));
-        for (int i = 1; i < 11; i++) {
-            BitcoindRpcClient.SmartFeeResult fee = client.getEstimateSmartFee(i);
-            System.out.println("blocks=" + fee.blocks() + ", est.fee=" + new DecimalFormat("#0.00000000").format(fee.feeRate()));
-        }
+//        for (int i = 1; i < 11; i++) {
+//            BitcoindRpcClient.SmartFeeResult fee = client.getEstimateSmartFee(i);
+//            System.out.println("blocks=" + fee.blocks() + ", est.fee=" + new DecimalFormat("#0.00000000").format(fee.feeRate()));
+//        }
     }
 
     @Test

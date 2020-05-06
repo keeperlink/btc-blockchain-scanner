@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -59,7 +59,7 @@ public class RpcInput implements SrcInput {
     @Override
     @SuppressWarnings("null")
     public short getInPos() {
-        return txin != null ? (short) txin.getOutpoint().getIndex() : (short) in.vout();
+        return txin != null ? (short) txin.getOutpoint().getIndex() : in.vout().shortValue();
     }
 
     @Override

@@ -16,8 +16,10 @@
 package com.sliva.btc.scanner.rpc;
 
 import com.google.gson.Gson;
+import static com.sliva.btc.scanner.rpc.RpcMethod.*;
 import com.sliva.btc.scanner.util.Utils;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Base64;
@@ -33,7 +35,6 @@ import org.apache.commons.cli.Options;
 import org.apache.commons.httpclient.HttpClient;
 import org.apache.commons.httpclient.methods.PostMethod;
 import org.apache.commons.httpclient.methods.StringRequestEntity;
-import org.apache.commons.io.IOUtils;
 
 /**
  *
@@ -49,6 +50,7 @@ public class RpcClientDirect {
     private static final ThreadLocal<HttpClient> clientPool = ThreadLocal.withInitial(() -> new HttpClient());
     private final AtomicLong reqCounter = new AtomicLong();
     private final String auth;
+    private final Gson GSON = new Gson();
 
     public static RpcClientDirect getInstance() {
         if (instance == null) {
@@ -63,20 +65,20 @@ public class RpcClientDirect {
     }
 
     public String getBlockHash(int height) throws IOException {
-        return query("getblockhash", height).toString();
+        return query(getblockhash, height).toString();
     }
 
     public int getBlockHeight(String hash) throws IOException {
-        return Double.valueOf(((Map) query("getblock", hash, 1)).get("height").toString()).intValue();
+        return Double.valueOf(((Map) query(getblock, hash, 1)).get("height").toString()).intValue();
     }
 
     public String getRawBlock(String hash) throws IOException {
-        return query("getblock", hash, 0).toString();
+        return query(getblock, hash, 0).toString();
     }
 
-    public Object query(String method, Object... params) throws IOException {
+    public Object query(RpcMethod method, Object... params) throws IOException {
         final String reqId = Long.toString(reqCounter.incrementAndGet());
-        String req = new Gson().toJson(new RpcRequest(method, params, reqId));
+        String req = GSON.toJson(new RpcRequest(method, params, reqId));
         log.trace("query(method:{}): Request: {}", method, req);
         PostMethod httpPost = new PostMethod(RPC_URL);
         httpPost.addRequestHeader("Authorization", "Basic " + auth);
@@ -85,13 +87,13 @@ public class RpcClientDirect {
         if (respCode != 200) {
             throw new IOException("Response code not OK: " + respCode + ". method=" + method + ", params=" + Arrays.deepToString(params) + ", response: " + httpPost.getResponseBodyAsString());
         }
-        Map response = new Gson().fromJson(IOUtils.toString(httpPost.getResponseBodyAsStream(), StandardCharsets.UTF_8), Map.class);
+        Map<String, Object> response = GSON.fromJson(new InputStreamReader(httpPost.getResponseBodyAsStream(), StandardCharsets.UTF_8), Map.class);
         log.trace("query(method:{}): Request: {}", method, response);
         if (!reqId.equals(response.get("id"))) {
             throw new IOException("Wrong response ID (expected: " + String.valueOf(reqId) + ", response: " + response.get("id") + ")");
         }
         if (response.get("error") != null) {
-            throw new IOException(new Gson().toJson(response.get("error")));
+            throw new IOException(GSON.toJson(response.get("error")));
         }
         return response.get("result");
     }
@@ -116,7 +118,7 @@ public class RpcClientDirect {
     @AllArgsConstructor
     private static class RpcRequest {
 
-        private final String method;
+        private final RpcMethod method;
         private final Object[] params;
         private final String id;
     }

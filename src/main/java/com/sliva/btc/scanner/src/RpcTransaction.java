@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,6 +16,7 @@
 package com.sliva.btc.scanner.src;
 
 import com.sliva.btc.scanner.rpc.RpcClient;
+import java.math.BigDecimal;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -83,8 +84,8 @@ public class RpcTransaction implements SrcTransaction<RpcInput, RpcOutput> {
             //Bitcoin Core RPC does not return first transaction - generate it here
             return Collections.singletonList(new RpcOutput(new RawTransaction.Out() {
                 @Override
-                public double value() {
-                    return 50;
+                public BigDecimal value() {
+                    return new BigDecimal("50");
                 }
 
                 @Override

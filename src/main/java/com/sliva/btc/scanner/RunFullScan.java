@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,13 +22,13 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.sliva.btc.scanner.db.DBConnection;
 import com.sliva.btc.scanner.db.DbAddBlock;
 import com.sliva.btc.scanner.db.DbCachedAddress;
-import com.sliva.btc.scanner.db.DbUpdateInput;
 import com.sliva.btc.scanner.db.DbCachedOutput;
 import com.sliva.btc.scanner.db.DbCachedTransaction;
 import com.sliva.btc.scanner.db.DbQueryBlock;
 import com.sliva.btc.scanner.db.DbQueryInput;
 import com.sliva.btc.scanner.db.DbQueryInputSpecial;
 import com.sliva.btc.scanner.db.DbUpdateAddressOne;
+import com.sliva.btc.scanner.db.DbUpdateInput;
 import com.sliva.btc.scanner.db.DbUpdateInputSpecial;
 import com.sliva.btc.scanner.db.DbUpdateOutput;
 import com.sliva.btc.scanner.db.DbUpdateTransaction;
@@ -111,18 +111,23 @@ public class RunFullScan {
      */
     @SuppressWarnings({"SleepWhileInLoop"})
     public static void main(String[] args) throws Exception {
-        CommandLineParser parser = new DefaultParser();
-        CommandLine cmd = parser.parse(prepOptions(), args);
-        if (cmd.hasOption('h')) {
-            printHelpAndExit();
-        }
-        int loopTime = cmd.hasOption("loop") ? Integer.parseInt(cmd.getOptionValue("loop")) : 0;
-        do {
-            new RunFullScan(cmd).runProcess();
-            if (loopTime > 0 && !terminateLoop) {
-                Thread.sleep(loopTime * 1000L);
+        try {
+            CommandLineParser parser = new DefaultParser();
+            CommandLine cmd = parser.parse(prepOptions(), args);
+            if (cmd.hasOption('h')) {
+                printHelpAndExit();
             }
-        } while (loopTime > 0 && !terminateLoop);
+            int loopTime = cmd.hasOption("loop") ? Integer.parseInt(cmd.getOptionValue("loop")) : 0;
+            do {
+                new RunFullScan(cmd).runProcess();
+                if (loopTime > 0 && !terminateLoop) {
+                    log.info("Execution finished. Sleeping for " + loopTime + " sec...");
+                    Thread.sleep(loopTime * 1000L);
+                }
+            } while (loopTime > 0 && !terminateLoop);
+        } catch (Exception e) {
+            log.error(null, e);
+        }
     }
 
     public RunFullScan(CommandLine cmd) throws Exception {
@@ -132,8 +137,9 @@ public class RunFullScan {
         DbUpdateOutput.MAX_INSERT_QUEUE_LENGTH = 5000;
         DbUpdateTransaction.MAX_INSERT_QUEUE_LENGTH = 5000;
 
-        safeRun = cmd.hasOption("start-from-block") || cmd.hasOption("blocks-back") ? true
-                : (!cmd.hasOption("safe-run") ? DEFAULT_SAFE_RUN : "true".equalsIgnoreCase(cmd.getOptionValue("safe-run")));
+        safeRun = cmd.hasOption("safe-run") ? "true".equalsIgnoreCase(cmd.getOptionValue("safe-run"))
+                : cmd.hasOption("start-from-block") || cmd.hasOption("blocks-back") ? true
+                : DEFAULT_SAFE_RUN;
         startBlock = Integer.parseInt(cmd.getOptionValue("start-from-block", "-1"));
         blocksBack = Integer.parseInt(cmd.getOptionValue("blocks-back", Integer.toString(DEFAULT_BLOCKS_BACK)));
         updateSpent = "true".equalsIgnoreCase(cmd.getOptionValue("update-spent", String.valueOf(DEFAULT_UPDATE_SPENT)));
@@ -159,7 +165,7 @@ public class RunFullScan {
             blockProvider = new RpcBlockProvider();
         }
         inputsCache = !safeRun ? null : CacheBuilder.newBuilder()
-                .concurrencyLevel(nExecTxnThreads)
+                .concurrencyLevel(Math.max(1, nExecTxnThreads))
                 .maximumSize(20_000)
                 .recordStats()
                 .build(
@@ -222,7 +228,7 @@ public class RunFullScan {
 
                 String blockHash = block.getHash();
                 log.info("Block(" + blockHeight + ").hash: " + blockHash + ", nTxns=" + block.getTransactions().count());
-                if (!safeRun || queryBlock.findBlockByHash(blockHash) == null) {
+                if (queryBlock.findBlockByHash(blockHash) == null) {
                     addBlock.add(BtcBlock.builder()
                             .height(blockHeight)
                             .hash(blockHash)
@@ -648,10 +654,10 @@ public class RunFullScan {
     private static Options prepOptions() {
         Options options = new Options();
         options.addOption("h", "help", false, "Print help");
-        options.addOption(null, "safe-run", false, "Run in safe mode - check DB for existing records before adding new");
+        options.addOption(null, "safe-run", true, "Run in safe mode - check DB for existing records before adding new");
         options.addOption(null, "update-spent", true, "Update spent flag on outpus. Default is true. For better performance of massive update you might want to disable it and run separate process after this update is done.");
-        options.addOption(null, "blocks-back", true, "Check last number of blocks. Process will run in safe mode (option -s)");
-        options.addOption(null, "start-from-block", true, "Start checking from block hight provided. Process will run in safe mode (option -s)");
+        options.addOption(null, "blocks-back", true, "Check last number of blocks. Process will run in safe mode (option --safe-run=true)");
+        options.addOption(null, "start-from-block", true, "Start checking from block hight provided. Process will run in safe mode (option --safe-run=true)");
         options.addOption(null, "threads", true, "Number of threads to run. Default is " + DEFAULT_TXN_THREADS + ". To disable parallel threading set value to 0");
         options.addOption(null, "stop-file", true, "File to be watched on each new block to stop process. If file is present the process stops and file renamed by adding '1' to the end.");
         options.addOption(null, "loop", true, "Repeat update every provided number of seconds");

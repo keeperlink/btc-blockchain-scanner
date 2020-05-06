@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,6 +31,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.StringUtils;
 
@@ -43,7 +44,7 @@ public abstract class DbUpdate implements AutoCloseable {
 
     private static final int MYSQL_BULK_INSERT_BUFFER_SIZE = 256 * 1024 * 1024;
     private static final int UPDATER_THREADS = 2;
-    private static final ExecuteDbUpdate thread = new ExecuteDbUpdate();
+    private static ExecuteDbUpdate thread;
     private static final Collection<DbUpdate> dbUpdateInstances = new ArrayList<>();
     private static final Set<DbUpdate> executingInstances = new HashSet<>();
     private static final ExecutorService executor = new ThreadPoolExecutor(UPDATER_THREADS, UPDATER_THREADS,
@@ -55,11 +56,7 @@ public abstract class DbUpdate implements AutoCloseable {
     private boolean isClosed = false;
     protected final Object execSync = new Object();
 
-    static {
-        thread.start();
-    }
-
-    @SuppressWarnings("LeakingThisInConstructor")
+    @SuppressWarnings({"LeakingThisInConstructor", "CallToThreadStartDuringObjectConstruction"})
     public DbUpdate(DBConnection conn) {
         this.conn = conn;
         try {
@@ -69,6 +66,12 @@ public abstract class DbUpdate implements AutoCloseable {
         }
         synchronized (dbUpdateInstances) {
             dbUpdateInstances.add(this);
+        }
+        synchronized (ExecuteDbUpdate.class) {
+            if (thread == null) {
+                thread = new ExecuteDbUpdate();
+                thread.start();
+            }
         }
     }
 
@@ -115,11 +118,8 @@ public abstract class DbUpdate implements AutoCloseable {
 
     private static void updateRuntimeMap(String tableName, long records, long runtime) {
         synchronized (execStats) {
-            ExecStats s = execStats.get(tableName);
-            if (s == null) {
-                execStats.put(tableName, s = new ExecStats());
-            }
-            s.addExecution(records, runtime);
+            execStats.computeIfAbsent(tableName, ExecStats::new)
+                    .addExecution(records, runtime);
         }
     }
 
@@ -153,7 +153,7 @@ public abstract class DbUpdate implements AutoCloseable {
         @Override
         @SuppressWarnings({"SleepWhileInLoop"})
         public void run() {
-            Utils.sleep(1000);
+            Utils.sleep(2000);
             log.info(getName() + ": STARTED");
             startTimeMsec = System.currentTimeMillis();
             try {
@@ -192,6 +192,7 @@ public abstract class DbUpdate implements AutoCloseable {
                                     }
                                     break;
                                 } catch (RejectedExecutionException e) {
+//                                    log.error("Err: " + e.getClass() + ": " + e.getMessage());
                                     Utils.sleep(500);
                                 }
                             }
@@ -209,6 +210,7 @@ public abstract class DbUpdate implements AutoCloseable {
             } finally {
                 executor.shutdown();
                 log.info(getName() + ": FINISHED");
+                thread = null;
             }
         }
     }
@@ -246,9 +248,11 @@ public abstract class DbUpdate implements AutoCloseable {
         }
     }
 
+    @RequiredArgsConstructor
     @Getter
     private static class ExecStats {
 
+        private final String tableName;
         private long executions;
         private long totalRecords;
         private long totalRuntime;

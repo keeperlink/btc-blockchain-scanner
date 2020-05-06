@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,6 +16,7 @@
 package com.sliva.btc.scanner.rpc;
 
 import com.sliva.btc.scanner.util.MapWrapper;
+import java.math.BigDecimal;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -90,8 +91,8 @@ public class BlockMapWrapper extends MapWrapper implements Block {
     }
 
     @Override
-    public double difficulty() {
-        return mapDouble("difficulty");
+    public BigDecimal difficulty() {
+        return mapBigDecimal("difficulty");
     }
 
     @Override
