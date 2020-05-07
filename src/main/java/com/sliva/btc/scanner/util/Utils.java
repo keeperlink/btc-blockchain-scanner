@@ -45,9 +45,9 @@ public final class Utils {
     private static final int DUPE2_BLOCK = 91812;
 
     public static String fixDupeTxid(String txid, int blockHeight) {
-        if (txid.equalsIgnoreCase(DUPE1) && blockHeight == DUPE1_BLOCK) {
+        if (blockHeight == DUPE1_BLOCK && txid.equalsIgnoreCase(DUPE1)) {
             return DUPE1_REPLACE;
-        } else if (txid.equalsIgnoreCase(DUPE2) && blockHeight == DUPE2_BLOCK) {
+        } else if (blockHeight == DUPE2_BLOCK && txid.equalsIgnoreCase(DUPE2)) {
             return DUPE2_REPLACE;
         }
         return txid;

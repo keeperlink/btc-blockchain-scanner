@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +15,7 @@
  */
 package com.sliva.btc.scanner.db;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.src.SrcAddress;
 import com.sliva.btc.scanner.src.SrcAddressType;
@@ -51,6 +52,7 @@ public class DbCachedAddress implements AutoCloseable {
 
     @SuppressWarnings("DoubleCheckedLocking")
     public int getOrAdd(SrcAddress address, boolean updateCache) throws SQLException {
+        checkArgument(address != null, "Argument 'address' is null");
         return getOne(BtcAddress.builder()
                 .type(address.getType()).build())
                 .getOrAdd(address.getHash(), updateCache);

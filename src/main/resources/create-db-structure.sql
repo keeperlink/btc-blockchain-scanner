@@ -51,6 +51,15 @@ CREATE TABLE IF NOT EXISTS `input` (
   UNIQUE KEY `ix_in_txn_pos` (`in_transaction_id`,`in_pos`)
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+CREATE TABLE IF NOT EXISTS `input_special` (
+  `transaction_id` int(10) unsigned NOT NULL,
+  `pos` smallint(5) unsigned NOT NULL,
+  `sighash_type` bit(8) NOT NULL,
+  `segwit` bit(1) NOT NULL,
+  `multisig` bit(1) NOT NULL,
+  PRIMARY KEY (`transaction_id`,`pos`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 CREATE TABLE IF NOT EXISTS `output` (
   `transaction_id` int(10) unsigned NOT NULL,
   `pos` smallint(5) unsigned NOT NULL,
