@@ -15,25 +15,35 @@
  */
 package com.sliva.btc.scanner.db;
 
+import static com.google.common.base.Preconditions.checkArgument;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.sliva.btc.scanner.db.BatchExecutor.FillStatement;
+import com.sliva.btc.scanner.util.BatchUtils;
 import com.sliva.btc.scanner.util.Utils;
+import static com.sliva.btc.scanner.util.Utils.synchronize;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import lombok.AllArgsConstructor;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.time.StopWatch;
 
 /**
  *
@@ -42,23 +52,24 @@ import org.apache.commons.lang3.StringUtils;
 @Slf4j
 public abstract class DbUpdate implements AutoCloseable {
 
+    private static final Duration PRINT_STATS_PERIOD = Duration.ofSeconds(30);
     private static final int MYSQL_BULK_INSERT_BUFFER_SIZE = 256 * 1024 * 1024;
     private static final int UPDATER_THREADS = 2;
-    private static ExecuteDbUpdate thread;
+    private static ExecuteDbUpdate executeDbUpdateThread;
     private static final Collection<DbUpdate> dbUpdateInstances = new ArrayList<>();
     private static final Set<DbUpdate> executingInstances = new HashSet<>();
     private static final ExecutorService executor = new ThreadPoolExecutor(UPDATER_THREADS, UPDATER_THREADS,
             0L, TimeUnit.MILLISECONDS,
-            new LinkedBlockingQueue<Runnable>(1));
+            new LinkedBlockingQueue<Runnable>(1),
+            new ThreadFactoryBuilder().setDaemon(true).setNameFormat("DbUpdate-%d").build());
     private static final Map<String, ExecStats> execStats = new HashMap<>();
-    private static long startTimeMsec;
-    private final DBConnection conn;
-    private boolean isClosed = false;
+    private static final StopWatch lastPrintedTime = StopWatch.createStarted();
+    @Getter
+    private boolean isActive = true;
     protected final Object execSync = new Object();
 
     @SuppressWarnings({"LeakingThisInConstructor", "CallToThreadStartDuringObjectConstruction"})
     public DbUpdate(DBConnection conn) {
-        this.conn = conn;
         try {
             conn.getConnection().createStatement().execute("SET bulk_insert_buffer_size=" + MYSQL_BULK_INSERT_BUFFER_SIZE);
         } catch (SQLException e) {
@@ -68,36 +79,23 @@ public abstract class DbUpdate implements AutoCloseable {
             dbUpdateInstances.add(this);
         }
         synchronized (ExecuteDbUpdate.class) {
-            if (thread == null) {
-                thread = new ExecuteDbUpdate();
-                thread.start();
+            if (executeDbUpdateThread == null) {
+                executeDbUpdateThread = new ExecuteDbUpdate();
+                executeDbUpdateThread.start();
             }
         }
     }
 
-    protected DBConnection getConn() {
-        return conn;
-    }
-
-    public boolean isIsClosed() {
-        return isClosed;
-    }
-
-    public void setIsClosed(boolean isClosed) {
-        this.isClosed = isClosed;
-    }
-
     public void flushCache() {
         log.trace("flushCache() Called");
-        DBUpdateCall c = new DBUpdateCall(this);
-        while (c.call() != 0) {
+        while (executeSync() != 0) {
         }
     }
 
     @Override
     public void close() {
         log.debug("{}.close()", this.getTableName());
-        setIsClosed(true);
+        isActive = false;
         flushCache();
         log.trace("{}.close() FINISHED", this.getTableName());
     }
@@ -106,9 +104,11 @@ public abstract class DbUpdate implements AutoCloseable {
 
     public abstract int getCacheFillPercent();
 
-    public abstract boolean needExecuteInserts();
+    public abstract boolean isExecuteNeeded();
 
     public abstract int executeInserts();
+
+    public abstract int executeUpdates();
 
     protected static void waitFullQueue(Collection queue, int maxQueueLength) {
         while (queue.size() >= maxQueueLength) {
@@ -116,17 +116,89 @@ public abstract class DbUpdate implements AutoCloseable {
         }
     }
 
-    private static void updateRuntimeMap(String tableName, long records, long runtime) {
+    private static void updateRuntimeMap(String tableName, long records, long runtimeNanos) {
         synchronized (execStats) {
             execStats.computeIfAbsent(tableName, ExecStats::new)
-                    .addExecution(records, runtime);
+                    .addExecution(records, runtimeNanos);
         }
     }
 
-    private static void printStats() {
-        if (System.currentTimeMillis() - lastPrintedTime > 30 * 1000) {
-            lastPrintedTime = System.currentTimeMillis();
-            long runtimeInSec = Math.max(TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis() - startTimeMsec), 1);
+    /**
+     * Execute batch of statements.
+     *
+     * @param <T> Element type
+     * @param syncObject Object to synchronize on when pulling data from source
+     * Collection
+     * @param source Source Collection
+     * @param ps DB Statement to execute in batch
+     * @param batchMaxSize Batch maximum size
+     * @param fillCallback callback to fill each DB statement in batch
+     * @param postExecutor post-execution process, can be null
+     * @return number of records executed
+     */
+    public <T> int executeBatch(Object syncObject, Collection<T> source, ThreadLocal<PreparedStatement> ps, int batchMaxSize, FillStatement<T> fillCallback, Consumer<Collection<T>> postExecutor) {
+        checkArgument(syncObject != null, "Argument 'syncObject' is null");
+        checkArgument(source != null, "Argument 'source' is null");
+        checkArgument(batchMaxSize > 0, "Argument 'batchMaxSize' (%s) must be a positive number", batchMaxSize);
+        checkArgument(ps != null, "Argument 'ps' is null");
+        checkArgument(fillCallback != null, "Argument 'fillCallback' is null");
+        Collection<T> batchToRun = synchronize(syncObject, () -> BatchUtils.pullData(source, batchMaxSize));
+        if (batchToRun != null) {
+            synchronized (execSync) {
+                BatchExecutor.executeBatch(batchToRun, ps.get(), fillCallback);
+                if (postExecutor != null) {
+                    postExecutor.accept(batchToRun);
+                }
+            }
+        }
+        return batchToRun == null ? 0 : batchToRun.size();
+    }
+
+    private int executeSync() {
+        int nRecs = 0;
+        try {
+            log.trace("{}.executeSync(): STARTED", getTableName());
+            long s = System.nanoTime();
+            try {
+                nRecs = executeInserts();
+                nRecs += executeUpdates();
+            } catch (Exception e) {
+                log.error(e.getMessage(), e);
+            } finally {
+                long runtimeNanos = System.nanoTime() - s;
+                updateRuntimeMap(getTableName(), nRecs, runtimeNanos);
+                if (nRecs > 0) {
+                    log.debug("{}.executeSync(): insert/update queries executed: {} runtime {} ms.", getTableName(), nRecs, TimeUnit.NANOSECONDS.toMillis(runtimeNanos));
+                }
+            }
+        } finally {
+            synchronized (executingInstances) {
+                executingInstances.remove(this);
+            }
+        }
+        return nRecs;
+    }
+
+    private void executeAsync() {
+        for (;;) {
+            try {
+                log.trace("{}.executeAsync(): Submitting ", getTableName());
+                synchronized (executingInstances) {
+                    executor.submit(this::executeSync);
+                    executingInstances.add(this);
+                }
+                log.trace("{}.executeAsync(): Submitted ", getTableName());
+                break;
+            } catch (RejectedExecutionException e) {
+                log.trace("Err: {}: {}", e.getClass(), e.getMessage());
+                Utils.sleep(100);
+            }
+        }
+    }
+
+    public static void printStats() {
+        if (log.isDebugEnabled()) {
+            long runtimeInSec = Math.max(TimeUnit.NANOSECONDS.toSeconds(executeDbUpdateThread.startTime.getNanoTime()), 1);
             synchronized (execStats) {
                 execStats.entrySet().forEach((e) -> {
                     ExecStats s = e.getValue();
@@ -134,17 +206,18 @@ public abstract class DbUpdate implements AutoCloseable {
                             StringUtils.rightPad(e.getKey(), 16),
                             s.getExecutions(),
                             s.getTotalRecords(),
-                            s.getTotalRecords() / runtimeInSec,
-                            TimeUnit.NANOSECONDS.toSeconds(s.getTotalRuntime()),
-                            TimeUnit.NANOSECONDS.toSeconds(s.getTotalRuntime() * 100 / (runtimeInSec * UPDATER_THREADS))
+                            runtimeInSec == 0 ? null : s.getTotalRecords() / runtimeInSec,
+                            TimeUnit.NANOSECONDS.toSeconds(s.getTotalRuntimeNanos()),
+                            runtimeInSec == 0 ? null : TimeUnit.NANOSECONDS.toSeconds(s.getTotalRuntimeNanos() * 100 / (runtimeInSec * UPDATER_THREADS))
                     );
                 });
             }
         }
     }
-    private static long lastPrintedTime = System.currentTimeMillis();
 
     private static final class ExecuteDbUpdate extends Thread {
+
+        private StopWatch startTime;
 
         public ExecuteDbUpdate() {
             super("ExecuteDbUpdate");
@@ -153,52 +226,29 @@ public abstract class DbUpdate implements AutoCloseable {
         @Override
         @SuppressWarnings({"SleepWhileInLoop"})
         public void run() {
-            Utils.sleep(2000);
+            Utils.sleep(500);
             log.info(getName() + ": STARTED");
-            startTimeMsec = System.currentTimeMillis();
+            startTime = StopWatch.createStarted();
             try {
                 for (;;) {
                     boolean executed = false;
                     try {
-                        boolean allClosed = true;
-                        int maxFillPercent = 0;
-                        DbUpdate dbUpdateMaxFilled = null;
+                        AtomicInteger liveUpdatersCount = new AtomicInteger();
+                        Optional<DbUpdate> dbUpdateMaxFilled;
                         synchronized (dbUpdateInstances) {
-                            for (DbUpdate dbUpdate : dbUpdateInstances) {
-                                if (!dbUpdate.isClosed) {
-                                    allClosed = false;
-                                    if (!executingInstances.contains(dbUpdate) && dbUpdate.needExecuteInserts()) {
-                                        int fillPercent = dbUpdate.getCacheFillPercent();
-                                        if (fillPercent > maxFillPercent) {
-                                            maxFillPercent = fillPercent;
-                                            dbUpdateMaxFilled = dbUpdate;
-                                        }
-                                    }
-                                }
-                            }
+                            dbUpdateMaxFilled = dbUpdateInstances.stream()
+                                    .filter(DbUpdate::isActive)
+                                    .peek(d -> liveUpdatersCount.incrementAndGet())
+                                    .filter(d -> !executingInstances.contains(d) && d.isExecuteNeeded())
+                                    .max(Comparator.comparingInt(DbUpdate::getCacheFillPercent));
                         }
-                        if (allClosed && dbUpdateMaxFilled == null && executingInstances.isEmpty()) {
+                        if (liveUpdatersCount.get() == 0 && !dbUpdateMaxFilled.isPresent() && executingInstances.isEmpty()) {
                             log.info("ExecuteDbUpdate: All updaters are closed - exiting this thread");
                             break;
                         }
-                        if (dbUpdateMaxFilled != null) {
-                            for (;;) {
-                                try {
-                                    synchronized (executingInstances) {
-                                        log.trace("{}.Submitting ", dbUpdateMaxFilled.getClass().getSimpleName());
-                                        executor.submit(new DBUpdateCall(dbUpdateMaxFilled));
-                                        log.trace("{}.Submitted ", dbUpdateMaxFilled.getClass().getSimpleName());
-                                        executingInstances.add(dbUpdateMaxFilled);
-                                    }
-                                    break;
-                                } catch (RejectedExecutionException e) {
-//                                    log.error("Err: " + e.getClass() + ": " + e.getMessage());
-                                    Utils.sleep(500);
-                                }
-                            }
-                            executed = true;
-                        }
-                        printStats();
+                        dbUpdateMaxFilled.ifPresent(DbUpdate::executeAsync);
+                        executed = dbUpdateMaxFilled.isPresent();
+                        printStatsCheckPeriod();
                     } catch (Exception e) {
                         log.error(e.getMessage(), e);
                     } finally {
@@ -210,41 +260,16 @@ public abstract class DbUpdate implements AutoCloseable {
             } finally {
                 executor.shutdown();
                 log.info(getName() + ": FINISHED");
-                thread = null;
+                executeDbUpdateThread = null;
             }
         }
-    }
 
-    @AllArgsConstructor
-    @Slf4j
-    private static class DBUpdateCall implements Callable<Integer> {
-
-        private final DbUpdate dbUpdate;
-
-        @Override
-        @SuppressWarnings("UseSpecificCatch")
-        public Integer call() {
-            int nRecs = 0;
-            try {
-                log.trace("{}.executeInserts(): STARTED", dbUpdate.getTableName());
-                long s = System.nanoTime();
-                try {
-                    nRecs = dbUpdate.executeInserts();
-                } catch (Exception e) {
-                    log.error(e.getMessage(), e);
-                } finally {
-                    long runtime = System.nanoTime() - s;
-                    updateRuntimeMap(dbUpdate.getTableName(), nRecs, runtime);
-                    if (nRecs > 0) {
-                        log.debug("{}.executeInserts(): Records inserted: {} runtime {} ms.", dbUpdate.getTableName(), nRecs, TimeUnit.NANOSECONDS.toMillis(runtime));
-                    }
-                }
-            } finally {
-                synchronized (executingInstances) {
-                    executingInstances.remove(dbUpdate);
-                }
+        private static void printStatsCheckPeriod() {
+            if (lastPrintedTime.getNanoTime() > PRINT_STATS_PERIOD.toNanos()) {
+                lastPrintedTime.reset();
+                lastPrintedTime.start();
+                printStats();
             }
-            return nRecs;
         }
     }
 
@@ -255,12 +280,12 @@ public abstract class DbUpdate implements AutoCloseable {
         private final String tableName;
         private long executions;
         private long totalRecords;
-        private long totalRuntime;
+        private long totalRuntimeNanos;
 
-        void addExecution(long records, long runtime) {
+        void addExecution(long records, long runtimeNanos) {
             executions++;
             totalRecords += records;
-            totalRuntime += runtime;
+            totalRuntimeNanos += runtimeNanos;
         }
     }
 }

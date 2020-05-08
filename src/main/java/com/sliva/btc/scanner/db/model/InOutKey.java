@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,19 +20,21 @@ import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.ToString;
+import lombok.experimental.SuperBuilder;
 
 /**
  *
  * @author Sliva Co
  */
 @Getter
+@SuperBuilder(toBuilder = true)
 @AllArgsConstructor
 @EqualsAndHashCode
 @ToString
 public class InOutKey implements Comparable<InOutKey> {
 
     private final int transactionId;
-    private final int pos;
+    private final short pos;
 
     @Override
     public int compareTo(InOutKey o) {

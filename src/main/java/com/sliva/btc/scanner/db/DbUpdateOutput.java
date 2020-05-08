@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,7 +22,6 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -78,12 +77,15 @@ public class DbUpdateOutput extends DbUpdate {
 
     @Override
     public int getCacheFillPercent() {
-        return cacheData == null ? 0 : cacheData.addQueue.size() * 100 / MAX_INSERT_QUEUE_LENGTH;
+        return cacheData == null ? 0 : Math.max(cacheData.addQueue.size() * 100 / MAX_INSERT_QUEUE_LENGTH,
+                Math.max(cacheData.queueUpdateAddress.size() * 100 / MAX_UPDATE_QUEUE_LENGTH,
+                        Math.max(cacheData.queueUpdateAmount.size() * 100 / MAX_UPDATE_QUEUE_LENGTH,
+                                cacheData.queueUpdateSpent.size() * 100 / MAX_UPDATE_QUEUE_LENGTH)));
     }
 
     @Override
-    public boolean needExecuteInserts() {
-        return cacheData == null ? false : cacheData.addQueue.size() >= MIN_BATCH_SIZE;
+    public boolean isExecuteNeeded() {
+        return cacheData != null && (cacheData.addQueue.size() >= MIN_BATCH_SIZE || cacheData.queueUpdateAddress.size() >= MIN_BATCH_SIZE || cacheData.queueUpdateAmount.size() >= MIN_BATCH_SIZE || cacheData.queueUpdateSpent.size() >= MIN_BATCH_SIZE);
     }
 
     public void add(TxOutput txOutput) {
@@ -142,7 +144,7 @@ public class DbUpdateOutput extends DbUpdate {
             }
         }
         if (cacheData.queueUpdateSpent.size() >= MAX_UPDATE_QUEUE_LENGTH) {
-            executeUpdateSpent();
+            _executeUpdateSpent();
         }
     }
 
@@ -170,7 +172,7 @@ public class DbUpdateOutput extends DbUpdate {
             }
         }
         if (cacheData.queueUpdateAddress.size() >= MAX_UPDATE_QUEUE_LENGTH) {
-            executeUpdateAddress();
+            _executeUpdateAddress();
         }
     }
 
@@ -197,114 +199,55 @@ public class DbUpdateOutput extends DbUpdate {
                 cacheData.queueUpdateAmount.add(TxOutput.builder().transactionId(transactionId).pos(pos).amount(amount).build());
             }
         }
-        if (cacheData.queueUpdateAddress.size() >= MAX_UPDATE_QUEUE_LENGTH) {
-            executeUpdateAddress();
+        if (cacheData.queueUpdateAmount.size() >= MAX_UPDATE_QUEUE_LENGTH) {
+            _executeUpdateAmount();
         }
     }
 
     @Override
     public int executeInserts() {
-        Collection<TxOutput> temp = null;
-        synchronized (cacheData) {
-            if (!cacheData.addQueue.isEmpty()) {
-                temp = new ArrayList<>();
-                Iterator<TxOutput> it = cacheData.addQueue.iterator();
-                for (int i = 0; i < MAX_BATCH_SIZE && it.hasNext(); i++) {
-                    temp.add(it.next());
-                    it.remove();
-                }
+        return executeBatch(cacheData, cacheData.addQueue, psAdd, MAX_BATCH_SIZE, (t, ps) -> {
+            ps.setInt(1, t.getTransactionId());
+            ps.setInt(2, t.getPos());
+            ps.setInt(3, t.getAddressId());
+            ps.setLong(4, t.getAmount());
+            ps.setInt(5, t.getStatus());
+        }, executed -> {
+            synchronized (cacheData) {
+                executed.stream().peek(cacheData.queueMap::remove).map(InOutKey::getTransactionId).forEach(cacheData.queueMapTx::remove);
             }
-        }
-        if (temp != null) {
-            synchronized (execSync) {
-                BatchExecutor.executeBatch(temp, psAdd.get(), (TxOutput t, PreparedStatement ps) -> {
-                    ps.setInt(1, t.getTransactionId());
-                    ps.setInt(2, t.getPos());
-                    ps.setInt(3, t.getAddressId());
-                    ps.setLong(4, t.getAmount());
-                    ps.setInt(5, t.getStatus());
-                });
-                synchronized (cacheData) {
-                    for (TxOutput t : temp) {
-                        cacheData.queueMap.remove(new InOutKey(t.getTransactionId(), t.getPos()));
-                        cacheData.queueMapTx.remove(t.getTransactionId());
-                    }
-                }
-            }
-        }
-        return temp == null ? 0 : temp.size();
-    }
-
-    public void executeUpdateSpent() {
-        Collection<TxOutput> temp = null;
-        synchronized (cacheData) {
-            if (!cacheData.queueUpdateSpent.isEmpty()) {
-                temp = new ArrayList<>(cacheData.queueUpdateSpent);
-                cacheData.queueUpdateSpent.clear();
-            }
-        }
-        if (temp != null) {
-            synchronized (execSync) {
-                long s = System.currentTimeMillis();
-                BatchExecutor.executeBatch(temp, psUpdateSpent.get(), (TxOutput t, PreparedStatement ps) -> {
-                    ps.setInt(1, t.getStatus());
-                    ps.setInt(2, t.getTransactionId());
-                    ps.setInt(3, t.getPos());
-                });
-                log.debug("executeUpdateSpent({}): runtime={}", temp.size(), (System.currentTimeMillis() - s) + " ms.");
-            }
-        }
-    }
-
-    public void executeUpdateAddress() {
-        Collection<TxOutput> temp = null;
-        synchronized (cacheData) {
-            if (!cacheData.queueUpdateAddress.isEmpty()) {
-                temp = new ArrayList<>(cacheData.queueUpdateAddress);
-                cacheData.queueUpdateAddress.clear();
-            }
-        }
-        if (temp != null) {
-            synchronized (execSync) {
-                long s = System.currentTimeMillis();
-                BatchExecutor.executeBatch(temp, psUpdateAddress.get(), (TxOutput t, PreparedStatement ps) -> {
-                    ps.setInt(1, t.getAddressId());
-                    ps.setInt(2, t.getTransactionId());
-                    ps.setInt(3, t.getPos());
-                });
-                log.debug("executeUpdateAddress({}): runtime={}", temp.size(), (System.currentTimeMillis() - s) + " ms.");
-            }
-        }
-    }
-
-    public void executeUpdateAmount() {
-        Collection<TxOutput> temp = null;
-        synchronized (cacheData) {
-            if (!cacheData.queueUpdateAmount.isEmpty()) {
-                temp = new ArrayList<>(cacheData.queueUpdateAmount);
-                cacheData.queueUpdateAmount.clear();
-            }
-        }
-        if (temp != null) {
-            synchronized (execSync) {
-                long s = System.currentTimeMillis();
-                BatchExecutor.executeBatch(temp, psUpdateAmount.get(), (TxOutput t, PreparedStatement ps) -> {
-                    ps.setLong(1, t.getAmount());
-                    ps.setInt(2, t.getTransactionId());
-                    ps.setInt(3, t.getPos());
-                });
-                log.debug("executeUpdateAmount({}): runtime={}", temp.size(), (System.currentTimeMillis() - s) + " ms.");
-            }
-        }
+        });
     }
 
     @Override
-    public void flushCache() {
-        log.trace("flushCache() Called");
-        super.flushCache();
-        executeUpdateSpent();
-        executeUpdateAddress();
-        executeUpdateAmount();
+    public int executeUpdates() {
+        return _executeUpdateSpent()
+                + _executeUpdateAddress()
+                + _executeUpdateAmount();
+    }
+
+    private int _executeUpdateSpent() {
+        return executeBatch(cacheData, cacheData.queueUpdateSpent, psUpdateSpent, MAX_BATCH_SIZE, (t, ps) -> {
+            ps.setInt(1, t.getStatus());
+            ps.setInt(2, t.getTransactionId());
+            ps.setInt(3, t.getPos());
+        }, null);
+    }
+
+    private int _executeUpdateAddress() {
+        return executeBatch(cacheData, cacheData.queueUpdateAddress, psUpdateAddress, MAX_BATCH_SIZE, (t, ps) -> {
+            ps.setInt(1, t.getAddressId());
+            ps.setInt(2, t.getTransactionId());
+            ps.setInt(3, t.getPos());
+        }, null);
+    }
+
+    private int _executeUpdateAmount() {
+        return executeBatch(cacheData, cacheData.queueUpdateAmount, psUpdateAmount, MAX_BATCH_SIZE, (t, ps) -> {
+            ps.setLong(1, t.getAmount());
+            ps.setInt(2, t.getTransactionId());
+            ps.setInt(3, t.getPos());
+        }, null);
     }
 
     @Getter

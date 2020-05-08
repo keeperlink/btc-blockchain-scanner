@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,10 +22,8 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.spongycastle.util.encoders.Hex;
@@ -42,8 +40,9 @@ public class DbUpdateAddressOne extends DbUpdate {
     public static int MAX_BATCH_SIZE = 40000;
     public static int MAX_INSERT_QUEUE_LENGTH = 1000000;
     private static int MAX_UPDATE_QUEUE_LENGTH = 10000;
-    private static final String SQL_ADD = "INSERT INTO address_table_name(address_id,address,wallet_id)VALUES(?,?,?)";
-    private static final String SQL_UPDATE_WALLET = "UPDATE address_table_name SET wallet_id=? WHERE address_id=?";
+    private static final String TABLE_NAME_TO_FILL = "__address_table_name__";
+    private static final String SQL_ADD = "INSERT INTO __address_table_name__(address_id,address,wallet_id)VALUES(?,?,?)";
+    private static final String SQL_UPDATE_WALLET = "UPDATE __address_table_name__ SET wallet_id=? WHERE address_id=?";
     private final SrcAddressType addressType;
     private final ThreadLocal<PreparedStatement> psAdd;
     private final ThreadLocal<PreparedStatement> psUpdateWallet;
@@ -72,12 +71,12 @@ public class DbUpdateAddressOne extends DbUpdate {
 
     @Override
     public int getCacheFillPercent() {
-        return cacheData == null ? 0 : cacheData.addQueue.size() * 100 / MAX_INSERT_QUEUE_LENGTH;
+        return cacheData == null ? 0 : Math.max(cacheData.addQueue.size() * 100 / MAX_INSERT_QUEUE_LENGTH, cacheData.updateWalletQueue.size() * 100 / MAX_UPDATE_QUEUE_LENGTH);
     }
 
     @Override
-    public boolean needExecuteInserts() {
-        return cacheData == null ? false : cacheData.addQueue.size() >= MIN_BATCH_SIZE;
+    public boolean isExecuteNeeded() {
+        return cacheData != null && (cacheData.addQueue.size() >= MIN_BATCH_SIZE || cacheData.updateWalletQueue.size() >= MIN_BATCH_SIZE);
     }
 
     public void add(BtcAddress addr) throws SQLException {
@@ -116,77 +115,39 @@ public class DbUpdateAddressOne extends DbUpdate {
             }
         }
         if (cacheData.updateWalletQueue.size() >= MAX_UPDATE_QUEUE_LENGTH) {
-            executeUpdateWallet();
+            _executeUpdateWallet();
         }
     }
 
     @Override
     public int executeInserts() {
-        Collection<BtcAddress> temp = null;
-        synchronized (cacheData) {
-            if (!cacheData.addQueue.isEmpty()) {
-                temp = new ArrayList<>();
-                Iterator<BtcAddress> it = cacheData.addQueue.iterator();
-                for (int i = 0; i < MAX_BATCH_SIZE && it.hasNext(); i++) {
-                    temp.add(it.next());
-                    it.remove();
-                }
+        return executeBatch(cacheData, cacheData.addQueue, psAdd, MAX_BATCH_SIZE, (t, ps) -> {
+            ps.setInt(1, t.getAddressId());
+            ps.setBytes(2, t.getAddress());
+            ps.setInt(3, t.getWalletId());
+        }, executed -> {
+            synchronized (cacheData) {
+                executed.stream()
+                        .peek(t -> cacheData.addMap.remove(Hex.toHexString(t.getAddress())))
+                        .map(BtcAddress::getAddressId).forEach(cacheData.addMapId::remove);
             }
-        }
-        if (temp != null) {
-            synchronized (execSync) {
-                BatchExecutor.executeBatch(temp, psAdd.get(), (t, ps) -> {
-                    ps.setInt(1, t.getAddressId());
-                    ps.setBytes(2, t.getAddress());
-                    ps.setInt(3, t.getWalletId());
-                });
-                synchronized (cacheData) {
-                    for (BtcAddress t : temp) {
-                        cacheData.addMap.remove(Hex.toHexString(t.getAddress()));
-                        cacheData.addMapId.remove(t.getAddressId());
-                    }
-                }
-            }
-        }
-        return temp == null ? 0 : temp.size();
-    }
-
-    public void executeUpdateWallet() {
-        Collection<BtcAddress> temp = null;
-        synchronized (cacheData) {
-            if (!cacheData.updateWalletQueue.isEmpty()) {
-                temp = new ArrayList<>(cacheData.updateWalletQueue);
-                cacheData.updateWalletQueue.clear();
-            }
-        }
-        if (temp != null) {
-            synchronized (execSync) {
-                long s = System.nanoTime();
-                BatchExecutor.executeBatch(temp, psUpdateWallet.get(), (BtcAddress t, PreparedStatement ps) -> {
-                    ps.setInt(1, t.getWalletId());
-                    ps.setInt(2, t.getAddressId());
-                });
-                long runtime = System.nanoTime() - s;
-                log.debug("{}.executeUpdateWallet(): Updated {} records. runtime {} ms.", getTableName(), temp.size(), TimeUnit.NANOSECONDS.toMillis(runtime));
-            }
-        }
+        });
     }
 
     @Override
-    public void flushCache() {
-        log.trace("{}.flushCache() Called", getTableName());
-        super.flushCache();
-        executeUpdateWallet();
+    public int executeUpdates() {
+        return _executeUpdateWallet();
     }
 
-    @Override
-    public void close() {
-        super.close();
-        executeUpdateWallet();
+    private int _executeUpdateWallet() {
+        return executeBatch(cacheData, cacheData.updateWalletQueue, psUpdateWallet, MAX_BATCH_SIZE, (t, ps) -> {
+            ps.setInt(1, t.getWalletId());
+            ps.setInt(2, t.getAddressId());
+        }, null);
     }
 
     private String fixTableName(String sql) {
-        return sql.replaceAll("address_table_name", getTableName());
+        return sql.replaceAll(TABLE_NAME_TO_FILL, getTableName());
     }
 
     @Getter

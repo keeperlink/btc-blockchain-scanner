@@ -23,6 +23,7 @@ import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.text.DecimalFormat;
 import java.util.Properties;
+import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.DecoderException;
 import org.apache.commons.codec.binary.Hex;
@@ -130,6 +131,12 @@ public final class Utils {
             }
         }
         return prop;
+    }
+
+    public static <T> T synchronize(Object syncObject, Supplier<T> supplier) {
+        synchronized (syncObject) {
+            return supplier.get();
+        }
     }
 
     public static class NumberFile {

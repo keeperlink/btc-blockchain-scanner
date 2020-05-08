@@ -27,6 +27,7 @@ import com.sliva.btc.scanner.db.DbCachedTransaction;
 import com.sliva.btc.scanner.db.DbQueryBlock;
 import com.sliva.btc.scanner.db.DbQueryInput;
 import com.sliva.btc.scanner.db.DbQueryInputSpecial;
+import com.sliva.btc.scanner.db.DbUpdate;
 import com.sliva.btc.scanner.db.DbUpdateAddressOne;
 import com.sliva.btc.scanner.db.DbUpdateInput;
 import com.sliva.btc.scanner.db.DbUpdateInputSpecial;
@@ -241,6 +242,7 @@ public class RunFullScan {
             throw e;
         } finally {
             log.info("Execution FINISHED");
+            DbUpdate.printStats();
         }
     }
 
@@ -417,7 +419,7 @@ public class RunFullScan {
                             if (intx == null) {
                                 log.info("Transaction referenced from input does not exists: " + txInput.getInTransactionId());
                                 updateInput.update(inputToAdd);
-                                updateInput.executeUpdate();
+                                updateInput.executeUpdates();
                             } else {
                                 try {
                                     TxnProcessOutput out = processTransaction(txInput.getInTransactionId(), updateInput, updateInputSpecial, cachedTxn, cachedAddress, cachedOutput);
@@ -426,7 +428,7 @@ public class RunFullScan {
                                     log.debug(e.getMessage(), e);
                                 }
                                 updateInput.update(inputToAdd);
-                                updateInput.executeUpdate();
+                                updateInput.executeUpdates();
                             }
                         }
                     }

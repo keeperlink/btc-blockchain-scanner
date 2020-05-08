@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +15,7 @@
  */
 package com.sliva.btc.scanner.db;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -22,8 +23,10 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.Collection;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.time.StopWatch;
 
 /**
  *
@@ -34,8 +37,11 @@ import lombok.extern.slf4j.Slf4j;
 public final class BatchExecutor {
 
     public static <T> void executeBatch(Collection<T> list, PreparedStatement ps, FillStatement<T> fillCallback) {
+        StopWatch sw = StopWatch.createStarted();
+        checkArgument(list != null, "Argument 'list' is null");
+        checkArgument(ps != null, "Argument 'ps' is null");
+        checkArgument(fillCallback != null, "Argument 'fillCallback' is null");
         log.trace("BatchExecutor.executeBatch(): list.size={}", list.size());
-        long s = System.currentTimeMillis();
         try {
             for (T a : list) {
                 fillCallback.fill(a, ps);
@@ -45,7 +51,7 @@ public final class BatchExecutor {
         } catch (Exception e) {
             log.error(e.getMessage(), e);
             clearBatch(ps);
-            list.forEach((a) -> {
+            list.forEach(a -> {
                 try {
                     fillCallback.fill(a, ps);
                     ps.execute();
@@ -56,7 +62,7 @@ public final class BatchExecutor {
             });
         } finally {
             clearPsData(ps);
-            log.debug("BatchExecutor.executeBatch({}): runtime={}", list.size(), (System.currentTimeMillis() - s) + " ms.");
+            log.debug("BatchExecutor.executeBatch({}): runtime={}", list.size(), TimeUnit.NANOSECONDS.toMillis(sw.getNanoTime()) + " ms.");
         }
     }
 
@@ -69,9 +75,7 @@ public final class BatchExecutor {
         log.debug("executeBatchFromFile: temp file: {}", file.getAbsolutePath());
         long s = System.currentTimeMillis();
         try (PrintStream out = new PrintStream(file)) {
-            for (T a : list) {
-                fillCallback.accept(a, out);
-            }
+            list.forEach(a -> fillCallback.accept(a, out));
             out.close();
             conn.getConnection().prepareCall("LOAD DATA LOCAL INFILE '" + filename + "' INTO TABLE " + tableName).execute();
         } finally {

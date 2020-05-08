@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,9 +19,7 @@ import com.sliva.btc.scanner.db.model.BtcBlock;
 import com.sliva.btc.scanner.util.Utils;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Iterator;
 import java.util.LinkedHashSet;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -66,8 +64,8 @@ public class DbAddBlock extends DbUpdate {
     }
 
     @Override
-    public boolean needExecuteInserts() {
-        return cacheData == null ? false : cacheData.addQueue.size() >= MIN_BATCH_SIZE;
+    public boolean isExecuteNeeded() {
+        return cacheData != null && cacheData.addQueue.size() >= MIN_BATCH_SIZE;
     }
 
     public void add(BtcBlock btcBlock) throws SQLException {
@@ -80,27 +78,16 @@ public class DbAddBlock extends DbUpdate {
 
     @Override
     public int executeInserts() {
-        Collection<BtcBlock> temp = null;
-        synchronized (cacheData) {
-            if (!cacheData.addQueue.isEmpty()) {
-                temp = new ArrayList<>();
-                Iterator<BtcBlock> it = cacheData.addQueue.iterator();
-                for (int i = 0; i < MAX_BATCH_SIZE && it.hasNext(); i++) {
-                    temp.add(it.next());
-                    it.remove();
-                }
-            }
-        }
-        if (temp != null) {
-            synchronized (execSync) {
-                BatchExecutor.executeBatch(temp, psAdd.get(), (BtcBlock t, PreparedStatement ps) -> {
-                    ps.setInt(1, t.getHeight());
-                    ps.setBytes(2, Utils.id2bin(t.getHash()));
-                    ps.setInt(3, t.getTxnCount());
-                });
-            }
-        }
-        return temp == null ? 0 : temp.size();
+        return executeBatch(cacheData, cacheData.addQueue, psAdd, MAX_BATCH_SIZE, (t, ps) -> {
+            ps.setInt(1, t.getHeight());
+            ps.setBytes(2, Utils.id2bin(t.getHash()));
+            ps.setInt(3, t.getTxnCount());
+        }, null);
+    }
+
+    @Override
+    public int executeUpdates() {
+        return 0;
     }
 
     @Getter

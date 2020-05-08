@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,11 +20,9 @@ import com.sliva.btc.scanner.db.model.BtcTransaction;
 import com.sliva.btc.scanner.util.Utils;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
@@ -74,12 +72,12 @@ public class DbUpdateTransaction extends DbUpdate {
 
     @Override
     public int getCacheFillPercent() {
-        return cacheData.addQueue.size() * 100 / MAX_INSERT_QUEUE_LENGTH;
+        return cacheData == null ? 0 : Math.max(cacheData.addQueue.size() * 100 / MAX_INSERT_QUEUE_LENGTH, cacheData.updateInOutQueue.size() * 100 / MAX_UPDATE_QUEUE_LENGTH);
     }
 
     @Override
-    public boolean needExecuteInserts() {
-        return cacheData.addQueue.size() >= MIN_BATCH_SIZE;
+    public boolean isExecuteNeeded() {
+        return cacheData != null && (cacheData.addQueue.size() >= MIN_BATCH_SIZE || cacheData.updateInOutQueue.size() >= MIN_BATCH_SIZE);
     }
 
     public void add(BtcTransaction tx) throws SQLException {
@@ -122,97 +120,33 @@ public class DbUpdateTransaction extends DbUpdate {
     @SuppressWarnings({"UseSpecificCatch", "CallToPrintStackTrace"})
     @Override
     public int executeInserts() {
-        Collection<BtcTransaction> temp = null;
-        synchronized (cacheData) {
-            if (!cacheData.addQueue.isEmpty()) {
-                temp = new ArrayList<>();
-                Iterator<BtcTransaction> it = cacheData.addQueue.iterator();
-                for (int i = 0; i < MAX_BATCH_SIZE && it.hasNext(); i++) {
-                    temp.add(it.next());
-                    it.remove();
-                }
+        return executeBatch(cacheData, cacheData.addQueue, psAdd, MAX_BATCH_SIZE, (t, ps) -> {
+            ps.setInt(1, t.getTransactionId());
+            ps.setBytes(2, Utils.id2bin(t.getTxid()));
+            ps.setInt(3, t.getBlockHeight());
+            ps.setInt(4, t.getNInputs());
+            ps.setInt(5, t.getNOutputs());
+        }, executed -> {
+            synchronized (cacheData) {
+                executed.stream().peek(t -> cacheData.addMap.remove(t.getTxid())).map(BtcTransaction::getTransactionId).forEach(cacheData.addMapId::remove);
             }
-        }
-        if (temp != null) {
-            synchronized (execSync) {
-//                try {
-//                    BatchExecutor.executeBatchFromFile(temp, "transaction(transaction_id,@hexID,block_height,nInputs,nOutputs) SET txid=UNHEX(@hexID)", getConn(), (t, out) -> {
-//                        out.println(t.getTransactionId()
-//                                + "\t" + t.getTxid()
-//                                + "\t" + t.getBlockHeight()
-//                                + "\t" + t.getNInputs()
-//                                + "\t" + t.getNOutputs());
-//                    });
-//                } catch (Exception e) {
-//                    log.error(e.getMessage(), e);
-                BatchExecutor.executeBatch(temp, psAdd.get(), (BtcTransaction t, PreparedStatement ps) -> {
-                    ps.setInt(1, t.getTransactionId());
-                    ps.setBytes(2, Utils.id2bin(t.getTxid()));
-                    ps.setInt(3, t.getBlockHeight());
-                    ps.setInt(4, t.getNInputs());
-                    ps.setInt(5, t.getNOutputs());
-                });
-//                }
-                synchronized (cacheData) {
-                    for (BtcTransaction t : temp) {
-                        cacheData.addMap.remove(t.getTxid());
-                        cacheData.addMapId.remove(t.getTransactionId());
-                    }
-                }
-            }
-        }
-        return temp == null ? 0 : temp.size();
-    }
-
-    @SuppressWarnings({"UseSpecificCatch", "CallToPrintStackTrace"})
-    public void executeUpdateInOuts() {
-        Collection<BtcTransaction> temp = null;
-        synchronized (cacheData) {
-            if (!cacheData.updateInOutQueue.isEmpty()) {
-                temp = new ArrayList<>(cacheData.updateInOutQueue);
-                cacheData.updateInOutQueue.clear();
-            }
-        }
-        if (temp != null) {
-            synchronized (execSync) {
-                BatchExecutor.executeBatch(cacheData.updateInOutQueue, psUpdateInOut.get(), (BtcTransaction t, PreparedStatement ps) -> {
-                    ps.setInt(1, t.getNInputs());
-                    ps.setInt(2, t.getNOutputs());
-                    ps.setInt(3, t.getTransactionId());
-                });
-            }
-        }
+        });
     }
 
     @Override
-    public void close() {
-        super.close();
-        executeUpdateInOuts();
+    public int executeUpdates() {
+        return _executeUpdateInOuts();
     }
 
-//    private class ExecuteAddThread extends Thread {
-//
-//        public ExecuteAddThread() {
-//            super("DbUpdateTransaction.ExecuteAddThread");
-//        }
-//
-//        @Override
-//        @SuppressWarnings({"SleepWhileInLoop", "CallToPrintStackTrace"})
-//        public void run() {
-//            log.info(getName() + ": STARTED");
-//            while (!isClosed) {
-//                try {
-//                    if (cacheData.addQueue.size() >= MIN_BATCH_SIZE) {
-//                        executeInserts();
-//                    }
-//                } catch (Exception e) {
-//                    log.debug(e.getMessage(), e);
-//                } finally {
-//                    Utils.sleep(10);
-//                }
-//            }
-//        }
-//    }
+    @SuppressWarnings({"UseSpecificCatch", "CallToPrintStackTrace"})
+    private int _executeUpdateInOuts() {
+        return executeBatch(cacheData, cacheData.updateInOutQueue, psUpdateInOut, MAX_BATCH_SIZE, (t, ps) -> {
+            ps.setInt(1, t.getNInputs());
+            ps.setInt(2, t.getNOutputs());
+            ps.setInt(3, t.getTransactionId());
+        }, null);
+    }
+
     @Getter
     public static class CacheData {
 

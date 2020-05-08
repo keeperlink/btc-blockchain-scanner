@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,7 +23,6 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -73,12 +72,12 @@ public class DbUpdateInputSpecial extends DbUpdate {
 
     @Override
     public int getCacheFillPercent() {
-        return cacheData == null ? 0 : cacheData.addQueue.size() * 100 / MAX_INSERT_QUEUE_LENGTH;
+        return cacheData == null ? 0 : Math.max(cacheData.addQueue.size() * 100 / MAX_INSERT_QUEUE_LENGTH, cacheData.queueUpdate.size() * 100 / MAX_UPDATE_QUEUE_LENGTH);
     }
 
     @Override
-    public boolean needExecuteInserts() {
-        return cacheData == null ? false : cacheData.addQueue.size() >= MIN_BATCH_SIZE;
+    public boolean isExecuteNeeded() {
+        return cacheData != null && (cacheData.addQueue.size() >= MIN_BATCH_SIZE || cacheData.queueUpdate.size() >= MIN_BATCH_SIZE);
     }
 
     public void add(TxInputSpecial txInput) throws SQLException {
@@ -116,15 +115,14 @@ public class DbUpdateInputSpecial extends DbUpdate {
     public void update(TxInputSpecial txInput) throws SQLException {
         log.trace("update(txInput:{})", txInput);
         synchronized (cacheData) {
-            InOutKey key = new InOutKey(txInput.getTransactionId(), txInput.getPos());
-            TxInputSpecial txInput2 = cacheData.queueMap.get(key);
+            TxInputSpecial txInput2 = cacheData.queueMap.get(txInput);
             boolean updatedInQueue = false;
             if (txInput2 != null) {
                 if (cacheData.addQueue.remove(txInput2)) {
                     cacheData.addQueue.add(txInput);
                     updatedInQueue = true;
                 }
-                cacheData.queueMap.put(key, txInput);
+                cacheData.queueMap.put(txInput, txInput);
                 //cacheData.queueMapTx.put(key, txInput);
             }
             if (!updatedInQueue) {
@@ -132,70 +130,35 @@ public class DbUpdateInputSpecial extends DbUpdate {
             }
         }
         if (cacheData.queueUpdate.size() >= MAX_UPDATE_QUEUE_LENGTH) {
-            executeUpdate();
+            executeUpdates();
         }
     }
 
     @SuppressWarnings({"UseSpecificCatch"})
     @Override
     public int executeInserts() {
-        Collection<TxInputSpecial> temp = null;
-        synchronized (cacheData) {
-            if (!cacheData.addQueue.isEmpty()) {
-                temp = new ArrayList<>();
-                Iterator<TxInputSpecial> it = cacheData.addQueue.iterator();
-                for (int i = 0; i < MAX_BATCH_SIZE && it.hasNext(); i++) {
-                    temp.add(it.next());
-                    it.remove();
-                }
-                //cacheData.addQueue.clear();
+        return executeBatch(cacheData, cacheData.addQueue, psAdd, MAX_BATCH_SIZE, (t, ps) -> {
+            ps.setInt(1, t.getTransactionId());
+            ps.setInt(2, t.getPos());
+            ps.setInt(3, Byte.toUnsignedInt(t.getSighashType()));
+            ps.setBoolean(4, t.isSegwit());
+            ps.setBoolean(5, t.isMultisig());
+        }, executed -> {
+            synchronized (cacheData) {
+                executed.stream().peek(cacheData.queueMap::remove).map(InOutKey::getTransactionId).forEach(cacheData.queueMapTx::remove);
             }
-        }
-        if (temp != null) {
-            synchronized (execSync) {
-                BatchExecutor.executeBatch(temp, psAdd.get(), (TxInputSpecial t, PreparedStatement ps) -> {
-                    ps.setInt(1, t.getTransactionId());
-                    ps.setInt(2, t.getPos());
-                    ps.setInt(3, Byte.toUnsignedInt(t.getSighashType()));
-                    ps.setBoolean(4, t.isSegwit());
-                    ps.setBoolean(5, t.isMultisig());
-                });
-                synchronized (cacheData) {
-                    for (TxInputSpecial t : temp) {
-                        cacheData.queueMap.remove(new InOutKey(t.getTransactionId(), t.getPos()));
-                        cacheData.queueMapTx.remove(t.getTransactionId());
-                    }
-                }
-            }
-        }
-        return temp == null ? 0 : temp.size();
-    }
-
-    public void executeUpdate() {
-        Collection<TxInputSpecial> temp = null;
-        synchronized (cacheData) {
-            if (!cacheData.queueUpdate.isEmpty()) {
-                temp = new ArrayList<>(cacheData.queueUpdate);
-                cacheData.queueUpdate.clear();
-            }
-        }
-        if (temp != null) {
-            synchronized (execSync) {
-                BatchExecutor.executeBatch(temp, psUpdate.get(), (TxInputSpecial t, PreparedStatement ps) -> {
-                    ps.setInt(1, Byte.toUnsignedInt(t.getSighashType()));
-                    ps.setBoolean(2, t.isSegwit());
-                    ps.setBoolean(3, t.isMultisig());
-                    ps.setInt(4, t.getTransactionId());
-                    ps.setInt(5, t.getPos());
-                });
-            }
-        }
+        });
     }
 
     @Override
-    public void close() {
-        executeUpdate();
-        super.close();
+    public int executeUpdates() {
+        return executeBatch(cacheData, cacheData.queueUpdate, psUpdate, MAX_BATCH_SIZE, (t, ps) -> {
+            ps.setInt(1, Byte.toUnsignedInt(t.getSighashType()));
+            ps.setBoolean(2, t.isSegwit());
+            ps.setBoolean(3, t.isMultisig());
+            ps.setInt(4, t.getTransactionId());
+            ps.setInt(5, t.getPos());
+        }, null);
     }
 
     @Getter
