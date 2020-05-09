@@ -19,15 +19,16 @@ import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import com.sliva.btc.scanner.db.DBPreparedStatement;
 import com.sliva.btc.scanner.db.DbUpdateOutput;
 import com.sliva.btc.scanner.db.model.OutputStatus;
+import com.sliva.btc.scanner.util.CommandLineUtils;
+import com.sliva.btc.scanner.util.CommandLineUtils.CmdArguments;
+import static com.sliva.btc.scanner.util.CommandLineUtils.buildOption;
 import com.sliva.btc.scanner.util.Utils;
-import java.sql.ResultSet;
+import com.sliva.btc.scanner.util.Utils.NumberFile;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.concurrent.atomic.AtomicInteger;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.cli.CommandLine;
-import org.apache.commons.cli.CommandLineParser;
-import org.apache.commons.cli.DefaultParser;
-import org.apache.commons.cli.HelpFormatter;
-import org.apache.commons.cli.Options;
 
 /**
  *
@@ -38,6 +39,15 @@ public class RunUpdateSpent {
 
     private static final int DEFAULT_START_TRANSACTION_ID = 0;
     private static final int DEFAULT_BATCH_SIZE = 200_000;
+
+    public static final Collection<CommandLineUtils.CmdOption> CMD_OPTS = new ArrayList<>();
+    private static final CommandLineUtils.CmdOption batchSizeOpt = buildOption(CMD_OPTS, null, "batch-size", true, "Number or transactions to process in a batch. Default: " + DEFAULT_BATCH_SIZE);
+    private static final CommandLineUtils.CmdOption startFromOpt = buildOption(CMD_OPTS, null, "start-from", true, "Start process from this transaction ID. Beside a number this parameter can be set to a file name that stores the numeric value updated on every batch");
+
+    static {
+        CMD_OPTS.addAll(DBConnectionSupplier.CMD_OPTS);
+    }
+
     private static final String SQL_QUERY_OUTPUTS
             = "SELECT O.transaction_id,O.pos,O.address_id,O.spent,I.in_transaction_id FROM output O"
             + " LEFT JOIN input I ON I.in_transaction_id=O.transaction_id AND I.in_pos=O.pos"
@@ -47,7 +57,7 @@ public class RunUpdateSpent {
     private final DBPreparedStatement psQueryOutputs;
     private final int startTransactionId;
     private final int batchSize;
-    private final Utils.NumberFile startFromFile;
+    private final NumberFile startFromFile;
 
     /**
      * @param args the command line arguments
@@ -55,11 +65,7 @@ public class RunUpdateSpent {
      */
     public static void main(String[] args) throws Exception {
         DbUpdateOutput.MAX_UPDATE_QUEUE_LENGTH = 50000;
-        CommandLineParser parser = new DefaultParser();
-        CommandLine cmd = parser.parse(prepOptions(), args);
-        if (cmd.hasOption('h')) {
-            printHelpAndExit();
-        }
+        CmdArguments cmd = CommandLineUtils.buildCmdArguments(args, Main.Command.update_spent.name(), CMD_OPTS);
         log.info("START");
         try {
             new RunUpdateSpent(cmd).runProcess();
@@ -68,26 +74,20 @@ public class RunUpdateSpent {
         }
     }
 
-    public RunUpdateSpent(CommandLine cmd) {
-        startFromFile = new Utils.NumberFile(cmd.getOptionValue("start-from", Integer.toString(DEFAULT_START_TRANSACTION_ID)));
+    public RunUpdateSpent(CmdArguments cmd) {
+        startFromFile = new Utils.NumberFile(cmd.getOption(startFromOpt).orElse(Integer.toString(DEFAULT_START_TRANSACTION_ID)));
         startTransactionId = startFromFile.getNumber().intValue();
-        batchSize = Integer.parseInt(cmd.getOptionValue("batch-size", Integer.toString(DEFAULT_BATCH_SIZE)));
-        DBConnectionSupplier.applyArguments(cmd);
-
+        batchSize = cmd.getOption(batchSizeOpt).map(Integer::parseInt).orElse(DEFAULT_BATCH_SIZE);
         dbCon = new DBConnectionSupplier();
         psQueryOutputs = dbCon.prepareStatement(SQL_QUERY_OUTPUTS);
     }
 
     private void runProcess() throws SQLException {
-        for (int i = startTransactionId;; i += batchSize) {
-            log.info("Processing batch of outputs for transaction IDs between {} and {}", i, i + batchSize);
-            startFromFile.updateNumber(i);
-            psQueryOutputs.getParamSetter().setInt(i).setInt(i + batchSize).checkStateReady();
-            int txnCount = 0;
-            try (ResultSet rs = psQueryOutputs.executeQuery();
-                    DbUpdateOutput updateOutput = new DbUpdateOutput(dbCon)) {
-                while (rs.next()) {
-                    txnCount++;
+        for (AtomicInteger i = new AtomicInteger(startTransactionId);; i.addAndGet(batchSize)) {
+            log.info("Processing batch of outputs for transaction IDs between {} and {}", i.get(), i.get() + batchSize);
+            startFromFile.updateNumber(i.get());
+            try (DbUpdateOutput updateOutput = new DbUpdateOutput(dbCon)) {
+                if (psQueryOutputs.setParameters(p -> p.setInt(i.get()).setInt(i.get() + batchSize)).executeQuery(rs -> {
                     int transactionId = rs.getInt(1);
                     short pos = rs.getShort(2);
                     int addressId = rs.getInt(3);
@@ -102,29 +102,11 @@ public class RunUpdateSpent {
                     } else if (spent != OutputStatus.SPENT) {
                         updateOutput.updateSpent(transactionId, pos, OutputStatus.SPENT);
                     }
+                }) == 0) {
+                    log.info("Reached end of transactions table");
+                    break;
                 }
-            }
-            if (txnCount == 0) {
-                log.info("Reached end of transactions table");
-                break;
             }
         }
     }
-
-    private static void printHelpAndExit() {
-        System.out.println("Available options:");
-        HelpFormatter formatter = new HelpFormatter();
-        formatter.printHelp("java <jar> " + Main.Command.update_wallets + " [options]", prepOptions());
-        System.exit(1);
-    }
-
-    private static Options prepOptions() {
-        Options options = new Options();
-        options.addOption("h", "help", false, "Print help");
-        options.addOption(null, "batch-size", true, "Number or transactions to process in a batch. Default: " + DEFAULT_BATCH_SIZE);
-        options.addOption(null, "start-from", true, "Start process from this transaction ID. Beside a number this parameter can be set to a file name that stores the numeric value updated on every batch");
-        DBConnectionSupplier.addOptions(options);
-        return options;
-    }
-
 }

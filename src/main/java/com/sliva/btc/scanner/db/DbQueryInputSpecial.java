@@ -16,14 +16,10 @@
 package com.sliva.btc.scanner.db;
 
 import com.sliva.btc.scanner.db.model.TxInputSpecial;
-import com.sliva.btc.scanner.db.model.TxOutput;
-import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.List;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.ToString;
+import java.util.Optional;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -43,44 +39,30 @@ public class DbQueryInputSpecial {
         this.psQueryInputs = conn.prepareStatement(SQL_QUERY_INPUTS);
     }
 
-    public TxInputSpecial getInput(int transactionId, short pos) throws SQLException {
-        try (ResultSet rs = psQueryInput.setParameters(ps -> ps.setInt(transactionId).setShort(pos)).executeQuery()) {
-            if (rs.next()) {
-                return TxInputSpecial.builder()
-                        .transactionId(transactionId)
-                        .pos(pos)
-                        .sighashType(rs.getByte(1))
-                        .segwit(rs.getBoolean(2))
-                        .multisig(rs.getBoolean(3))
-                        .build();
-            }
-        }
-        return null;
+    @NonNull
+    public Optional<TxInputSpecial> getInput(int transactionId, short pos) throws SQLException {
+        return psQueryInput
+                .setParameters(ps -> ps.setInt(transactionId).setShort(pos))
+                .querySingleRow(
+                        rs -> TxInputSpecial.builder()
+                                .transactionId(transactionId)
+                                .pos(pos)
+                                .sighashType(rs.getByte(1))
+                                .segwit(rs.getBoolean(2))
+                                .multisig(rs.getBoolean(3))
+                                .build());
     }
 
     public List<TxInputSpecial> getInputs(int transactionId) throws SQLException {
-        List<TxInputSpecial> result = new ArrayList<>();
-        try (ResultSet rs = psQueryInputs.setParameters(ps -> ps.setInt(transactionId)).executeQuery()) {
-            while (rs.next()) {
-                result.add(TxInputSpecial.builder()
-                        .transactionId(transactionId)
-                        .pos(rs.getShort(1))
-                        .sighashType(rs.getByte(2))
-                        .segwit(rs.getBoolean(3))
-                        .multisig(rs.getBoolean(4))
-                        .build());
-            }
-        }
-        log.trace("getInputs(transactionId:{}): result={}", transactionId, result);
-        return result;
-    }
-
-    @Getter
-    @Builder
-    @ToString
-    public static class TxInputOutput {
-
-        private final TxInputSpecial input;
-        private final TxOutput output;
+        return psQueryInputs
+                .setParameters(ps -> ps.setInt(transactionId))
+                .executeQueryToList(
+                        rs -> TxInputSpecial.builder()
+                                .transactionId(transactionId)
+                                .pos(rs.getShort(1))
+                                .sighashType(rs.getByte(2))
+                                .segwit(rs.getBoolean(3))
+                                .multisig(rs.getBoolean(4))
+                                .build());
     }
 }

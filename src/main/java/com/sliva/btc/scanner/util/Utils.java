@@ -26,6 +26,7 @@ import java.util.Properties;
 import java.util.function.Supplier;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.DecoderException;
 import org.apache.commons.codec.binary.Hex;
@@ -81,6 +82,15 @@ public final class Utils {
         }
     }
 
+    @SneakyThrows(DecoderException.class)
+    public static byte[] decodeHex(String hexString) {
+        return hexString == null ? null : Hex.decodeHex(hexString);
+    }
+
+    public static String encodeHex(byte[] hexBytes) {
+        return hexBytes == null ? null : Hex.encodeHexString(hexBytes, true);
+    }
+
     public static String id2hex(byte[] data) {
         if (data == null) {
             return null;
@@ -88,7 +98,7 @@ public final class Utils {
         if (data.length != 32) {
             throw new IllegalArgumentException("Txid or blockid has to be 32 bytes long: " + Hex.encodeHexString(data));
         }
-        return Hex.encodeHexString(data);
+        return encodeHex(data);
     }
 
     public static byte[] id2bin(String txid) {
@@ -98,11 +108,7 @@ public final class Utils {
         if (txid.length() != 64) {
             throw new IllegalArgumentException("Txid or blockid has to be 32 bytes long: " + txid);
         }
-        try {
-            return Hex.decodeHex(txid.toCharArray());
-        } catch (DecoderException e) {
-            throw new IllegalArgumentException("invalid txid: " + txid, e);
-        }
+        return decodeHex(txid);
     }
 
     public static SrcAddressType getBtcAddressType(Script.ScriptType scriptType) {

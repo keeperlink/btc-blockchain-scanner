@@ -20,9 +20,7 @@ import com.sliva.btc.scanner.db.model.InOutKey;
 import com.sliva.btc.scanner.db.model.TxInput;
 import com.sliva.btc.scanner.db.model.TxOutput;
 import com.sliva.btc.scanner.src.SrcAddressType;
-import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -88,40 +86,34 @@ public class DbQueryOutput {
     }
 
     public List<TxOutputInput> getOutputsWithInput(int transactionId) throws SQLException {
-        try (ResultSet rs = psQueryOutputsWithInput.setParameters(ps -> ps.setInt(transactionId)).executeQuery()) {
-            List<TxOutputInput> result = new ArrayList<>();
-            while (rs.next()) {
-                TxOutputInput.TxOutputInputBuilder builder = TxOutputInput.builder();
-                builder.output(TxOutput.builder()
-                        .transactionId(transactionId)
-                        .pos(rs.getShort(1))
-                        .addressId(rs.getInt(2))
-                        .amount(rs.getLong(3))
-                        .status(rs.getByte(4))
+        return psQueryOutputsWithInput.setParameters(ps -> ps.setInt(transactionId)).executeQueryToList(rs -> {
+            TxOutputInput.TxOutputInputBuilder builder = TxOutputInput.builder();
+            builder.output(TxOutput.builder()
+                    .transactionId(transactionId)
+                    .pos(rs.getShort(1))
+                    .addressId(rs.getInt(2))
+                    .amount(rs.getLong(3))
+                    .status(rs.getByte(4))
+                    .build());
+            if (rs.getObject(5) != null) {
+                builder.input(TxInput.builder()
+                        .transactionId(rs.getInt(5))
+                        .pos(rs.getShort(6))
+                        .inTransactionId(transactionId)
+                        .inPos(rs.getShort(1))
                         .build());
-                if (rs.getObject(5) != null) {
-                    builder.input(TxInput.builder()
-                            .transactionId(rs.getInt(5))
-                            .pos(rs.getShort(6))
-                            .inTransactionId(transactionId)
-                            .inPos(rs.getShort(1))
-                            .build());
-                }
-                result.add(builder.build());
             }
-            return result;
-        }
+            return builder.build();
+        });
     }
 
     public Collection<OutputAddressWallet> queryOutputsInTxnRange(int startTxId, int endTxId, SrcAddressType addressType) throws SQLException {
         if (!BtcAddress.getRealTypes().contains(addressType)) {
             throw new IllegalArgumentException("addressType=" + addressType + ", allowed only real types: " + BtcAddress.getRealTypes());
         }
-        DBPreparedStatement ps = psQueryOutputsInTxnRange.get(addressType);
-        try (ResultSet rs = ps.setParameters(p -> p.setInt(startTxId).setInt(endTxId)).executeQuery()) {
-            Collection<OutputAddressWallet> result = new ArrayList<>();
-            while (rs.next()) {
-                result.add(OutputAddressWallet.builder()
+        return psQueryOutputsInTxnRange.get(addressType).setParameters(p -> p.setInt(startTxId).setInt(endTxId))
+                .executeQueryToList(rs
+                        -> OutputAddressWallet.builder()
                         .transactionId(rs.getInt(1))
                         .pos(rs.getShort(2))
                         .addressId(rs.getInt(3))
@@ -130,9 +122,6 @@ public class DbQueryOutput {
                         .walletId(rs.getInt(6))
                         .walletName(rs.getString(7))
                         .build());
-            }
-            return result;
-        }
     }
 
     @Getter

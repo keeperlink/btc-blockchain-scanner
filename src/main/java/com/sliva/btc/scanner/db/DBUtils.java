@@ -24,6 +24,7 @@ import java.util.Optional;
 import java.util.Set;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
+import lombok.NonNull;
 
 /**
  *
@@ -38,6 +39,7 @@ public final class DBUtils {
      * @param ps PreparedStatement
      * @return Optional integer value or empty
      */
+    @NonNull
     public static Optional<Integer> readInteger(DBPreparedStatement ps) {
         return ps.querySingleRow(rs -> rs.getObject(1, Integer.class));
     }
@@ -49,6 +51,7 @@ public final class DBUtils {
      * @return Collection
      * @throws SQLException
      */
+    @NonNull
     public static Collection<Integer> readIntegersToSet(DBPreparedStatement ps) throws SQLException {
         Set<Integer> result = new HashSet<>();
         ps.executeQuery(rs -> result.add(rs.getObject(1, Integer.class)));
@@ -62,6 +65,7 @@ public final class DBUtils {
      * @return Map
      * @throws SQLException
      */
+    @NonNull
     public static Map<Integer, Integer> readIntegersToMap(DBPreparedStatement ps) throws SQLException {
         Map<Integer, Integer> result = new HashMap<>();
         ps.executeQuery(rs -> result.put(rs.getObject(1, Integer.class), rs.getObject(2, Integer.class)));

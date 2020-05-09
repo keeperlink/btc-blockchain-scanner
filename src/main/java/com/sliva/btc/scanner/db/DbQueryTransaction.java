@@ -17,9 +17,7 @@ package com.sliva.btc.scanner.db;
 
 import com.sliva.btc.scanner.db.model.BtcTransaction;
 import com.sliva.btc.scanner.util.Utils;
-import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -68,16 +66,18 @@ public class DbQueryTransaction {
         this.psQuerySpeninfTransactionsByAddress = conn.prepareStatement(SQL_QUERY_SPENDING_TRANSACTIONS_BY_ADDRESS);
     }
 
-    public BtcTransaction findTransaction(String txid) throws SQLException {
-        try (ResultSet rs = psFindTransactionByTxid.setParameters(ps -> ps.setBytes(Utils.id2bin(txid))).executeQuery()) {
-            return rs.next() ? BtcTransaction.builder()
-                    .transactionId(rs.getInt(1))
-                    .txid(txid)
-                    .blockHeight(rs.getInt(2))
-                    .nInputs(rs.getInt(3))
-                    .nOutputs(rs.getInt(4))
-                    .build() : null;
-        }
+    @NonNull
+    public Optional<BtcTransaction> findTransaction(String txid) throws SQLException {
+        return psFindTransactionByTxid
+                .setParameters(ps -> ps.setBytes(Utils.id2bin(txid)))
+                .querySingleRow(
+                        rs -> BtcTransaction.builder()
+                                .transactionId(rs.getInt(1))
+                                .txid(txid)
+                                .blockHeight(rs.getInt(2))
+                                .nInputs(rs.getInt(3))
+                                .nOutputs(rs.getInt(4))
+                                .build());
     }
 
     @NonNull
@@ -85,93 +85,81 @@ public class DbQueryTransaction {
         return DBUtils.readInteger(psFindTransactionIdByTxid.setParameters(ps -> ps.setBytes(Utils.id2bin(txid))));
     }
 
-    public BtcTransaction findTransaction(int transactionId) throws SQLException {
-        try (ResultSet rs = psFindTransactionById.setParameters(ps -> ps.setInt(transactionId)).executeQuery()) {
-            return rs.next() ? BtcTransaction.builder()
-                    .transactionId(transactionId)
-                    .txid(Utils.id2hex(rs.getBytes(1)))
-                    .blockHeight(rs.getInt(2))
-                    .nInputs(rs.getInt(3))
-                    .nOutputs(rs.getInt(4))
-                    .build() : null;
-        }
+    @NonNull
+    public Optional<BtcTransaction> findTransaction(int transactionId) throws SQLException {
+        return psFindTransactionById
+                .setParameters(ps -> ps.setInt(transactionId))
+                .querySingleRow(
+                        rs -> BtcTransaction.builder()
+                                .transactionId(transactionId)
+                                .txid(Utils.id2hex(rs.getBytes(1)))
+                                .blockHeight(rs.getInt(2))
+                                .nInputs(rs.getInt(3))
+                                .nOutputs(rs.getInt(4))
+                                .build());
     }
 
+    @NonNull
     public List<BtcTransaction> getTxnsNoOutputs(int limit) throws SQLException {
-        try (ResultSet rs = psQueryTxnsNoOutputs.setMaxRows(limit).executeQuery()) {
-            List<BtcTransaction> result = new ArrayList<>();
-            while (rs.next()) {
-                result.add(BtcTransaction.builder()
+        return psQueryTxnsNoOutputs.setMaxRows(limit).executeQueryToList(
+                rs -> BtcTransaction.builder()
                         .transactionId(rs.getInt(1))
                         .txid(Utils.id2hex(rs.getBytes(2)))
                         .blockHeight(rs.getInt(3))
                         .nInputs(rs.getInt(4))
                         .nOutputs(rs.getInt(5))
                         .build());
-            }
-            return result;
-        }
     }
 
+    @NonNull
     public List<BtcTransaction> getTxnsRangle(int startTransactionId, int endTransactionId) throws SQLException {
-        try (ResultSet rs = psQueryTxnsRange.setParameters(ps -> ps.setInt(startTransactionId).setInt(endTransactionId)).executeQuery()) {
-            List<BtcTransaction> result = new ArrayList<>();
-            while (rs.next()) {
-                result.add(BtcTransaction.builder()
-                        .transactionId(rs.getInt(1))
-                        .txid(Utils.id2hex(rs.getBytes(2)))
-                        .blockHeight(rs.getInt(3))
-                        .nInputs(rs.getInt(4))
-                        .nOutputs(rs.getInt(5))
-                        .build());
-            }
-            return result;
-        }
+        return psQueryTxnsRange.
+                setParameters(ps -> ps.setInt(startTransactionId).setInt(endTransactionId))
+                .executeQueryToList(
+                        rs -> BtcTransaction.builder()
+                                .transactionId(rs.getInt(1))
+                                .txid(Utils.id2hex(rs.getBytes(2)))
+                                .blockHeight(rs.getInt(3))
+                                .nInputs(rs.getInt(4))
+                                .nOutputs(rs.getInt(5))
+                                .build());
     }
 
+    @NonNull
     public List<String> getTxnsInBlock(int blockHeight) throws SQLException {
-        try (ResultSet rs = psQueryTxnsInBlock.setParameters(ps -> ps.setInt(blockHeight)).executeQuery()) {
-            List<String> result = new ArrayList<>();
-            while (rs.next()) {
-                result.add(Utils.id2hex(rs.getBytes(1)));
-            }
-            return result;
-        }
+        return psQueryTxnsInBlock
+                .setParameters(ps -> ps.setInt(blockHeight))
+                .executeQueryToList(rs -> Utils.id2hex(rs.getBytes(1)));
     }
 
     public int countTxnsInBlock(int blockHeight) throws SQLException {
         return DBUtils.readInteger(psCountTxnsInBlock.setParameters(ps -> ps.setInt(blockHeight))).orElse(0);
     }
 
+    @NonNull
     public List<BtcTransaction> getTransactionsInBlock(int blockHeight) throws SQLException {
-        try (ResultSet rs = psQueryTransactionsInBlock.setParameters(ps -> ps.setInt(blockHeight)).executeQuery()) {
-            List<BtcTransaction> result = null;
-            while (rs.next()) {
-                if (result == null) {
-                    result = new ArrayList<>();
-                }
-                result.add(BtcTransaction.builder()
-                        .transactionId(rs.getInt(1))
-                        .txid(Utils.id2hex(rs.getBytes(2)))
-                        .blockHeight(blockHeight)
-                        .nInputs(rs.getInt(3))
-                        .nOutputs(rs.getInt(4))
-                        .build());
-            }
-            return result;
-        }
+        return psQueryTransactionsInBlock
+                .setParameters(ps -> ps.setInt(blockHeight))
+                .executeQueryToList(
+                        rs -> BtcTransaction.builder()
+                                .transactionId(rs.getInt(1))
+                                .txid(Utils.id2hex(rs.getBytes(2)))
+                                .blockHeight(blockHeight)
+                                .nInputs(rs.getInt(3))
+                                .nOutputs(rs.getInt(4))
+                                .build());
     }
 
-    public BtcTransaction getLastTransaction() throws SQLException {
-        try (ResultSet rs = psFindLastTransaction.executeQuery()) {
-            return rs.next() ? BtcTransaction.builder()
-                    .transactionId(rs.getInt(1))
-                    .txid(Utils.id2hex(rs.getBytes(2)))
-                    .blockHeight(rs.getInt(3))
-                    .nInputs(rs.getInt(4))
-                    .nOutputs(rs.getInt(5))
-                    .build() : null;
-        }
+    @NonNull
+    public Optional<BtcTransaction> getLastTransaction() throws SQLException {
+        return psFindLastTransaction.querySingleRow(
+                rs -> BtcTransaction.builder()
+                        .transactionId(rs.getInt(1))
+                        .txid(Utils.id2hex(rs.getBytes(2)))
+                        .blockHeight(rs.getInt(3))
+                        .nInputs(rs.getInt(4))
+                        .nOutputs(rs.getInt(5))
+                        .build());
     }
 
     @NonNull

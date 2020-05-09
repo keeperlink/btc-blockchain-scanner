@@ -65,6 +65,7 @@ public class TestRawBlock {
         BlockFileLoader bfl = new BlockFileLoader(np, blockChainFiles);
 
         Context context = new Context(np);
+        log.trace("context:{}", context);
         String skipToBlock = "00000000000561f7d0e08fbcd1d8cab38477da5a78af9a1e0f3a376e061ca947";
         boolean searching = true;
         for (Block block : bfl) {
@@ -95,17 +96,15 @@ public class TestRawBlock {
                         if (!ti.isCoinBase()) {
                             log.info("\tIn.Outpoint: " + ti.getOutpoint().getHash().toString() + ":" + ti.getOutpoint().getIndex());
                             log.info("\tIn.Value: " + ti.getValue());
-                            BtcTransaction inTxn = queryTransaction.findTransaction(ti.getOutpoint().getHash().toString());
-                            if (inTxn == null) {
-                                throw new IllegalStateException("Transaction not found in DB: " + ti.getOutpoint().getHash().toString());
-                            }
+                            BtcTransaction inTxn = queryTransaction.findTransaction(ti.getOutpoint().getHash().toString())
+                                    .orElseThrow(() -> new IllegalStateException("Transaction not found in DB: " + ti.getOutpoint().getHash().toString()));
                             TxInput txInput = findInput(txInputs, inTxn.getTransactionId(), (int) ti.getOutpoint().getIndex());
                             if (txInput == null) {
                                 throw new IllegalStateException("Transaction INPUT not found in DB: " + ti.getOutpoint().getHash().toString() + ":" + ti.getOutpoint().getIndex());
                             }
                         }
                     }
-                    if (txInputs != null && !txInputs.isEmpty()) {
+                    if (!txInputs.isEmpty()) {
                         throw new IllegalStateException("More inputs in DB: " + txInputs);
                     }
                     log.info("Tx.outputs: " + t.getOutputs().size());

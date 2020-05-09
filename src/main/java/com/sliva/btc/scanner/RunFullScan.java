@@ -68,7 +68,6 @@ import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -222,12 +221,12 @@ public class RunFullScan {
             ExecutorService loadThreadpool = Executors.newFixedThreadPool(loadBlockThreads, new ThreadFactoryBuilder().setDaemon(true).setNameFormat("loadBlock-%d").build());
             ExecutorService preprocThreadpool = Executors.newFixedThreadPool(preprocBlockThreads, new ThreadFactoryBuilder().setDaemon(true).setNameFormat("preprocBlock-%d").build());
             Supplier<Integer> blockNumberSupplier = buildBlockNumberSupplier(firstBlockToProcess, lastBlockToProcess);
-            Supplier<CompletableFuture<SrcBlock>> preProcFeatureSupplier
+            Supplier<CompletableFuture<SrcBlock<SrcTransaction<SrcInput, SrcOutput<SrcAddress>>>>> preProcFeatureSupplier
                     = () -> CompletableFuture
                             .completedFuture(blockNumberSupplier.get())
                             .thenApplyAsync(this::getBlock, loadThreadpool)
                             .thenApplyAsync(block -> preloadBlockCaches(block, cachedTxn, cachedOutput, cachedAddress), preprocThreadpool);
-            BufferingAheadSupplier<CompletableFuture<SrcBlock>> bufferingSupplier = new BufferingAheadSupplier<>(preProcFeatureSupplier, prefetchBufferSize);
+            BufferingAheadSupplier<CompletableFuture<SrcBlock<SrcTransaction<SrcInput, SrcOutput<SrcAddress>>>>> bufferingSupplier = new BufferingAheadSupplier<>(preProcFeatureSupplier, prefetchBufferSize);
             for (;;) {
                 try {
                     bufferingSupplier.get().thenAccept(block -> processBlock(block, addBlock, updateInput, updateInputSpecial, cachedTxn, cachedAddress, cachedOutput)).join();
@@ -246,7 +245,7 @@ public class RunFullScan {
         }
     }
 
-    private SrcBlock getBlock(int blockHeight) {
+    private SrcBlock<SrcTransaction<SrcInput, SrcOutput<SrcAddress>>> getBlock(int blockHeight) {
         log.trace("getBlock({}): STARTED", blockHeight);
         try {
             return blockProvider.getBlock(blockHeight);
@@ -257,7 +256,7 @@ public class RunFullScan {
 
     @SneakyThrows(SQLException.class)
     private void processBlock(
-            SrcBlock<SrcTransaction> block,
+            SrcBlock<SrcTransaction<SrcInput, SrcOutput<SrcAddress>>> block,
             DbAddBlock addBlock,
             DbUpdateInput updateInput,
             DbUpdateInputSpecial updateInputSpecial,
@@ -302,14 +301,15 @@ public class RunFullScan {
         return queryBlock.findLastHeight().orElse(-1) + 1;
     }
 
+    @SneakyThrows(SQLException.class)
     private TxnProcessOutput processTransaction(
             int transactionId,
             DbUpdateInput updateInput,
             DbUpdateInputSpecial updateInputSpecial,
             DbCachedTransaction cachedTxn,
             DbCachedAddress cachedAddress,
-            DbCachedOutput cachedOutput) throws SQLException, ExecutionException {
-        BtcTransaction intx = cachedTxn.getTransaction(transactionId);
+            DbCachedOutput cachedOutput) {
+        BtcTransaction intx = cachedTxn.getTransaction(transactionId).orElseThrow(() -> new IllegalStateException("Transaction not found. transactionId=" + transactionId));
         log.debug("processTransaction({}): intx={}", transactionId, intx);
         List<BtcTransaction> listTxn = safeRun ? cachedTxn.getTransactionsInBlock(intx.getBlockHeight()) : null;
         try {
@@ -321,7 +321,7 @@ public class RunFullScan {
 
     @SneakyThrows(SQLException.class)
     private TxnProcessOutput processTransaction(
-            SrcTransaction t,
+            SrcTransaction<SrcInput, SrcOutput<SrcAddress>> t,
             int blockHeight,
             List<BtcTransaction> listTxn,
             DbUpdateInput updateInput,
@@ -351,7 +351,6 @@ public class RunFullScan {
     }
 
     @SuppressWarnings("UseSpecificCatch")
-    @SneakyThrows({SQLException.class, ExecutionException.class})
     private Collection<TxInput> processTransactionInputs(
             SrcTransaction<SrcInput, SrcOutput<SrcAddress>> t,
             BtcTransaction tx,
@@ -365,7 +364,7 @@ public class RunFullScan {
         }
         final Collection<TxInput> txInputs;
         if (safeRun) {
-            Collection<TxInput> c = inputsCache.get(tx.getTransactionId());
+            Collection<TxInput> c = inputsCache.getUnchecked(tx.getTransactionId());
             txInputs = c == null ? null : new ArrayList<>(c);
         } else {
             txInputs = null;
@@ -375,10 +374,7 @@ public class RunFullScan {
             final short inPos = ti.getInPos();
             log.trace("In.Outpoint: {}:{}", inTxid, inPos);
             try {
-                final BtcTransaction inTxn = cachedTxn.getTransaction(inTxid);
-                if (inTxn == null) {
-                    throw new IllegalStateException("Transaction not found in DB: " + inTxid + " referenced from input#" + ti.getPos() + " in tx " + tx.toString());
-                }
+                final BtcTransaction inTxn = cachedTxn.getTransaction(inTxid).orElseThrow(() -> new IllegalStateException("Transaction not found in DB: " + inTxid + " referenced from input#" + ti.getPos() + " in tx " + tx.toString()));
                 TxInput txInput = findInput(txInputs, ti.getPos());
                 TxOutput txOutput = cachedOutput.getOutput(inTxn.getTransactionId(), inPos).orElseThrow(() -> new IllegalStateException("Output#" + ti.getPos() + " not found: " + inTxid + ":" + inPos + ". Src txn: " + tx.getTxid() + ". Ref tx: " + inTxn));
                 TxInput inputToAdd = TxInput.builder()
@@ -389,19 +385,17 @@ public class RunFullScan {
                         .build();
                 if (txInput == null) {
                     if (safeRun) {
-                        TxInput in2 = queryInput.findInputByOutTx(inTxn.getTransactionId(), inPos);
-                        if (in2 != null) {
+                        queryInput.findInputByOutTx(inTxn.getTransactionId(), inPos).ifPresent(in2 -> {
                             log.info("DB consistency issue: Found in DB input with same connected output:");
                             log.info("Adding     : " + frmtInput(inputToAdd, cachedTxn, cachedOutput, cachedAddress));
                             log.info("Found in DB: " + frmtInput(in2, cachedTxn, cachedOutput, cachedAddress));
-                            BtcTransaction intx = cachedTxn.getTransaction(in2.getTransactionId());
-                            if (intx == null) {
+                            if (!cachedTxn.getTransaction(in2.getTransactionId()).isPresent()) {
                                 log.info("Transaction referenced from input does not exists: " + in2.getTransactionId());
                                 updateInput.delete(in2);
                             } else {
                                 processTransaction(in2.getTransactionId(), updateInput, updateInputSpecial, cachedTxn, cachedAddress, cachedOutput);
                             }
-                        }
+                        });
                     }
                     updateInput.add(inputToAdd);
                 } else {
@@ -412,8 +406,7 @@ public class RunFullScan {
                         log.info("Found in DB: " + frmtInput(txInput, cachedTxn, cachedOutput, cachedAddress));
                         if (txInput.getInTransactionId() != inputToAdd.getInTransactionId()
                                 || txInput.getInPos() != inputToAdd.getInPos()) {
-                            BtcTransaction intx = cachedTxn.getTransaction(txInput.getInTransactionId());
-                            if (intx == null) {
+                            if (!cachedTxn.getTransaction(txInput.getInTransactionId()).isPresent()) {
                                 log.info("Transaction referenced from input does not exists: " + txInput.getInTransactionId());
                                 updateInput.update(inputToAdd);
                                 updateInput.executeUpdates();
@@ -440,12 +433,12 @@ public class RunFullScan {
                             .multisig(ti.isMultisig())
                             .build();
                     if (safeRun) {
-                        TxInputSpecial c = queryInputSpecial.getInput(tx.getTransactionId(), ti.getPos());
-                        if (c == null) {
+                        Optional<TxInputSpecial> c = queryInputSpecial.getInput(tx.getTransactionId(), ti.getPos());
+                        if (!c.isPresent()) {
                             updateInputSpecial.add(newInputSpecial);
-                        } else if (c.getSighashType() != newInputSpecial.getSighashType()
-                                || c.isSegwit() != newInputSpecial.isSegwit()
-                                || c.isMultisig() != newInputSpecial.isMultisig()) {
+                        } else if (c.get().getSighashType() != newInputSpecial.getSighashType()
+                                || c.get().isSegwit() != newInputSpecial.isSegwit()
+                                || c.get().isMultisig() != newInputSpecial.isMultisig()) {
                             updateInputSpecial.update(newInputSpecial);
                         }
                     } else {
@@ -455,15 +448,15 @@ public class RunFullScan {
                 if (updateSpent && txOutput.getStatus() != OutputStatus.SPENT) {
                     cachedOutput.updateStatus(txOutput.getTransactionId(), txOutput.getPos(), OutputStatus.SPENT);
                 }
-            } catch (SQLException | ExecutionException e) {
+            } catch (SQLException e) {
                 log.error(e.getMessage(), e);
             }
         });
         if (txInputs != null) {
-            for (TxInput txIn : txInputs) {
+            txInputs.stream().forEach(txIn -> {
                 log.debug("processTransactionInputs: Deleting record: " + txIn);
                 updateInput.delete(txIn);
-            }
+            });
         }
         return txInputs;
     }
@@ -532,17 +525,17 @@ public class RunFullScan {
         return txOutputs;
     }
 
-    private SrcTransaction findBJTransaction(int blockHeight, String txid) throws SQLException, IOException {
-        SrcBlock block = blockProvider.getBlock(blockHeight);
+    private SrcTransaction<SrcInput, SrcOutput<SrcAddress>> findBJTransaction(int blockHeight, String txid) throws SQLException, IOException {
+        SrcBlock<SrcTransaction<SrcInput, SrcOutput<SrcAddress>>> block = blockProvider.getBlock(blockHeight);
         return findBJTransaction(block, blockHeight, txid);
     }
 
-    private static SrcTransaction findBJTransaction(SrcBlock<SrcTransaction<SrcInput, SrcOutput<SrcAddress>>> block, int blockHeight, String txid) throws SQLException, IOException {
+    private static SrcTransaction<SrcInput, SrcOutput<SrcAddress>> findBJTransaction(SrcBlock<SrcTransaction<SrcInput, SrcOutput<SrcAddress>>> block, int blockHeight, String txid) throws SQLException, IOException {
         return block.getTransactions().filter((t) -> Utils.fixDupeTxid(t.getTxid(), blockHeight).equals(txid)).findAny().orElse(null);
     }
 
-    private SrcBlock<SrcTransaction<SrcInput, SrcOutput>> preloadBlockCaches(
-            SrcBlock<SrcTransaction<SrcInput, SrcOutput>> block,
+    private SrcBlock<SrcTransaction<SrcInput, SrcOutput<SrcAddress>>> preloadBlockCaches(
+            SrcBlock<SrcTransaction<SrcInput, SrcOutput<SrcAddress>>> block,
             DbCachedTransaction cachedTxn,
             DbCachedOutput cachedOutput,
             DbCachedAddress cachedAddress) {
@@ -557,8 +550,8 @@ public class RunFullScan {
         }
     }
 
-    private SrcTransaction<SrcInput, SrcOutput> preProcTransaction(
-            SrcTransaction<SrcInput, SrcOutput> t,
+    private SrcTransaction<SrcInput, SrcOutput<SrcAddress>> preProcTransaction(
+            SrcTransaction<SrcInput, SrcOutput<SrcAddress>> t,
             int blockHeight,
             DbCachedTransaction cachedTxn,
             DbCachedOutput cachedOutput,
@@ -572,7 +565,7 @@ public class RunFullScan {
                     inputsCache.getUnchecked(tx.getTransactionId());
                 });
             }
-            List<CompletableFuture> outFutures = t.getOutputs().map(to -> CompletableFuture.runAsync(() -> getAddress(to).map(to3 -> getOrAdd(to3, cachedAddress)), execInsOuts))
+            List<CompletableFuture<Void>> outFutures = t.getOutputs().map(to -> CompletableFuture.runAsync(() -> getAddress(to).map(to3 -> getOrAdd(to3, cachedAddress)), execInsOuts))
                     .collect(Collectors.toList());
             if (t.getInputs() != null) {
                 t.getInputs().map(ti -> CompletableFuture.runAsync(() -> getTransaction(ti.getInTxid(), cachedTxn).map(ti3 -> getOutputs(ti3.getTransactionId(), cachedOutput)), execInsOuts))
@@ -590,7 +583,7 @@ public class RunFullScan {
 
     @SneakyThrows(SQLException.class)
     private Optional<BtcTransaction> getTransaction(String txid, DbCachedTransaction cachedTxn) {
-        return Optional.ofNullable(cachedTxn.getTransaction(txid));
+        return cachedTxn.getTransaction(txid);
     }
 
     @SneakyThrows(SQLException.class)
@@ -598,7 +591,7 @@ public class RunFullScan {
         return cachedOutput.getOutputs(transactionId);
     }
 
-    private Optional<SrcAddress> getAddress(SrcOutput to) {
+    private Optional<SrcAddress> getAddress(SrcOutput<SrcAddress> to) {
         return Optional.ofNullable(to.getAddress());
     }
 
@@ -616,15 +609,16 @@ public class RunFullScan {
         return terminateLoop;
     }
 
-    private static String frmtInput(TxInput in, DbCachedTransaction cachedTxn, DbCachedOutput cachedOutput, DbCachedAddress cachedAddress) throws SQLException {
-        BtcTransaction tx = cachedTxn.getTransaction(in.getTransactionId());
-        BtcTransaction intx = cachedTxn.getTransaction(in.getInTransactionId());
+    @SneakyThrows(SQLException.class)
+    private static String frmtInput(TxInput in, DbCachedTransaction cachedTxn, DbCachedOutput cachedOutput, DbCachedAddress cachedAddress) {
+        Optional<BtcTransaction> tx = cachedTxn.getTransaction(in.getTransactionId());
+        Optional<BtcTransaction> intx = cachedTxn.getTransaction(in.getInTransactionId());
         Optional<TxOutput> out = cachedOutput.getOutput(in.getInTransactionId(), in.getInPos());
         BtcAddress adr = out.map(o -> cachedAddress.getAddress(o.getAddressId(), true)).orElse(null);
-        return "Input#" + in.getPos() + " in tx " + (tx == null ? null : tx.getTxid())
-                + " (" + (tx == null ? null : tx.getBlockHeight()) + "." + in.getTransactionId() + ")"
-                + " pointing to output " + (intx == null ? null : intx.getTxid()) + ":" + in.getInPos()
-                + " (" + (intx == null ? null : intx.getBlockHeight()) + "." + in.getInTransactionId() + ":" + in.getInPos() + ")"
+        return "Input#" + in.getPos() + " in tx " + tx.map(BtcTransaction::getTxid).orElse(null)
+                + " (" + tx.map(BtcTransaction::getBlockHeight).orElse(null) + "." + in.getTransactionId() + ")"
+                + " pointing to output " + intx.map(BtcTransaction::getTxid).orElse(null) + ":" + in.getInPos()
+                + " (" + intx.map(BtcTransaction::getBlockHeight).orElse(null) + "." + in.getInTransactionId() + ":" + in.getInPos() + ")"
                 + " with address " + (adr == null ? null : adr.getBjAddress());
 
     }

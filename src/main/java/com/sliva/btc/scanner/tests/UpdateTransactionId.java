@@ -23,6 +23,7 @@ import com.sliva.btc.scanner.db.model.BtcTransaction;
 import com.sliva.btc.scanner.rpc.ParallelGetBlock;
 import com.sliva.btc.scanner.rpc.RpcClient;
 import java.sql.SQLException;
+import java.util.Optional;
 import lombok.extern.slf4j.Slf4j;
 import wf.bitcoin.javabitcoindrpcclient.BitcoinJSONRPCClient;
 import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient;
@@ -53,12 +54,12 @@ public class UpdateTransactionId {
         queryTransaction = new DbQueryTransaction(conn);
         BitcoindRpcClient.BlockChainInfo bci = client.getBlockChainInfo();
         log.info("BlockChainInfo: {}", bci);
-        BtcTransaction lastTx = queryTransaction.getLastTransaction();
+        Optional<BtcTransaction> lastTx = queryTransaction.getLastTransaction();
         log.info("lastTx={}", lastTx);
-        int firstBlock = lastTx == null ? 1 : lastTx.getBlockHeight();//findFirstBlockToUpdate();
+        int firstBlock = lastTx.map(BtcTransaction::getBlockHeight).orElse(1);
         int numBlocks = queryBlock.findLastHeight().orElse(-1) - firstBlock + 1;
         log.info("firstBlock={}, numBlocks={}", firstBlock, numBlocks);
-        updateDb(RPC_THREADS, firstBlock, numBlocks, lastTx == null ? 0 : lastTx.getTransactionId());
+        updateDb(RPC_THREADS, firstBlock, numBlocks, lastTx.map(BtcTransaction::getTransactionId).orElse(0));
     }
 
 //    private static int findFirstBlockToUpdate() throws SQLException {

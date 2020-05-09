@@ -18,14 +18,13 @@ package com.sliva.btc.scanner.db;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.db.model.TxInput;
 import com.sliva.btc.scanner.db.model.TxOutput;
-import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import lombok.Builder;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 
@@ -65,72 +64,67 @@ public class DbQueryInput {
         this.psQueryInputAddresses = conn.prepareStatement(SQL_QUERY_INPUT_ADDRESSES);
     }
 
+    @NonNull
     public List<TxInput> getInputs(int transactionId) throws SQLException {
-        List<TxInput> result = new ArrayList<>();
-        try (ResultSet rs = psQueryInputs.setParameters(ps -> ps.setInt(transactionId)).executeQuery()) {
-            while (rs.next()) {
-                result.add(TxInput.builder()
-                        .transactionId(transactionId)
-                        .pos(rs.getShort(1))
-                        .inTransactionId(rs.getInt(2))
-                        .inPos(rs.getShort(3))
-                        .build());
-            }
-        }
-        log.trace("getInputs(transactionId:{}): result={}", transactionId, result);
-        return result;
+        return psQueryInputs
+                .setParameters(ps -> ps.setInt(transactionId))
+                .executeQueryToList(
+                        rs -> TxInput.builder()
+                                .transactionId(transactionId)
+                                .pos(rs.getShort(1))
+                                .inTransactionId(rs.getInt(2))
+                                .inPos(rs.getShort(3))
+                                .build());
     }
 
-    public TxInput findInputByOutTx(int inTransactionId, short inPos) throws SQLException {
-        try (ResultSet rs = psFindInputByOutTx.setParameters(ps -> ps.setInt(inTransactionId).setInt(inPos)).executeQuery()) {
-            TxInput result = rs.next() ? TxInput.builder()
-                    .transactionId(rs.getInt(1))
-                    .pos(rs.getShort(2))
-                    .inTransactionId(inTransactionId)
-                    .inPos(inPos)
-                    .build() : null;
-            log.trace("findInputByOutTx(inTransactionId:{},inPos:{}): result={}", inTransactionId, inPos, result);
-            return result;
-        }
+    @NonNull
+    public Optional<TxInput> findInputByOutTx(int inTransactionId, short inPos) throws SQLException {
+        return psFindInputByOutTx
+                .setParameters(ps -> ps.setInt(inTransactionId).setInt(inPos))
+                .querySingleRow(
+                        rs -> TxInput.builder()
+                                .transactionId(rs.getInt(1))
+                                .pos(rs.getShort(2))
+                                .inTransactionId(inTransactionId)
+                                .inPos(inPos)
+                                .build());
     }
 
+    @NonNull
     public List<TxInputOutput> getInputsWithOutput(int transactionId) throws SQLException {
-        try (ResultSet rs = psQueryInputsWithOutput.setParameters(ps -> ps.setInt(transactionId)).executeQuery()) {
-            List<TxInputOutput> result = new ArrayList<>();
-            while (rs.next()) {
-                TxInputOutput.TxInputOutputBuilder builder = TxInputOutput.builder();
-                builder.input(TxInput.builder()
-                        .transactionId(transactionId)
-                        .pos(rs.getShort(1))
-                        .inTransactionId(rs.getInt(2))
-                        .inPos(rs.getShort(3))
-                        .build());
-                if (rs.getObject(4) != null) {
-                    builder.output(TxOutput.builder()
-                            .transactionId(rs.getInt(2))
-                            .pos(rs.getShort(3))
-                            .addressId(rs.getInt(4))
-                            .amount(rs.getLong(5))
-                            .status(rs.getByte(6))
-                            .build());
-                }
-                result.add(builder.build());
-            }
-            return result;
-        }
+        return psQueryInputsWithOutput
+                .setParameters(ps -> ps.setInt(transactionId))
+                .executeQueryToList(
+                        rs -> {
+                            TxInputOutput.TxInputOutputBuilder builder = TxInputOutput.builder();
+                            builder.input(TxInput.builder()
+                                    .transactionId(transactionId)
+                                    .pos(rs.getShort(1))
+                                    .inTransactionId(rs.getInt(2))
+                                    .inPos(rs.getShort(3))
+                                    .build());
+                            if (rs.getObject(4) != null) {
+                                builder.output(TxOutput.builder()
+                                        .transactionId(rs.getInt(2))
+                                        .pos(rs.getShort(3))
+                                        .addressId(rs.getInt(4))
+                                        .amount(rs.getLong(5))
+                                        .status(rs.getByte(6))
+                                        .build());
+                            }
+                            return builder.build();
+                        });
     }
 
+    @NonNull
     public Collection<BtcAddress> getInputAddresses(int transactionId) throws SQLException {
-        try (ResultSet rs = psQueryInputAddresses.setParameters(ps -> ps.setInt(transactionId)).executeQuery()) {
-            Collection<BtcAddress> result = new HashSet<>();
-            while (rs.next()) {
-                result.add(BtcAddress.builder()
-                        .addressId(rs.getInt(1))
-                        .walletId(rs.getInt(2))
-                        .build());
-            }
-            return result;
-        }
+        return psQueryInputAddresses
+                .setParameters(ps -> ps.setInt(transactionId))
+                .executeQueryToList(
+                        rs -> BtcAddress.builder()
+                                .addressId(rs.getInt(1))
+                                .walletId(rs.getInt(2))
+                                .build());
     }
 
     @Getter

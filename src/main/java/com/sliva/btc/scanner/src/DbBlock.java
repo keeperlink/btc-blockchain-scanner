@@ -15,13 +15,10 @@
  */
 package com.sliva.btc.scanner.src;
 
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.ArrayList;
+import static com.sliva.btc.scanner.util.Utils.decodeHex;
+import static com.sliva.btc.scanner.util.Utils.encodeHex;
 import java.util.Collection;
 import java.util.stream.Stream;
-import lombok.SneakyThrows;
-import org.apache.commons.codec.DecoderException;
 import org.apache.commons.codec.binary.Hex;
 
 /**
@@ -52,16 +49,10 @@ public class DbBlock implements SrcBlock<DbTransaction> {
     @Override
     public String getHash() {
         if (hash == null) {
-            try {
-                try (ResultSet rs = blockProvider.psQueryBlockHash.setParameters(p -> p.setInt(height)).executeQuery()) {
-                    if (!rs.next()) {
-                        throw new IllegalStateException("Block #" + height + " not found in DB");
-                    }
-                    hash = Hex.encodeHexString(rs.getBytes(1), true);
-                }
-            } catch (SQLException e) {
-                throw new IllegalStateException(e);
-            }
+            hash = blockProvider.psQueryBlockHash
+                    .setParameters(p -> p.setInt(height))
+                    .querySingleRow(rs -> Hex.encodeHexString(rs.getBytes(1), true))
+                    .orElseThrow(() -> new IllegalStateException("Block #" + height + " not found in DB"));
         }
         return hash;
     }
@@ -69,16 +60,10 @@ public class DbBlock implements SrcBlock<DbTransaction> {
     @Override
     public int getHeight() {
         if (height == -1) {
-            try {
-                try (ResultSet rs = blockProvider.psQueryBlockHeight.setParameters(p -> p.setBytes(decodeHex(hash))).executeQuery()) {
-                    if (!rs.next()) {
-                        throw new IllegalStateException("Block " + hash + " not found in DB");
-                    }
-                    height = rs.getInt(1);
-                }
-            } catch (SQLException e) {
-                throw new IllegalStateException(e);
-            }
+            height = blockProvider.psQueryBlockHeight
+                    .setParameters(p -> p.setBytes(decodeHex(hash)))
+                    .querySingleRow(rs -> rs.getInt(1))
+                    .orElseThrow(() -> new IllegalStateException("Block " + hash + " not found in DB"));
         }
         return height;
     }
@@ -86,23 +71,10 @@ public class DbBlock implements SrcBlock<DbTransaction> {
     @Override
     public Stream<DbTransaction> getTransactions() {
         if (transactions == null) {
-            try {
-                try (ResultSet rs = blockProvider.psQueryBlockTransactions.setParameters(p -> p.setInt(getHeight())).executeQuery()) {
-                    Collection<DbTransaction> t = new ArrayList<>();
-                    while (rs.next()) {
-                        t.add(new DbTransaction(blockProvider, rs.getInt(1), Hex.encodeHexString(rs.getBytes(2), true)));
-                    }
-                    transactions = t;
-                }
-            } catch (SQLException e) {
-                throw new IllegalStateException(e);
-            }
+            transactions = blockProvider.psQueryBlockTransactions
+                    .setParameters(p -> p.setInt(getHeight()))
+                    .executeQueryToList(rs -> new DbTransaction(blockProvider, rs.getInt(1), encodeHex(rs.getBytes(2))));
         }
         return transactions.stream();
-    }
-
-    @SneakyThrows(DecoderException.class)
-    private byte[] decodeHex(String hexString) {
-        return Hex.decodeHex(hash);
     }
 }

@@ -18,9 +18,7 @@ package com.sliva.btc.scanner.db;
 import com.sliva.btc.scanner.db.DBPreparedStatement.ParamSetter;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.db.model.BtcWallet;
-import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Optional;
@@ -86,14 +84,16 @@ public class DbQueryWallet {
         this.psQueryUnusedWalletsInRange = conn.prepareStatement(SQL_QUERY_UNUSED_WALLETS_IN_RANGE);
     }
 
-    public BtcWallet getWallet(int walletId) throws SQLException {
-        try (ResultSet rs = psQueryWallet.setParameters(p -> p.setInt(walletId)).executeQuery()) {
-            return rs.next() ? BtcWallet.builder()
-                    .walletId(walletId)
-                    .name(rs.getString(1))
-                    .description(rs.getString(2))
-                    .build() : null;
-        }
+    @NonNull
+    public Optional<BtcWallet> getWallet(int walletId) throws SQLException {
+        return psQueryWallet
+                .setParameters(p -> p.setInt(walletId))
+                .querySingleRow(
+                        rs -> BtcWallet.builder()
+                                .walletId(walletId)
+                                .name(rs.getString(1))
+                                .description(rs.getString(2))
+                                .build());
     }
 
     @NonNull
@@ -101,30 +101,31 @@ public class DbQueryWallet {
         return DBUtils.readInteger(psMaxId);
     }
 
+    @NonNull
     public Collection<BtcAddress> getWalletAddresses(int walletId) throws SQLException {
-        try (ResultSet rs = psQueryWalletAddresses.setParameters(p -> p.setInt(walletId).setInt(walletId).setInt(walletId).setInt(walletId)).executeQuery()) {
-            Collection<BtcAddress> result = new ArrayList<>();
-            while (rs.next()) {
-                result.add(BtcAddress.builder()
-                        .addressId(rs.getInt(1))
-                        .address(rs.getBytes(2))
-                        .walletId(walletId)
-                        .build());
-            }
-            return result;
-        }
+        return psQueryWalletAddresses
+                .setParameters(p -> p.setInt(walletId).setInt(walletId).setInt(walletId).setInt(walletId))
+                .executeQueryToList(
+                        rs -> BtcAddress.builder()
+                                .addressId(rs.getInt(1))
+                                .address(rs.getBytes(2))
+                                .walletId(walletId)
+                                .build());
     }
 
+    @NonNull
     public Collection<Integer> getMissingWallets() throws SQLException {
         return DBUtils.readIntegersToSet(psQueryMissingWallets);
     }
 
+    @NonNull
     public Collection<Integer> getMissingWalletsInRange(int minWalletId, int maxWalletId) throws SQLException {
         ParamSetter p = psQueryMissingWalletsInRange.getParamSetter();
         IntStream.range(0, 8).forEach(i -> p.setInt(minWalletId).setInt(maxWalletId));
         return DBUtils.readIntegersToSet(psQueryMissingWalletsInRange);
     }
 
+    @NonNull
     public Collection<Integer> getMissingWalletsParallel() throws SQLException, InterruptedException {
         final Collection<Integer> result = new HashSet<>();
         final int maxId = getMaxId().orElse(0);
@@ -149,16 +150,19 @@ public class DbQueryWallet {
         return result;
     }
 
+    @NonNull
     public Collection<Integer> getUnusedWalletRecords() throws SQLException {
         return DBUtils.readIntegersToSet(psQueryUnusedWallets);
     }
 
+    @NonNull
     public Collection<Integer> getUnusedWalletRecordsInRange(int minWalletId, int maxWalletId) throws SQLException {
         ParamSetter p = psQueryMissingWalletsInRange.getParamSetter();
         IntStream.range(0, 5).forEach(i -> p.setInt(minWalletId).setInt(maxWalletId));
         return DBUtils.readIntegersToSet(psQueryUnusedWalletsInRange);
     }
 
+    @NonNull
     public Collection<Integer> getUnusedWalletRecordsParallel() throws SQLException, InterruptedException {
         final Collection<Integer> result = new HashSet<>();
         final int maxId = getMaxId().orElse(0);

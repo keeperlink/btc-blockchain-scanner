@@ -85,15 +85,12 @@ public class DbUpdateInput extends DbUpdate {
         synchronized (cacheData) {
             cacheData.addQueue.add(txInput);
             cacheData.queueMap.put(txInput, txInput);
-            List<TxInput> list = cacheData.queueMapTx.get(txInput.getTransactionId());
-            if (list == null) {
-                cacheData.queueMapTx.put(txInput.getTransactionId(), list = new ArrayList<>());
-            }
+            List<TxInput> list = cacheData.queueMapTx.computeIfAbsent(txInput.getTransactionId(), ArrayList::new);
             list.add(txInput);
         }
     }
 
-    public void delete(TxInput txInput) throws SQLException {
+    public void delete(TxInput txInput) {
         log.trace("delete(txInput:{})", txInput);
         synchronized (cacheData) {
             psDelete.setParameters(p -> p.setInt(txInput.getTransactionId()).setInt(txInput.getPos())).execute();

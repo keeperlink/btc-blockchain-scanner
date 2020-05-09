@@ -57,7 +57,7 @@ public abstract class DbUpdate implements AutoCloseable {
     private static final Duration PRINT_STATS_PERIOD = Duration.ofSeconds(30);
     private static final int MYSQL_BULK_INSERT_BUFFER_SIZE = 256 * 1024 * 1024;
     private static final int UPDATER_THREADS = 3;
-    private static ExecuteDbUpdate executeDbUpdateThread;
+    private static volatile ExecuteDbUpdate executeDbUpdateThread;
     private static final Collection<DbUpdate> dbUpdateInstances = new ArrayList<>();
     private static final Set<DbUpdate> executingInstances = new HashSet<>();
     private static final ExecutorService executor = new ThreadPoolExecutor(UPDATER_THREADS, UPDATER_THREADS,
@@ -82,8 +82,9 @@ public abstract class DbUpdate implements AutoCloseable {
         }
         synchronized (ExecuteDbUpdate.class) {
             if (executeDbUpdateThread == null) {
-                executeDbUpdateThread = new ExecuteDbUpdate();
-                executeDbUpdateThread.start();
+                ExecuteDbUpdate t = new ExecuteDbUpdate();
+                t.start();
+                executeDbUpdateThread = t;
             }
         }
     }
@@ -199,7 +200,7 @@ public abstract class DbUpdate implements AutoCloseable {
     }
 
     public static void printStats() {
-        if (log.isDebugEnabled()) {
+        if (log.isDebugEnabled() && executeDbUpdateThread != null) {
             long runtimeInSec = Math.max(TimeUnit.NANOSECONDS.toSeconds(executeDbUpdateThread.startTime.getNanoTime()), 1);
             synchronized (execStats) {
                 execStats.entrySet().forEach((e) -> {
@@ -219,7 +220,7 @@ public abstract class DbUpdate implements AutoCloseable {
 
     private static final class ExecuteDbUpdate extends Thread {
 
-        private StopWatch startTime;
+        private final StopWatch startTime = StopWatch.createStarted();
 
         private ExecuteDbUpdate() {
             super("ExecuteDbUpdate");
@@ -230,7 +231,6 @@ public abstract class DbUpdate implements AutoCloseable {
         public void run() {
             Utils.sleep(500);
             log.info(getName() + ": STARTED");
-            startTime = StopWatch.createStarted();
             try {
                 for (;;) {
                     boolean executed = false;
