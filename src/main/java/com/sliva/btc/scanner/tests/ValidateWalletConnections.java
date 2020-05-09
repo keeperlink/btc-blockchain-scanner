@@ -15,7 +15,8 @@
  */
 package com.sliva.btc.scanner.tests;
 
-import com.sliva.btc.scanner.db.DBConnection;
+import com.sliva.btc.scanner.db.DBConnectionSupplier;
+import com.sliva.btc.scanner.db.DBPreparedStatement;
 import com.sliva.btc.scanner.db.DBUtils;
 import com.sliva.btc.scanner.db.DbQueryWallet;
 import com.sliva.btc.scanner.db.DbUpdateAddress;
@@ -23,13 +24,13 @@ import com.sliva.btc.scanner.src.DbAddress;
 import com.sliva.btc.scanner.src.DbBlockProvider;
 import com.sliva.btc.scanner.src.DbTransaction;
 import com.sliva.btc.scanner.src.DbWallet;
-import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -49,9 +50,9 @@ public class ValidateWalletConnections {
             = "SELECT O.address_id FROM input I"
             + " INNER JOIN output O ON O.transaction_id=I.in_transaction_id AND O.pos=I.in_pos"
             + " WHERE I.transaction_id=?";
-    private static final DBConnection conn = new DBConnection();
-    private static final ThreadLocal<PreparedStatement> psQuerySpentTransactionsByAddress = conn.prepareStatement(QUERY_SPENT_TRANSACTIONS_BY_ADDRESS);
-    private static final ThreadLocal<PreparedStatement> psQueryInputAddressesByTransactionId = conn.prepareStatement(QUERY_INPUT_ADDRESSES_BY_TRANSACTION_ID);
+    private static final DBConnectionSupplier conn = new DBConnectionSupplier();
+    private static final DBPreparedStatement psQuerySpentTransactionsByAddress = conn.prepareStatement(QUERY_SPENT_TRANSACTIONS_BY_ADDRESS);
+    private static final DBPreparedStatement psQueryInputAddressesByTransactionId = conn.prepareStatement(QUERY_INPUT_ADDRESSES_BY_TRANSACTION_ID);
     private static final DbBlockProvider dbBlockProvider = new DbBlockProvider(conn);
     private static final DbQueryWallet queryWallet = new DbQueryWallet(conn);
     private final DbUpdateAddress updateAddress;
@@ -70,7 +71,7 @@ public class ValidateWalletConnections {
 
     private void runProcess() throws SQLException {
         try {
-            final int maxWalletId = queryWallet.getMaxId();
+            final int maxWalletId = queryWallet.getMaxId().orElse(0);
             log.info("Validating wallets [" + START_WALLET_ID + " - " + maxWalletId + "]");
             for (int walletId = START_WALLET_ID; walletId <= maxWalletId; walletId++) {
                 testWallet(walletId);
@@ -134,21 +135,13 @@ public class ValidateWalletConnections {
         }
     }
 
+    @SneakyThrows(SQLException.class)
     private Collection<Integer> getSpentTransactions(int addressId) {
-        try {
-            psQuerySpentTransactionsByAddress.get().setInt(1, addressId);
-            return DBUtils.readIntegersToSet(psQuerySpentTransactionsByAddress.get());
-        } catch (SQLException e) {
-            throw new IllegalStateException(e);
-        }
+        return DBUtils.readIntegersToSet(psQuerySpentTransactionsByAddress.setParameters(p -> p.setInt(addressId)));
     }
 
+    @SneakyThrows(SQLException.class)
     private Collection<Integer> getInputAddresses(int transactionId) {
-        try {
-            psQueryInputAddressesByTransactionId.get().setInt(1, transactionId);
-            return DBUtils.readIntegersToSet(psQueryInputAddressesByTransactionId.get());
-        } catch (SQLException e) {
-            throw new IllegalStateException(e);
-        }
+        return DBUtils.readIntegersToSet(psQueryInputAddressesByTransactionId.setParameters(p -> p.setInt(transactionId)));
     }
 }

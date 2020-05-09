@@ -20,6 +20,8 @@ import com.sliva.btc.scanner.src.SrcAddressType;
 import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
+import lombok.NonNull;
 
 /**
  *
@@ -29,17 +31,18 @@ public class DbQueryAddressCombo extends DbQueryAddress {
 
     private final Map<SrcAddressType, DbQueryAddress> queryAddressMap = new HashMap<>();
 
-    public DbQueryAddressCombo(DBConnection conn) {
-        super(null, null);
+    public DbQueryAddressCombo(DBConnectionSupplier conn) {
+        super();
         BtcAddress.getRealTypes().forEach((t) -> queryAddressMap.put(t, new DbQueryAddress(conn, t)));
     }
 
     @Override
-    public BtcAddress findByAddress(byte[] address) throws SQLException {
+    @NonNull
+    public Optional<BtcAddress> findByAddress(byte[] address) throws SQLException {
         for (SrcAddressType type : BtcAddress.getRealTypes()) {
             if (address.length == 20 ^ type == SrcAddressType.P2WSH) {
-                BtcAddress a = queryAddressMap.get(type).findByAddress(address);
-                if (a != null) {
+                Optional<BtcAddress> a = queryAddressMap.get(type).findByAddress(address);
+                if (a.isPresent()) {
                     return a;
                 }
             }
@@ -48,7 +51,8 @@ public class DbQueryAddressCombo extends DbQueryAddress {
     }
 
     @Override
-    public BtcAddress findByAddressId(int addressId) throws SQLException {
+    @NonNull
+    public Optional<BtcAddress> findByAddressId(int addressId) throws SQLException {
         return queryAddressMap.get(BtcAddress.getTypeFromId(addressId)).findByAddressId(addressId);
     }
 
@@ -58,9 +62,9 @@ public class DbQueryAddressCombo extends DbQueryAddress {
     }
 
     @Override
-    public int getWalletId(int addressId) throws SQLException {
-        BtcAddress a = findByAddressId(addressId);
-        return a != null ? a.getWalletId() : 0;
+    @NonNull
+    public Optional<Integer> getWalletId(int addressId) throws SQLException {
+        return findByAddressId(addressId).map(BtcAddress::getWalletId);
     }
 
     @Override

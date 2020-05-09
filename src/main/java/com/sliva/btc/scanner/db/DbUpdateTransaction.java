@@ -18,7 +18,6 @@ package com.sliva.btc.scanner.db;
 import static com.sliva.btc.scanner.db.DbUpdate.waitFullQueue;
 import com.sliva.btc.scanner.db.model.BtcTransaction;
 import com.sliva.btc.scanner.util.Utils;
-import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.Collection;
 import java.util.HashMap;
@@ -44,16 +43,16 @@ public class DbUpdateTransaction extends DbUpdate {
     private static final String SQL_ADD = "INSERT INTO transaction(transaction_id,txid,block_height,nInputs,nOutputs)VALUES(?,?,?,?,?)";
     private static final String SQL_DELETE = "DELETE FROM transaction WHERE transaction_id=?";
     private static final String SQL_UPDATE_IN_OUT = "UPDATE transaction SET nInputs=?,nOutputs=? WHERE transaction_id=?";
-    private final ThreadLocal<PreparedStatement> psAdd;
-    private final ThreadLocal<PreparedStatement> psDelete;
-    private final ThreadLocal<PreparedStatement> psUpdateInOut;
+    private final DBPreparedStatement psAdd;
+    private final DBPreparedStatement psDelete;
+    private final DBPreparedStatement psUpdateInOut;
     private final CacheData cacheData;
 
-    public DbUpdateTransaction(DBConnection conn) {
+    public DbUpdateTransaction(DBConnectionSupplier conn) {
         this(conn, new CacheData());
     }
 
-    public DbUpdateTransaction(DBConnection conn, CacheData cacheData) {
+    public DbUpdateTransaction(DBConnectionSupplier conn, CacheData cacheData) {
         super(conn);
         this.psAdd = conn.prepareStatement(SQL_ADD);
         this.psDelete = conn.prepareStatement(SQL_DELETE);
@@ -93,44 +92,23 @@ public class DbUpdateTransaction extends DbUpdate {
     public void delete(BtcTransaction tx) throws SQLException {
         log.trace("delete(tx:{})", tx);
         synchronized (cacheData) {
-            psDelete.get().setInt(1, tx.getTransactionId());
-            psDelete.get().execute();
+            psDelete.setParameters(p -> p.setInt(tx.getTransactionId())).execute();
             cacheData.addQueue.remove(tx);
             cacheData.addMap.remove(tx.getTxid());
             cacheData.addMapId.remove(tx.getTransactionId());
         }
     }
 
-    @Deprecated
-    public void updateInOut(int transactionId, int nInputs, int nOutputs) throws SQLException {
-        throw new UnsupportedOperationException();
-//        synchronized (cacheData) {
-//            //TODO need to check add queue first
-//            cacheData.updateInOutQueue.add(BtcTransaction.builder()
-//                    .transactionId(transactionId)
-//                    .nInputs(nInputs)
-//                    .nOutputs(nOutputs)
-//                    .build());
-//        }
-//        if (cacheData.updateInOutQueue.size() >= MAX_UPDATE_QUEUE_LENGTH) {
-//            executeUpdateInOuts();
-//        }
-    }
-
     @SuppressWarnings({"UseSpecificCatch", "CallToPrintStackTrace"})
     @Override
     public int executeInserts() {
-        return executeBatch(cacheData, cacheData.addQueue, psAdd, MAX_BATCH_SIZE, (t, ps) -> {
-            ps.setInt(1, t.getTransactionId());
-            ps.setBytes(2, Utils.id2bin(t.getTxid()));
-            ps.setInt(3, t.getBlockHeight());
-            ps.setInt(4, t.getNInputs());
-            ps.setInt(5, t.getNOutputs());
-        }, executed -> {
-            synchronized (cacheData) {
-                executed.stream().peek(t -> cacheData.addMap.remove(t.getTxid())).map(BtcTransaction::getTransactionId).forEach(cacheData.addMapId::remove);
-            }
-        });
+        return executeBatch(cacheData, cacheData.addQueue, psAdd, MAX_BATCH_SIZE,
+                (t, p) -> p.setInt(t.getTransactionId()).setBytes(Utils.id2bin(t.getTxid())).setInt(t.getBlockHeight()).setInt(t.getNInputs()).setInt(t.getNOutputs()),
+                executed -> {
+                    synchronized (cacheData) {
+                        executed.stream().peek(t -> cacheData.addMap.remove(t.getTxid())).map(BtcTransaction::getTransactionId).forEach(cacheData.addMapId::remove);
+                    }
+                });
     }
 
     @Override
@@ -140,11 +118,8 @@ public class DbUpdateTransaction extends DbUpdate {
 
     @SuppressWarnings({"UseSpecificCatch", "CallToPrintStackTrace"})
     private int _executeUpdateInOuts() {
-        return executeBatch(cacheData, cacheData.updateInOutQueue, psUpdateInOut, MAX_BATCH_SIZE, (t, ps) -> {
-            ps.setInt(1, t.getNInputs());
-            ps.setInt(2, t.getNOutputs());
-            ps.setInt(3, t.getTransactionId());
-        }, null);
+        return executeBatch(cacheData, cacheData.updateInOutQueue, psUpdateInOut, MAX_BATCH_SIZE,
+                (t, p) -> p.setInt(t.getNInputs()).setInt(t.getNOutputs()).setInt(t.getTransactionId()), null);
     }
 
     @Getter

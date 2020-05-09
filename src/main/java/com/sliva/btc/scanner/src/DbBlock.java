@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,6 +20,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.stream.Stream;
+import lombok.SneakyThrows;
 import org.apache.commons.codec.DecoderException;
 import org.apache.commons.codec.binary.Hex;
 
@@ -52,8 +53,7 @@ public class DbBlock implements SrcBlock<DbTransaction> {
     public String getHash() {
         if (hash == null) {
             try {
-                blockProvider.psQueryBlockHash.get().setInt(1, height);
-                try (ResultSet rs = blockProvider.psQueryBlockHash.get().executeQuery()) {
+                try (ResultSet rs = blockProvider.psQueryBlockHash.setParameters(p -> p.setInt(height)).executeQuery()) {
                     if (!rs.next()) {
                         throw new IllegalStateException("Block #" + height + " not found in DB");
                     }
@@ -70,14 +70,13 @@ public class DbBlock implements SrcBlock<DbTransaction> {
     public int getHeight() {
         if (height == -1) {
             try {
-                blockProvider.psQueryBlockHeight.get().setBytes(1, Hex.decodeHex(hash));
-                try (ResultSet rs = blockProvider.psQueryBlockHeight.get().executeQuery()) {
+                try (ResultSet rs = blockProvider.psQueryBlockHeight.setParameters(p -> p.setBytes(decodeHex(hash))).executeQuery()) {
                     if (!rs.next()) {
                         throw new IllegalStateException("Block " + hash + " not found in DB");
                     }
                     height = rs.getInt(1);
                 }
-            } catch (SQLException | DecoderException e) {
+            } catch (SQLException e) {
                 throw new IllegalStateException(e);
             }
         }
@@ -88,8 +87,7 @@ public class DbBlock implements SrcBlock<DbTransaction> {
     public Stream<DbTransaction> getTransactions() {
         if (transactions == null) {
             try {
-                blockProvider.psQueryBlockTransactions.get().setInt(1, getHeight());
-                try (ResultSet rs = blockProvider.psQueryBlockTransactions.get().executeQuery()) {
+                try (ResultSet rs = blockProvider.psQueryBlockTransactions.setParameters(p -> p.setInt(getHeight())).executeQuery()) {
                     Collection<DbTransaction> t = new ArrayList<>();
                     while (rs.next()) {
                         t.add(new DbTransaction(blockProvider, rs.getInt(1), Hex.encodeHexString(rs.getBytes(2), true)));
@@ -103,4 +101,8 @@ public class DbBlock implements SrcBlock<DbTransaction> {
         return transactions.stream();
     }
 
+    @SneakyThrows(DecoderException.class)
+    private byte[] decodeHex(String hexString) {
+        return Hex.decodeHex(hash);
+    }
 }

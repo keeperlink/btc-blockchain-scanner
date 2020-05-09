@@ -18,7 +18,6 @@ package com.sliva.btc.scanner.db;
 import static com.sliva.btc.scanner.db.DbUpdate.waitFullQueue;
 import com.sliva.btc.scanner.db.model.InOutKey;
 import com.sliva.btc.scanner.db.model.TxInput;
-import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -44,16 +43,16 @@ public class DbUpdateInput extends DbUpdate {
     private static final String SQL_ADD = "INSERT INTO input(transaction_id,pos,in_transaction_id,in_pos)VALUES(?,?,?,?)";
     private static final String SQL_DELETE = "DELETE FROM input WHERE transaction_id=? AND pos=?";
     private static final String SQL_UPDATE = "UPDATE input SET in_transaction_id=?,in_pos=? WHERE transaction_id=? AND pos=?";
-    private final ThreadLocal<PreparedStatement> psAdd;
-    private final ThreadLocal<PreparedStatement> psDelete;
-    private final ThreadLocal<PreparedStatement> psUpdate;
+    private final DBPreparedStatement psAdd;
+    private final DBPreparedStatement psDelete;
+    private final DBPreparedStatement psUpdate;
     private final CacheData cacheData;
 
-    public DbUpdateInput(DBConnection conn) {
+    public DbUpdateInput(DBConnectionSupplier conn) {
         this(conn, new CacheData());
     }
 
-    public DbUpdateInput(DBConnection conn, CacheData cacheData) {
+    public DbUpdateInput(DBConnectionSupplier conn, CacheData cacheData) {
         super(conn);
         this.psAdd = conn.prepareStatement(SQL_ADD);
         this.psDelete = conn.prepareStatement(SQL_DELETE);
@@ -85,7 +84,7 @@ public class DbUpdateInput extends DbUpdate {
         waitFullQueue(cacheData.addQueue, MAX_INSERT_QUEUE_LENGTH);
         synchronized (cacheData) {
             cacheData.addQueue.add(txInput);
-            cacheData.queueMap.put(new InOutKey(txInput.getTransactionId(), txInput.getPos()), txInput);
+            cacheData.queueMap.put(txInput, txInput);
             List<TxInput> list = cacheData.queueMapTx.get(txInput.getTransactionId());
             if (list == null) {
                 cacheData.queueMapTx.put(txInput.getTransactionId(), list = new ArrayList<>());
@@ -97,11 +96,9 @@ public class DbUpdateInput extends DbUpdate {
     public void delete(TxInput txInput) throws SQLException {
         log.trace("delete(txInput:{})", txInput);
         synchronized (cacheData) {
-            psDelete.get().setInt(1, txInput.getTransactionId());
-            psDelete.get().setInt(2, txInput.getPos());
-            psDelete.get().execute();
+            psDelete.setParameters(p -> p.setInt(txInput.getTransactionId()).setInt(txInput.getPos())).execute();
             cacheData.addQueue.remove(txInput);
-            cacheData.queueMap.remove(new InOutKey(txInput.getTransactionId(), txInput.getPos()));
+            cacheData.queueMap.remove(txInput);
             List<TxInput> l = cacheData.queueMapTx.get(txInput.getTransactionId());
             if (l != null) {
                 l.remove(txInput);
@@ -137,26 +134,19 @@ public class DbUpdateInput extends DbUpdate {
     @SuppressWarnings({"UseSpecificCatch"})
     @Override
     public int executeInserts() {
-        return executeBatch(cacheData, cacheData.addQueue, psAdd, MAX_BATCH_SIZE, (t, ps) -> {
-            ps.setInt(1, t.getTransactionId());
-            ps.setInt(2, t.getPos());
-            ps.setInt(3, t.getInTransactionId());
-            ps.setInt(4, t.getInPos());
-        }, executed -> {
-            synchronized (cacheData) {
-                executed.stream().peek(cacheData.queueMap::remove).map(InOutKey::getTransactionId).forEach(cacheData.queueMapTx::remove);
-            }
-        });
+        return executeBatch(cacheData, cacheData.addQueue, psAdd, MAX_BATCH_SIZE,
+                (t, p) -> p.setInt(t.getTransactionId()).setInt(t.getPos()).setInt(t.getInTransactionId()).setInt(t.getInPos()),
+                executed -> {
+                    synchronized (cacheData) {
+                        executed.stream().peek(cacheData.queueMap::remove).map(InOutKey::getTransactionId).forEach(cacheData.queueMapTx::remove);
+                    }
+                });
     }
 
     @Override
     public int executeUpdates() {
-        return executeBatch(cacheData, cacheData.queueUpdate, psUpdate, MAX_BATCH_SIZE, (t, ps) -> {
-            ps.setInt(1, t.getInTransactionId());
-            ps.setInt(2, t.getInPos());
-            ps.setInt(3, t.getTransactionId());
-            ps.setInt(4, t.getPos());
-        }, null);
+        return executeBatch(cacheData, cacheData.queueUpdate, psUpdate, MAX_BATCH_SIZE,
+                (t, p) -> p.setInt(t.getInTransactionId()).setInt(t.getInPos()).setInt(t.getTransactionId()).setInt(t.getPos()), null);
     }
 
     @Getter

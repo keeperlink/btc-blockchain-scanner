@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +18,6 @@ package com.sliva.btc.scanner.db;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.db.model.TxInput;
 import com.sliva.btc.scanner.db.model.TxOutput;
-import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -54,12 +53,12 @@ public class DbQueryInput {
             + " LEFT JOIN address_p2wpkh P2WPKH ON P2WPKH.address_id=O.address_id"
             + " LEFT JOIN address_p2wsh P2WSH ON P2WSH.address_id=O.address_id"
             + " WHERE O.address_id>0 AND I.transaction_id=?";
-    private final ThreadLocal<PreparedStatement> psQueryInputs;
-    private final ThreadLocal<PreparedStatement> psFindInputByOutTx;
-    private final ThreadLocal<PreparedStatement> psQueryInputsWithOutput;
-    private final ThreadLocal<PreparedStatement> psQueryInputAddresses;
+    private final DBPreparedStatement psQueryInputs;
+    private final DBPreparedStatement psFindInputByOutTx;
+    private final DBPreparedStatement psQueryInputsWithOutput;
+    private final DBPreparedStatement psQueryInputAddresses;
 
-    public DbQueryInput(DBConnection conn) {
+    public DbQueryInput(DBConnectionSupplier conn) {
         this.psQueryInputs = conn.prepareStatement(SQL_QUERY_INPUTS);
         this.psFindInputByOutTx = conn.prepareStatement(SQL_FIND_INPUT_BY_OUT_TX);
         this.psQueryInputsWithOutput = conn.prepareStatement(SQL_QUERY_INPUTS_WITH_OUTPUT);
@@ -67,9 +66,8 @@ public class DbQueryInput {
     }
 
     public List<TxInput> getInputs(int transactionId) throws SQLException {
-        psQueryInputs.get().setInt(1, transactionId);
         List<TxInput> result = new ArrayList<>();
-        try (ResultSet rs = psQueryInputs.get().executeQuery()) {
+        try (ResultSet rs = psQueryInputs.setParameters(ps -> ps.setInt(transactionId)).executeQuery()) {
             while (rs.next()) {
                 result.add(TxInput.builder()
                         .transactionId(transactionId)
@@ -84,9 +82,7 @@ public class DbQueryInput {
     }
 
     public TxInput findInputByOutTx(int inTransactionId, short inPos) throws SQLException {
-        psFindInputByOutTx.get().setInt(1, inTransactionId);
-        psFindInputByOutTx.get().setInt(2, inPos);
-        try (ResultSet rs = psFindInputByOutTx.get().executeQuery()) {
+        try (ResultSet rs = psFindInputByOutTx.setParameters(ps -> ps.setInt(inTransactionId).setInt(inPos)).executeQuery()) {
             TxInput result = rs.next() ? TxInput.builder()
                     .transactionId(rs.getInt(1))
                     .pos(rs.getShort(2))
@@ -99,8 +95,7 @@ public class DbQueryInput {
     }
 
     public List<TxInputOutput> getInputsWithOutput(int transactionId) throws SQLException {
-        psQueryInputsWithOutput.get().setInt(1, transactionId);
-        try (ResultSet rs = psQueryInputsWithOutput.get().executeQuery()) {
+        try (ResultSet rs = psQueryInputsWithOutput.setParameters(ps -> ps.setInt(transactionId)).executeQuery()) {
             List<TxInputOutput> result = new ArrayList<>();
             while (rs.next()) {
                 TxInputOutput.TxInputOutputBuilder builder = TxInputOutput.builder();
@@ -126,8 +121,7 @@ public class DbQueryInput {
     }
 
     public Collection<BtcAddress> getInputAddresses(int transactionId) throws SQLException {
-        psQueryInputAddresses.get().setInt(1, transactionId);
-        try (ResultSet rs = psQueryInputAddresses.get().executeQuery()) {
+        try (ResultSet rs = psQueryInputAddresses.setParameters(ps -> ps.setInt(transactionId)).executeQuery()) {
             Collection<BtcAddress> result = new HashSet<>();
             while (rs.next()) {
                 result.add(BtcAddress.builder()

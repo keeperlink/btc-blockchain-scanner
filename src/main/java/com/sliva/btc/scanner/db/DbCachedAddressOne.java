@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -39,11 +39,11 @@ public class DbCachedAddressOne implements AutoCloseable {
     private final DbQueryAddress queryAddress;
     private final CacheData cacheData;
 
-    public DbCachedAddressOne(DBConnection conn, SrcAddressType addressType) {
+    public DbCachedAddressOne(DBConnectionSupplier conn, SrcAddressType addressType) {
         this(conn, addressType, new CacheData());
     }
 
-    public DbCachedAddressOne(DBConnection conn, SrcAddressType addressType, CacheData cacheData) {
+    public DbCachedAddressOne(DBConnectionSupplier conn, SrcAddressType addressType, CacheData cacheData) {
         this.addressType = addressType;
         updateAddress = new DbUpdateAddressOne(conn, addressType, cacheData.updateCachedData);
         queryAddress = new DbQueryAddress(conn, addressType);
@@ -94,7 +94,7 @@ public class DbCachedAddressOne implements AutoCloseable {
             result = updateAddress.getCacheData().getAddMapId().get(addressId);
         }
         if (result == null) {
-            result = queryAddress.findByAddressId(addressId);
+            result = queryAddress.findByAddressId(addressId).orElse(null);
         }
         if (result != null && updateCache) {
             updateCache(result);
@@ -109,7 +109,7 @@ public class DbCachedAddressOne implements AutoCloseable {
             result = updateAddress.getCacheData().getAddMap().get(hexAddr);
         }
         if (result == null) {
-            result = queryAddress.findByAddress(address);
+            result = queryAddress.findByAddress(address).orElse(null);
         }
         if (result != null && updateCache) {
             updateCache(result);

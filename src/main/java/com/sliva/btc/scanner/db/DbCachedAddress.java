@@ -24,6 +24,7 @@ import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
 import lombok.Getter;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.bitcoinj.core.Address;
 
@@ -37,11 +38,11 @@ public class DbCachedAddress implements AutoCloseable {
     private final Map<SrcAddressType, DbCachedAddressOne> updaters = new HashMap<>();
     private final CacheData cacheData;
 
-    public DbCachedAddress(DBConnection conn) throws SQLException {
+    public DbCachedAddress(DBConnectionSupplier conn) throws SQLException {
         this(conn, new CacheData());
     }
 
-    public DbCachedAddress(DBConnection conn, CacheData cacheData) {
+    public DbCachedAddress(DBConnectionSupplier conn, CacheData cacheData) {
         this.cacheData = cacheData;
         BtcAddress.getRealTypes().forEach((t) -> updaters.put(t, new DbCachedAddressOne(conn, t, cacheData.dataOneMap.get(t))));
     }
@@ -62,11 +63,13 @@ public class DbCachedAddress implements AutoCloseable {
         return getOne(btcAddress).add(btcAddress, updateCache);
     }
 
-    public BtcAddress getAddress(int addressId, boolean updateCache) throws SQLException {
+    @SneakyThrows(SQLException.class)
+    public BtcAddress getAddress(int addressId, boolean updateCache) {
         return getOne(BtcAddress.builder().addressId(addressId).build()).getAddress(addressId, updateCache);
     }
 
-    public BtcAddress getAddress(Address address, boolean updateCache) throws SQLException {
+    @SneakyThrows(SQLException.class)
+    public BtcAddress getAddress(Address address, boolean updateCache) {
         return getOne(BtcAddress.builder()
                 .type(Utils.getBtcAddressType(address.getOutputScriptType()))
                 .build()).getAddress(address.getHash(), updateCache);

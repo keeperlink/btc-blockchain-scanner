@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -66,11 +66,7 @@ public class DbWallet implements SrcWallet<DbAddress> {
     public Stream<DbAddress> getAddresses() {
         if (addresses == null) {
             try {
-                blockProvider.psQueryWalletAddresses.get().setInt(1, id);
-                blockProvider.psQueryWalletAddresses.get().setInt(2, id);
-                blockProvider.psQueryWalletAddresses.get().setInt(3, id);
-                blockProvider.psQueryWalletAddresses.get().setInt(4, id);
-                try (ResultSet rs = blockProvider.psQueryWalletAddresses.get().executeQuery()) {
+                try (ResultSet rs = blockProvider.psQueryWalletAddresses.setParameters(p -> p.setInt(id).setInt(id).setInt(id).setInt(id)).executeQuery()) {
                     Collection<DbAddress> t = new ArrayList<>();
                     while (rs.next()) {
                         t.add(new DbAddress(blockProvider, rs.getInt(1), rs.getBytes(2), id));
@@ -86,8 +82,7 @@ public class DbWallet implements SrcWallet<DbAddress> {
 
     private void loadWallet() {
         try {
-            blockProvider.psQueryWallet.get().setInt(1, id);
-            try (ResultSet rs = blockProvider.psQueryWallet.get().executeQuery()) {
+            try (ResultSet rs = blockProvider.psQueryWallet.setParameters(p -> p.setInt(id)).executeQuery()) {
                 if (!rs.next()) {
                     throw new IllegalStateException("Wallet #" + id + " not found in DB");
                 }

@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,11 +15,11 @@
  */
 package com.sliva.btc.scanner;
 
-import com.sliva.btc.scanner.db.DBConnection;
+import com.sliva.btc.scanner.db.DBConnectionSupplier;
+import com.sliva.btc.scanner.db.DBPreparedStatement;
 import com.sliva.btc.scanner.db.DbUpdateOutput;
 import com.sliva.btc.scanner.db.model.OutputStatus;
 import com.sliva.btc.scanner.util.Utils;
-import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import lombok.extern.slf4j.Slf4j;
@@ -43,8 +43,8 @@ public class RunUpdateSpent {
             + " LEFT JOIN input I ON I.in_transaction_id=O.transaction_id AND I.in_pos=O.pos"
             + " WHERE O.transaction_id BETWEEN ? AND ?";
 
-    private final DBConnection dbCon;
-    private final ThreadLocal<PreparedStatement> psQueryOutputs;
+    private final DBConnectionSupplier dbCon;
+    private final DBPreparedStatement psQueryOutputs;
     private final int startTransactionId;
     private final int batchSize;
     private final Utils.NumberFile startFromFile;
@@ -72,9 +72,9 @@ public class RunUpdateSpent {
         startFromFile = new Utils.NumberFile(cmd.getOptionValue("start-from", Integer.toString(DEFAULT_START_TRANSACTION_ID)));
         startTransactionId = startFromFile.getNumber().intValue();
         batchSize = Integer.parseInt(cmd.getOptionValue("batch-size", Integer.toString(DEFAULT_BATCH_SIZE)));
-        DBConnection.applyArguments(cmd);
+        DBConnectionSupplier.applyArguments(cmd);
 
-        dbCon = new DBConnection();
+        dbCon = new DBConnectionSupplier();
         psQueryOutputs = dbCon.prepareStatement(SQL_QUERY_OUTPUTS);
     }
 
@@ -82,10 +82,9 @@ public class RunUpdateSpent {
         for (int i = startTransactionId;; i += batchSize) {
             log.info("Processing batch of outputs for transaction IDs between {} and {}", i, i + batchSize);
             startFromFile.updateNumber(i);
-            psQueryOutputs.get().setInt(1, i);
-            psQueryOutputs.get().setInt(2, i + batchSize);
+            psQueryOutputs.getParamSetter().setInt(i).setInt(i + batchSize).checkStateReady();
             int txnCount = 0;
-            try (ResultSet rs = psQueryOutputs.get().executeQuery();
+            try (ResultSet rs = psQueryOutputs.executeQuery();
                     DbUpdateOutput updateOutput = new DbUpdateOutput(dbCon)) {
                 while (rs.next()) {
                     txnCount++;
@@ -124,7 +123,7 @@ public class RunUpdateSpent {
         options.addOption("h", "help", false, "Print help");
         options.addOption(null, "batch-size", true, "Number or transactions to process in a batch. Default: " + DEFAULT_BATCH_SIZE);
         options.addOption(null, "start-from", true, "Start process from this transaction ID. Beside a number this parameter can be set to a file name that stores the numeric value updated on every batch");
-        DBConnection.addOptions(options);
+        DBConnectionSupplier.addOptions(options);
         return options;
     }
 

@@ -32,11 +32,11 @@ public class DbUpdateAddress implements AutoCloseable {
 
     private final Map<SrcAddressType, DbUpdateAddressOne> updaters = new HashMap<>();
 
-    public DbUpdateAddress(DBConnection conn) {
+    public DbUpdateAddress(DBConnectionSupplier conn) {
         this(conn, new CacheData());
     }
 
-    public DbUpdateAddress(DBConnection conn, CacheData cacheData) {
+    public DbUpdateAddress(DBConnectionSupplier conn, CacheData cacheData) {
         BtcAddress.getRealTypes().forEach((t) -> updaters.put(t, new DbUpdateAddressOne(conn, t, cacheData.dataOneMap.get(t))));
     }
 

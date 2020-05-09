@@ -21,24 +21,28 @@ import static com.sliva.btc.scanner.util.CommandLineUtils.buildOption;
 import com.sliva.btc.scanner.util.Utils;
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Properties;
+import java.util.function.Supplier;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.Options;
 
 /**
+ * Database connection supplier. The class creates and keeps open connections
+ * one per each thread.
+ *
+ * #Thread-safe
  *
  * @author Sliva Co
  */
 @Slf4j
-public class DBConnection {
+public class DBConnectionSupplier implements Supplier<Connection> {
 
-    public static String DEFAULT_CONN_URL = "jdbc:mysql://localhost:3306/btc3"
+    public static String DEFAULT_CONN_URL = "jdbc:mysql://localhost:3306/btc_default_db"
             + "?verifyServerCertificate=false&useSSL=true"
             + "&useUnicode=true"
             + "&characterEncoding=UTF-8"
@@ -56,15 +60,15 @@ public class DBConnection {
     private final String dbname;
     private final ThreadLocal<Connection> conn;
 
-    public DBConnection() {
+    public DBConnectionSupplier() {
         this(DEFAULT_CONN_URL, DEFAULT_DB_USER, DEFAULT_DB_PASSWORD);
     }
 
-    public DBConnection(String dbName) {
-        this(DEFAULT_CONN_URL.replaceAll("btc3", dbName), DEFAULT_DB_USER, DEFAULT_DB_PASSWORD);
+    public DBConnectionSupplier(String dbName) {
+        this(DEFAULT_CONN_URL.replaceAll("btc_default_db", dbName), DEFAULT_DB_USER, DEFAULT_DB_PASSWORD);
     }
 
-    public DBConnection(String url, String user, String password) {
+    public DBConnectionSupplier(String url, String user, String password) {
         this.dbname = url;
         this.conn = ThreadLocal.withInitial(() -> makeJDBCConnection(url, user, password));
     }
@@ -84,18 +88,24 @@ public class DBConnection {
         }
     }
 
-    public Connection getConnection() {
+    /**
+     * Get open database connection local to current thread.
+     *
+     * @return
+     */
+    @Override
+    public Connection get() {
         return conn.get();
     }
 
-    public ThreadLocal<PreparedStatement> prepareStatement(final String sql) {
-        return ThreadLocal.withInitial(() -> {
-            try {
-                return getConnection().prepareStatement(sql, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
-            } catch (SQLException e) {
-                throw new IllegalStateException(sql, e);
-            }
-        });
+    @SneakyThrows(SQLException.class)
+    public void close() {
+        get().close();
+        conn.remove();
+    }
+
+    public DBPreparedStatement prepareStatement(String query) {
+        return new DBPreparedStatement(query, this);
     }
 
     public static void applyArguments(CmdArguments cmdArguments) {

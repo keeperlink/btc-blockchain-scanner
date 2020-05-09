@@ -15,12 +15,13 @@
  */
 package com.sliva.btc.scanner;
 
-import com.sliva.btc.scanner.db.DBConnection;
+import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import com.sliva.btc.scanner.db.DbQueryAddress;
 import com.sliva.btc.scanner.db.DbQueryAddressCombo;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.src.SrcAddressType;
 import com.sliva.btc.scanner.util.BJBlockHandler;
+import java.util.Optional;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
@@ -37,7 +38,7 @@ import org.bitcoinj.core.Address;
 public class RunAddress {
 
     private final String[] args;
-    private final DBConnection conn;
+    private final DBConnectionSupplier conn;
     private final DbQueryAddress queryAddress;
 
     /**
@@ -56,11 +57,11 @@ public class RunAddress {
     @SuppressWarnings("UseSpecificCatch")
     public RunAddress(CommandLine cmd, String[] args) {
         this.args = args;
-        DBConnection.applyArguments(cmd);
-        DBConnection c = null;
+        DBConnectionSupplier.applyArguments(cmd);
+        DBConnectionSupplier c = null;
         DbQueryAddress qa = null;
         try {
-            c = new DBConnection();
+            c = new DBConnectionSupplier();
             qa = new DbQueryAddressCombo(c);
         } catch (Exception e) {
             e.printStackTrace();
@@ -82,7 +83,7 @@ public class RunAddress {
     private void processAddress(String a) {
         if (a.length() <= 10 && StringUtils.isNumeric(a)) {
             try {
-                BtcAddress btcAddress = queryAddress.findByAddressId(Integer.parseInt(a));
+                BtcAddress btcAddress = queryAddress.findByAddressId(Integer.parseInt(a)).orElseThrow(() -> new IllegalArgumentException("Address not found: " + a));
                 System.out.println("Address for DB ID " + a + " is: " + btcAddress.getBjAddress()
                         + ", type: " + btcAddress.getType() + ", hash: " + Hex.encodeHexString(btcAddress.getAddress(), true));
             } catch (Exception e) {
@@ -91,8 +92,9 @@ public class RunAddress {
         } else if (a.matches("[0-9a-fA-F]*") && a.length() == 40 || a.length() == 64) {
             if (queryAddress != null) {
                 try {
-                    BtcAddress btcAddress = queryAddress.findByAddress(Hex.decodeHex(a));
-                    if (btcAddress != null) {
+                    Optional<BtcAddress> btcAddressOpt = queryAddress.findByAddress(Hex.decodeHex(a));
+                    if (btcAddressOpt.isPresent()) {
+                        BtcAddress btcAddress = btcAddressOpt.get();
                         System.out.println("Address for hash " + a + " is: " + btcAddress.getBjAddress()
                                 + ", type: " + btcAddress.getType() + ", DB ID: " + btcAddress.getAddressId());
                         return;
@@ -128,7 +130,7 @@ public class RunAddress {
     private static Options prepOptions() {
         Options options = new Options();
         options.addOption("h", "help", false, "Print help");
-        DBConnection.addOptions(options);
+        DBConnectionSupplier.addOptions(options);
         return options;
     }
 }

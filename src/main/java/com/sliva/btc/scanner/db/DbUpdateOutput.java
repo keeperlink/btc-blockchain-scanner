@@ -17,7 +17,6 @@ package com.sliva.btc.scanner.db;
 
 import com.sliva.btc.scanner.db.model.InOutKey;
 import com.sliva.btc.scanner.db.model.TxOutput;
-import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -45,18 +44,18 @@ public class DbUpdateOutput extends DbUpdate {
     private static final String SQL_UPDATE_SPENT = "UPDATE output SET spent=? WHERE transaction_id=? AND pos=?";
     private static final String SQL_UPDATE_ADDRESS = "UPDATE output SET address_id=? WHERE transaction_id=? AND pos=?";
     private static final String SQL_UPDATE_AMOUNT = "UPDATE output SET amount=? WHERE transaction_id=? AND pos=?";
-    private final ThreadLocal<PreparedStatement> psAdd;
-    private final ThreadLocal<PreparedStatement> psDelete;
-    private final ThreadLocal<PreparedStatement> psUpdateSpent;
-    private final ThreadLocal<PreparedStatement> psUpdateAddress;
-    private final ThreadLocal<PreparedStatement> psUpdateAmount;
+    private final DBPreparedStatement psAdd;
+    private final DBPreparedStatement psDelete;
+    private final DBPreparedStatement psUpdateSpent;
+    private final DBPreparedStatement psUpdateAddress;
+    private final DBPreparedStatement psUpdateAmount;
     private final CacheData cacheData;
 
-    public DbUpdateOutput(DBConnection conn) {
+    public DbUpdateOutput(DBConnectionSupplier conn) {
         this(conn, new CacheData());
     }
 
-    public DbUpdateOutput(DBConnection conn, CacheData cacheData) {
+    public DbUpdateOutput(DBConnectionSupplier conn, CacheData cacheData) {
         super(conn);
         this.psAdd = conn.prepareStatement(SQL_ADD);
         this.psDelete = conn.prepareStatement(SQL_DELETE);
@@ -93,7 +92,7 @@ public class DbUpdateOutput extends DbUpdate {
         waitFullQueue(cacheData.addQueue, MAX_INSERT_QUEUE_LENGTH);
         synchronized (cacheData) {
             cacheData.addQueue.add(txOutput);
-            cacheData.queueMap.put(new InOutKey(txOutput.getTransactionId(), txOutput.getPos()), txOutput);
+            cacheData.queueMap.put(txOutput, txOutput);
             List<TxOutput> list = cacheData.queueMapTx.get(txOutput.getTransactionId());
             if (list == null) {
                 cacheData.queueMapTx.put(txOutput.getTransactionId(), list = new ArrayList<>());
@@ -105,11 +104,9 @@ public class DbUpdateOutput extends DbUpdate {
     public void delete(TxOutput txOutput) throws SQLException {
         log.trace("delete(txOutput:{})", txOutput);
         synchronized (cacheData) {
-            psDelete.get().setInt(1, txOutput.getTransactionId());
-            psDelete.get().setInt(2, txOutput.getPos());
-            psDelete.get().execute();
+            psDelete.setParameters(p -> p.setInt(txOutput.getTransactionId()).setInt(txOutput.getPos())).execute();
             cacheData.addQueue.remove(txOutput);
-            cacheData.queueMap.remove(new InOutKey(txOutput.getTransactionId(), txOutput.getPos()));
+            cacheData.queueMap.remove(txOutput);
             List<TxOutput> l = cacheData.queueMapTx.get(txOutput.getTransactionId());
             if (l != null) {
                 l.remove(txOutput);
@@ -206,17 +203,13 @@ public class DbUpdateOutput extends DbUpdate {
 
     @Override
     public int executeInserts() {
-        return executeBatch(cacheData, cacheData.addQueue, psAdd, MAX_BATCH_SIZE, (t, ps) -> {
-            ps.setInt(1, t.getTransactionId());
-            ps.setInt(2, t.getPos());
-            ps.setInt(3, t.getAddressId());
-            ps.setLong(4, t.getAmount());
-            ps.setInt(5, t.getStatus());
-        }, executed -> {
-            synchronized (cacheData) {
-                executed.stream().peek(cacheData.queueMap::remove).map(InOutKey::getTransactionId).forEach(cacheData.queueMapTx::remove);
-            }
-        });
+        return executeBatch(cacheData, cacheData.addQueue, psAdd, MAX_BATCH_SIZE,
+                (t, p) -> p.setInt(t.getTransactionId()).setInt(t.getPos()).setInt(t.getAddressId()).setLong(t.getAmount()).setInt(t.getStatus()),
+                executed -> {
+                    synchronized (cacheData) {
+                        executed.stream().peek(cacheData.queueMap::remove).map(InOutKey::getTransactionId).forEach(cacheData.queueMapTx::remove);
+                    }
+                });
     }
 
     @Override
@@ -227,27 +220,18 @@ public class DbUpdateOutput extends DbUpdate {
     }
 
     private int _executeUpdateSpent() {
-        return executeBatch(cacheData, cacheData.queueUpdateSpent, psUpdateSpent, MAX_BATCH_SIZE, (t, ps) -> {
-            ps.setInt(1, t.getStatus());
-            ps.setInt(2, t.getTransactionId());
-            ps.setInt(3, t.getPos());
-        }, null);
+        return executeBatch(cacheData, cacheData.queueUpdateSpent, psUpdateSpent, MAX_BATCH_SIZE,
+                (t, p) -> p.setInt(t.getStatus()).setInt(t.getTransactionId()).setInt(t.getPos()), null);
     }
 
     private int _executeUpdateAddress() {
-        return executeBatch(cacheData, cacheData.queueUpdateAddress, psUpdateAddress, MAX_BATCH_SIZE, (t, ps) -> {
-            ps.setInt(1, t.getAddressId());
-            ps.setInt(2, t.getTransactionId());
-            ps.setInt(3, t.getPos());
-        }, null);
+        return executeBatch(cacheData, cacheData.queueUpdateAddress, psUpdateAddress, MAX_BATCH_SIZE,
+                (t, p) -> p.setInt(t.getAddressId()).setInt(t.getTransactionId()).setInt(t.getPos()), null);
     }
 
     private int _executeUpdateAmount() {
-        return executeBatch(cacheData, cacheData.queueUpdateAmount, psUpdateAmount, MAX_BATCH_SIZE, (t, ps) -> {
-            ps.setLong(1, t.getAmount());
-            ps.setInt(2, t.getTransactionId());
-            ps.setInt(3, t.getPos());
-        }, null);
+        return executeBatch(cacheData, cacheData.queueUpdateAmount, psUpdateAmount, MAX_BATCH_SIZE,
+                (t, p) -> p.setLong(t.getAmount()).setInt(t.getTransactionId()).setInt(t.getPos()), null);
     }
 
     @Getter

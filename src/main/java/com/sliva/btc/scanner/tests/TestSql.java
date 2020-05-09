@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,13 +15,13 @@
  */
 package com.sliva.btc.scanner.tests;
 
-import com.sliva.btc.scanner.db.DBConnection;
+import com.sliva.btc.scanner.db.DBConnectionSupplier;
+import com.sliva.btc.scanner.db.DBPreparedStatement;
 import com.sliva.btc.scanner.db.DbAddBlock;
 import com.sliva.btc.scanner.db.model.BtcBlock;
 import com.sliva.btc.scanner.util.Utils;
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import lombok.extern.slf4j.Slf4j;
 
@@ -32,7 +32,7 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class TestSql {
 
-    private static DBConnection conn;
+    private static DBConnectionSupplier conn;
 
     /**
      * @param args the command line arguments
@@ -51,12 +51,11 @@ public class TestSql {
 
     private static void addBlock(int height, String hash) throws SQLException {
         String sql = "INSERT INTO block(height,hash)VALUES(?,?)";
-        ThreadLocal<PreparedStatement> ps = conn.prepareStatement(sql);
-        ps.get().setInt(1, height);
-        ps.get().setBytes(2, Utils.id2bin(hash));
-        ps.get().executeUpdate();
+        DBPreparedStatement ps = conn.prepareStatement(sql);
+        ps.setParameters(p -> p.setInt(height).setBytes(Utils.id2bin(hash))).executeUpdate();
     }
 
+    @SuppressWarnings("CallToPrintStackTrace")
     private static void makeJDBCConnection() {
         try {
             Class.forName("com.mysql.jdbc.Driver");
@@ -69,8 +68,8 @@ public class TestSql {
 
         try {
             // DriverManager: The basic service for managing a set of JDBC drivers.
-            Connection conn = DriverManager.getConnection("jdbc:mysql://localhost:3306/btc?rewriteBatchedStatements=true", "root", "password");
-            if (conn != null) {
+            Connection conn2 = DriverManager.getConnection("jdbc:mysql://localhost:3306/btc?rewriteBatchedStatements=true", "root", "password");
+            if (conn2 != null) {
                 log.info("Connection Successful! Enjoy. Now it's time to push data");
             } else {
                 log.info("Failed to make connection!");
@@ -78,7 +77,6 @@ public class TestSql {
         } catch (SQLException e) {
             log.info("MySQL Connection Failed!");
             e.printStackTrace();
-            return;
         }
     }
 }

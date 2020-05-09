@@ -17,8 +17,6 @@ package com.sliva.btc.scanner.db;
 
 import com.sliva.btc.scanner.db.model.BtcBlock;
 import com.sliva.btc.scanner.util.Utils;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import lombok.Getter;
@@ -36,14 +34,14 @@ public class DbAddBlock extends DbUpdate {
     private static int MAX_INSERT_QUEUE_LENGTH = 30000;
     private static final String TABLE_NAME = "block";
     private static final String SQL_ADD = "INSERT INTO block(height,hash,txn_count)VALUES(?,?,?)";
-    private final ThreadLocal<PreparedStatement> psAdd;
+    private final DBPreparedStatement psAdd;
     private final CacheData cacheData;
 
-    public DbAddBlock(DBConnection conn) throws SQLException {
+    public DbAddBlock(DBConnectionSupplier conn) {
         this(conn, new CacheData());
     }
 
-    public DbAddBlock(DBConnection conn, CacheData cacheData) throws SQLException {
+    public DbAddBlock(DBConnectionSupplier conn, CacheData cacheData) {
         super(conn);
         this.psAdd = conn.prepareStatement(SQL_ADD);
         this.cacheData = cacheData;
@@ -68,7 +66,7 @@ public class DbAddBlock extends DbUpdate {
         return cacheData != null && cacheData.addQueue.size() >= MIN_BATCH_SIZE;
     }
 
-    public void add(BtcBlock btcBlock) throws SQLException {
+    public void add(BtcBlock btcBlock) {
         log.trace("add(btcBlock:{})", btcBlock);
         waitFullQueue(cacheData.addQueue, MAX_INSERT_QUEUE_LENGTH);
         synchronized (cacheData) {
@@ -78,11 +76,8 @@ public class DbAddBlock extends DbUpdate {
 
     @Override
     public int executeInserts() {
-        return executeBatch(cacheData, cacheData.addQueue, psAdd, MAX_BATCH_SIZE, (t, ps) -> {
-            ps.setInt(1, t.getHeight());
-            ps.setBytes(2, Utils.id2bin(t.getHash()));
-            ps.setInt(3, t.getTxnCount());
-        }, null);
+        return executeBatch(cacheData, cacheData.addQueue, psAdd, MAX_BATCH_SIZE,
+                (t, ps) -> ps.setInt(t.getHeight()).setBytes(Utils.id2bin(t.getHash())).setInt(t.getTxnCount()), null);
     }
 
     @Override

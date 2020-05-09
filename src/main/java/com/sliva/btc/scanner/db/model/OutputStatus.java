@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,11 +15,15 @@
  */
 package com.sliva.btc.scanner.db.model;
 
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
+
 /**
  *
  * @author Sliva Co
  */
-public class OutputStatus {
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
+public final class OutputStatus {
 
     public static final byte UNSPENT = 0;
     public static final byte SPENT = 1;

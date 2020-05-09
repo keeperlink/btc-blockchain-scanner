@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,48 +15,20 @@
  */
 package com.sliva.btc.scanner.tests;
 
-import com.sliva.btc.scanner.rpc.RpcClient;
-import com.sliva.btc.scanner.db.DBConnection;
-import com.sliva.btc.scanner.db.DbUpdateInput;
-import com.sliva.btc.scanner.db.DbCachedOutput;
-import com.sliva.btc.scanner.db.DbQueryInput;
-import com.sliva.btc.scanner.db.DbQueryInput.TxInputOutput;
-import com.sliva.btc.scanner.db.DbQueryOutput;
-import com.sliva.btc.scanner.db.DbQueryOutput.TxOutputInput;
-import com.sliva.btc.scanner.db.DbQueryTransaction;
-import com.sliva.btc.scanner.db.DbUpdateOutput;
-import com.sliva.btc.scanner.db.model.BtcAddress;
-import com.sliva.btc.scanner.db.model.BtcTransaction;
-import com.sliva.btc.scanner.db.model.OutputStatus;
-import com.sliva.btc.scanner.db.model.TxOutput;
-import com.sliva.btc.scanner.util.Utils;
-import java.io.File;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.ToString;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.codec.digest.DigestUtils;
-import static org.apache.commons.codec.digest.MessageDigestAlgorithms.MD5;
-import org.apache.commons.io.FileUtils;
-import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient;
-import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient.RawTransaction;
-import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient.RawTransaction.In;
-import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient.RawTransaction.Out;
 
 /**
  *
  * @author Sliva Co
  */
 @Slf4j
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public class FixAddresses {
 //
 //    private static BtcClient client;
-//    private static final DBConnection conn = new DBConnection("btc2");
+//    private static final DBConnectionSupplier conn = new DBConnectionSupplier("btc2");
 //
 //    /**
 //     * @param args the command line arguments

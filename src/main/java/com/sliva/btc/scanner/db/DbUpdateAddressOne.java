@@ -17,7 +17,6 @@ package com.sliva.btc.scanner.db;
 
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.src.SrcAddressType;
-import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -44,15 +43,15 @@ public class DbUpdateAddressOne extends DbUpdate {
     private static final String SQL_ADD = "INSERT INTO __address_table_name__(address_id,address,wallet_id)VALUES(?,?,?)";
     private static final String SQL_UPDATE_WALLET = "UPDATE __address_table_name__ SET wallet_id=? WHERE address_id=?";
     private final SrcAddressType addressType;
-    private final ThreadLocal<PreparedStatement> psAdd;
-    private final ThreadLocal<PreparedStatement> psUpdateWallet;
+    private final DBPreparedStatement psAdd;
+    private final DBPreparedStatement psUpdateWallet;
     private final CacheData cacheData;
 
-    public DbUpdateAddressOne(DBConnection conn, SrcAddressType addressType) throws SQLException {
+    public DbUpdateAddressOne(DBConnectionSupplier conn, SrcAddressType addressType) throws SQLException {
         this(conn, addressType, new CacheData());
     }
 
-    public DbUpdateAddressOne(DBConnection conn, SrcAddressType addressType, CacheData cacheData) {
+    public DbUpdateAddressOne(DBConnectionSupplier conn, SrcAddressType addressType, CacheData cacheData) {
         super(conn);
         this.addressType = addressType;
         this.psAdd = conn.prepareStatement(fixTableName(SQL_ADD));
@@ -121,17 +120,15 @@ public class DbUpdateAddressOne extends DbUpdate {
 
     @Override
     public int executeInserts() {
-        return executeBatch(cacheData, cacheData.addQueue, psAdd, MAX_BATCH_SIZE, (t, ps) -> {
-            ps.setInt(1, t.getAddressId());
-            ps.setBytes(2, t.getAddress());
-            ps.setInt(3, t.getWalletId());
-        }, executed -> {
-            synchronized (cacheData) {
-                executed.stream()
-                        .peek(t -> cacheData.addMap.remove(Hex.toHexString(t.getAddress())))
-                        .map(BtcAddress::getAddressId).forEach(cacheData.addMapId::remove);
-            }
-        });
+        return executeBatch(cacheData, cacheData.addQueue, psAdd, MAX_BATCH_SIZE,
+                (t, p) -> p.setInt(t.getAddressId()).setBytes(t.getAddress()).setInt(t.getWalletId()),
+                executed -> {
+                    synchronized (cacheData) {
+                        executed.stream()
+                                .peek(t -> cacheData.addMap.remove(Hex.toHexString(t.getAddress())))
+                                .map(BtcAddress::getAddressId).forEach(cacheData.addMapId::remove);
+                    }
+                });
     }
 
     @Override
@@ -140,10 +137,8 @@ public class DbUpdateAddressOne extends DbUpdate {
     }
 
     private int _executeUpdateWallet() {
-        return executeBatch(cacheData, cacheData.updateWalletQueue, psUpdateWallet, MAX_BATCH_SIZE, (t, ps) -> {
-            ps.setInt(1, t.getWalletId());
-            ps.setInt(2, t.getAddressId());
-        }, null);
+        return executeBatch(cacheData, cacheData.updateWalletQueue, psUpdateWallet, MAX_BATCH_SIZE,
+                (t, p) -> p.setInt(t.getWalletId()).setInt(t.getAddressId()), null);
     }
 
     private String fixTableName(String sql) {

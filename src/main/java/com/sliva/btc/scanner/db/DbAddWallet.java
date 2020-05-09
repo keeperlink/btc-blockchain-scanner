@@ -16,7 +16,6 @@
 package com.sliva.btc.scanner.db;
 
 import com.sliva.btc.scanner.db.model.BtcWallet;
-import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -36,15 +35,15 @@ public class DbAddWallet extends DbUpdate {
     private static int MAX_INSERT_QUEUE_LENGTH = 2000;
     private static final String TABLE_NAME = "wallet";
     private static final String SQL = "INSERT INTO wallet(wallet_id,name,details)VALUES(?,?,?)";
-    private final ThreadLocal<PreparedStatement> psAdd;
+    private final DBPreparedStatement psAdd;
     private final CacheData cacheData;
     private final DbQueryWallet dbQueryWallet;
 
-    public DbAddWallet(DBConnection conn) {
+    public DbAddWallet(DBConnectionSupplier conn) {
         this(conn, new CacheData());
     }
 
-    public DbAddWallet(DBConnection conn, CacheData cacheData) {
+    public DbAddWallet(DBConnectionSupplier conn, CacheData cacheData) {
         super(conn);
         this.psAdd = conn.prepareStatement(SQL);
         this.cacheData = cacheData;
@@ -94,11 +93,8 @@ public class DbAddWallet extends DbUpdate {
 
     @Override
     public int executeInserts() {
-        return executeBatch(cacheData, cacheData.addQueue, psAdd, MAX_BATCH_SIZE, (t, ps) -> {
-            ps.setInt(1, t.getWalletId());
-            ps.setString(2, t.getName());
-            ps.setString(3, t.getDescription());
-        }, null);
+        return executeBatch(cacheData, cacheData.addQueue, psAdd, MAX_BATCH_SIZE,
+                (t, ps) -> ps.setInt(t.getWalletId()).setString(t.getName()).setString(t.getDescription()), null);
     }
 
     @Override
@@ -109,7 +105,7 @@ public class DbAddWallet extends DbUpdate {
     private int getNextWalletId() throws SQLException {
         synchronized (cacheData.lastWalletId) {
             if (cacheData.lastWalletId.get() == 0) {
-                cacheData.lastWalletId.set(dbQueryWallet.getMaxId());
+                cacheData.lastWalletId.set(dbQueryWallet.getMaxId().orElse(0));
             }
             return cacheData.lastWalletId.incrementAndGet();
         }

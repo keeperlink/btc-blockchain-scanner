@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,12 +17,13 @@ package com.sliva.btc.scanner.db;
 
 import com.sliva.btc.scanner.db.model.BtcTransaction;
 import com.sliva.btc.scanner.util.Utils;
-import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
+import lombok.NonNull;
 
 /**
  *
@@ -43,18 +44,18 @@ public class DbQueryTransaction {
             = "SELECT I.transaction_id FROM input I"
             + " INNER JOIN output O ON O.transaction_id=I.in_transaction_id AND O.pos=I.in_pos"
             + " WHERE O.address_id=?";
-    private final ThreadLocal<PreparedStatement> psQueryTxnsNoOutputs;
-    private final ThreadLocal<PreparedStatement> psQueryTxnsRange;
-    private final ThreadLocal<PreparedStatement> psQueryTxnsInBlock;
-    private final ThreadLocal<PreparedStatement> psCountTxnsInBlock;
-    private final ThreadLocal<PreparedStatement> psFindTransactionByTxid;
-    private final ThreadLocal<PreparedStatement> psFindTransactionIdByTxid;
-    private final ThreadLocal<PreparedStatement> psFindTransactionById;
-    private final ThreadLocal<PreparedStatement> psQueryTransactionsInBlock;
-    private final ThreadLocal<PreparedStatement> psFindLastTransaction;
-    private final ThreadLocal<PreparedStatement> psQuerySpeninfTransactionsByAddress;
+    private final DBPreparedStatement psQueryTxnsNoOutputs;
+    private final DBPreparedStatement psQueryTxnsRange;
+    private final DBPreparedStatement psQueryTxnsInBlock;
+    private final DBPreparedStatement psCountTxnsInBlock;
+    private final DBPreparedStatement psFindTransactionByTxid;
+    private final DBPreparedStatement psFindTransactionIdByTxid;
+    private final DBPreparedStatement psFindTransactionById;
+    private final DBPreparedStatement psQueryTransactionsInBlock;
+    private final DBPreparedStatement psFindLastTransaction;
+    private final DBPreparedStatement psQuerySpeninfTransactionsByAddress;
 
-    public DbQueryTransaction(DBConnection conn) {
+    public DbQueryTransaction(DBConnectionSupplier conn) {
         this.psQueryTxnsNoOutputs = conn.prepareStatement(SQL_QUERY_TXNS_NO_OUTPUTS);
         this.psQueryTxnsRange = conn.prepareStatement(SQL_QUERY_TXNS_RANGE);
         this.psQueryTxnsInBlock = conn.prepareStatement(SQL_QUERY_TXNS_IN_BLOCK);
@@ -68,8 +69,7 @@ public class DbQueryTransaction {
     }
 
     public BtcTransaction findTransaction(String txid) throws SQLException {
-        psFindTransactionByTxid.get().setBytes(1, Utils.id2bin(txid));
-        try (ResultSet rs = psFindTransactionByTxid.get().executeQuery()) {
+        try (ResultSet rs = psFindTransactionByTxid.setParameters(ps -> ps.setBytes(Utils.id2bin(txid))).executeQuery()) {
             return rs.next() ? BtcTransaction.builder()
                     .transactionId(rs.getInt(1))
                     .txid(txid)
@@ -80,16 +80,13 @@ public class DbQueryTransaction {
         }
     }
 
-    public int findTransactionId(String txid) throws SQLException {
-        psFindTransactionIdByTxid.get().setBytes(1, Utils.id2bin(txid));
-        try (ResultSet rs = psFindTransactionIdByTxid.get().executeQuery()) {
-            return rs.next() ? rs.getInt(1) : 0;
-        }
+    @NonNull
+    public Optional<Integer> findTransactionId(String txid) throws SQLException {
+        return DBUtils.readInteger(psFindTransactionIdByTxid.setParameters(ps -> ps.setBytes(Utils.id2bin(txid))));
     }
 
     public BtcTransaction findTransaction(int transactionId) throws SQLException {
-        psFindTransactionById.get().setInt(1, transactionId);
-        try (ResultSet rs = psFindTransactionById.get().executeQuery()) {
+        try (ResultSet rs = psFindTransactionById.setParameters(ps -> ps.setInt(transactionId)).executeQuery()) {
             return rs.next() ? BtcTransaction.builder()
                     .transactionId(transactionId)
                     .txid(Utils.id2hex(rs.getBytes(1)))
@@ -101,8 +98,7 @@ public class DbQueryTransaction {
     }
 
     public List<BtcTransaction> getTxnsNoOutputs(int limit) throws SQLException {
-        psQueryTxnsNoOutputs.get().setMaxRows(limit);
-        try (ResultSet rs = psQueryTxnsNoOutputs.get().executeQuery()) {
+        try (ResultSet rs = psQueryTxnsNoOutputs.setMaxRows(limit).executeQuery()) {
             List<BtcTransaction> result = new ArrayList<>();
             while (rs.next()) {
                 result.add(BtcTransaction.builder()
@@ -118,9 +114,7 @@ public class DbQueryTransaction {
     }
 
     public List<BtcTransaction> getTxnsRangle(int startTransactionId, int endTransactionId) throws SQLException {
-        psQueryTxnsRange.get().setInt(1, startTransactionId);
-        psQueryTxnsRange.get().setInt(2, endTransactionId);
-        try (ResultSet rs = psQueryTxnsRange.get().executeQuery()) {
+        try (ResultSet rs = psQueryTxnsRange.setParameters(ps -> ps.setInt(startTransactionId).setInt(endTransactionId)).executeQuery()) {
             List<BtcTransaction> result = new ArrayList<>();
             while (rs.next()) {
                 result.add(BtcTransaction.builder()
@@ -136,8 +130,7 @@ public class DbQueryTransaction {
     }
 
     public List<String> getTxnsInBlock(int blockHeight) throws SQLException {
-        psQueryTxnsInBlock.get().setInt(1, blockHeight);
-        try (ResultSet rs = psQueryTxnsInBlock.get().executeQuery()) {
+        try (ResultSet rs = psQueryTxnsInBlock.setParameters(ps -> ps.setInt(blockHeight)).executeQuery()) {
             List<String> result = new ArrayList<>();
             while (rs.next()) {
                 result.add(Utils.id2hex(rs.getBytes(1)));
@@ -147,15 +140,11 @@ public class DbQueryTransaction {
     }
 
     public int countTxnsInBlock(int blockHeight) throws SQLException {
-        psCountTxnsInBlock.get().setInt(1, blockHeight);
-        try (ResultSet rs = psCountTxnsInBlock.get().executeQuery()) {
-            return rs.next() ? rs.getInt(1) : 0;
-        }
+        return DBUtils.readInteger(psCountTxnsInBlock.setParameters(ps -> ps.setInt(blockHeight))).orElse(0);
     }
 
     public List<BtcTransaction> getTransactionsInBlock(int blockHeight) throws SQLException {
-        psQueryTransactionsInBlock.get().setInt(1, blockHeight);
-        try (ResultSet rs = psQueryTransactionsInBlock.get().executeQuery()) {
+        try (ResultSet rs = psQueryTransactionsInBlock.setParameters(ps -> ps.setInt(blockHeight)).executeQuery()) {
             List<BtcTransaction> result = null;
             while (rs.next()) {
                 if (result == null) {
@@ -174,7 +163,7 @@ public class DbQueryTransaction {
     }
 
     public BtcTransaction getLastTransaction() throws SQLException {
-        try (ResultSet rs = psFindLastTransaction.get().executeQuery()) {
+        try (ResultSet rs = psFindLastTransaction.executeQuery()) {
             return rs.next() ? BtcTransaction.builder()
                     .transactionId(rs.getInt(1))
                     .txid(Utils.id2hex(rs.getBytes(2)))
@@ -185,14 +174,12 @@ public class DbQueryTransaction {
         }
     }
 
-    public int getLastTransactionId() throws SQLException {
-        try (ResultSet rs = psFindLastTransaction.get().executeQuery()) {
-            return rs.next() ? rs.getInt(1) : 0;
-        }
+    @NonNull
+    public Optional<Integer> getLastTransactionId() throws SQLException {
+        return DBUtils.readInteger(psFindLastTransaction);
     }
 
     public Collection<Integer> getSpendingTransactionsByAddress(int addressId) throws SQLException {
-        psQuerySpeninfTransactionsByAddress.get().setInt(1, addressId);
-        return DBUtils.readIntegersToSet(psQuerySpeninfTransactionsByAddress.get());
+        return DBUtils.readIntegersToSet(psQuerySpeninfTransactionsByAddress.setParameters(ps -> ps.setInt(addressId)));
     }
 }

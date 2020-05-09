@@ -15,6 +15,7 @@
  */
 package com.sliva.btc.scanner.neo4j;
 
+import com.sliva.btc.scanner.db.model.InOutKey;
 import com.sliva.btc.scanner.util.Utils;
 import java.io.File;
 import java.io.IOException;
@@ -26,10 +27,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.concurrent.CompletionStage;
-import lombok.Builder;
-import lombok.EqualsAndHashCode;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.ToString;
+import lombok.experimental.SuperBuilder;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.neo4j.driver.v1.Record;
@@ -161,11 +162,13 @@ public class NeoQueries implements AutoCloseable {
         return maxVal;
     }
 
+    @NonNull
     public OptionalInt getResultAsInteger(String query) {
         Optional<Record> r = readFirstRecord(run(query));
         return r.isPresent() ? OptionalInt.of(r.get().get(0).asInt()) : OptionalInt.empty();
     }
 
+    @NonNull
     public OptionalInt getResultAsInteger(String query, Value params) {
         Optional<Record> r = readFirstRecord(run(query, params));
         return r.isPresent() ? OptionalInt.of(r.get().get(0).asInt()) : OptionalInt.empty();
@@ -228,13 +231,10 @@ public class NeoQueries implements AutoCloseable {
     }
 
     @Getter
-    @Builder
-    @ToString
-    @EqualsAndHashCode(of = {"transactionId", "pos"})
-    public static class OutputWithWallet {
+    @SuperBuilder(toBuilder = true)
+    @ToString(callSuper = true)
+    public static class OutputWithWallet extends InOutKey {
 
-        private final int transactionId;
-        private final short pos;
         private final int walletId;
         private final String walletName;
     }

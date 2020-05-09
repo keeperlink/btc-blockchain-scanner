@@ -18,6 +18,8 @@ package com.sliva.btc.scanner.util;
 import com.sliva.btc.scanner.db.model.SighashType;
 import java.util.ArrayList;
 import java.util.List;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 import org.bitcoinj.core.TransactionInput;
 import org.bitcoinj.core.TransactionWitness;
 import org.bitcoinj.script.Script;
@@ -26,6 +28,7 @@ import org.bitcoinj.script.Script;
  *
  * @author whost
  */
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class SigUtils {
 
     private static final byte SIG_TAG = 0x30;

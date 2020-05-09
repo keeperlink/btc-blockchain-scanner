@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,8 +23,10 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -39,11 +41,11 @@ public class DbCachedOutput implements AutoCloseable {
     private final DbQueryOutput queryOutput;
     private final CacheData cacheData;
 
-    public DbCachedOutput(DBConnection conn) throws SQLException {
+    public DbCachedOutput(DBConnectionSupplier conn) throws SQLException {
         this(conn, new CacheData());
     }
 
-    public DbCachedOutput(DBConnection conn, CacheData cacheData) throws SQLException {
+    public DbCachedOutput(DBConnectionSupplier conn, CacheData cacheData) throws SQLException {
         updateOutput = new DbUpdateOutput(conn, cacheData.updateCachedData);
         queryOutput = new DbQueryOutput(conn);
         this.cacheData = cacheData;
@@ -124,41 +126,35 @@ public class DbCachedOutput implements AutoCloseable {
             ol = cacheData.cacheMap.get(transactionId);
         }
         lt = queryOutput.getOutputs(transactionId);
-        if (lt != null) {
-            if (ol != null) {
-                ol.merge(lt, true);
-                updateCache(transactionId, ol);
-                return ol.getList();
-            } else {
-                updateCache(lt);
-            }
+        if (ol != null) {
+            ol.merge(lt, true);
+            updateCache(transactionId, ol);
+            return ol.getList();
+        } else {
+            updateCache(lt);
         }
         return lt;
     }
 
-    public TxOutput getOutput(int transactionId, short pos) throws SQLException {
-        OutputsList ol = cacheData.cacheMap.get(transactionId);
-        TxOutput result = ol == null ? null : ol.find(pos);
-        if (result != null) {
+    @NonNull
+    public Optional<TxOutput> getOutput(int transactionId, short pos) throws SQLException {
+        Optional<OutputsList> ol = Optional.ofNullable(cacheData.cacheMap.get(transactionId));
+        Optional<TxOutput> result = ol.map(o -> o.find(pos));
+        if (result.isPresent()) {
             updateCache(transactionId);
             return result;
         }
-        result = updateOutput.getCacheData().getQueueMap().get(new InOutKey(transactionId, pos));
-        if (result != null) {
+        result = Optional.ofNullable(updateOutput.getCacheData().getQueueMap().get(new InOutKey(transactionId, pos)));
+        if (result.isPresent()) {
             updateCache(transactionId);
             return result;
         }
-        TxOutput to = queryOutput.getOutput(transactionId, pos);
-        if (to != null) {
-            updateCache(to);
+        result = queryOutput.getOutput(transactionId, pos);
+        if (result.isPresent()) {
+            updateCache(result.get());
         }
-        return to;
+        return result;
     }
-//
-//    private static TxOutput findOutput(int transactionId, int pos, Map<Integer, List<TxOutput>> map) {
-//        List<TxOutput> list = map.get(transactionId);
-//        return list == null ? null : list.stream().filter((t) -> t.getPos() == pos).findAny().orElse(null);
-//    }
 
     private void updateCache(int transactionId) throws SQLException {
         synchronized (cacheData) {
@@ -230,7 +226,7 @@ public class DbCachedOutput implements AutoCloseable {
         private final List<TxOutput> list = new ArrayList<>();
         private boolean complete;
 
-        public OutputsList(Collection<TxOutput> list, boolean complete) {
+        OutputsList(Collection<TxOutput> list, boolean complete) {
             this.list.addAll(list);
             this.complete = complete;
         }

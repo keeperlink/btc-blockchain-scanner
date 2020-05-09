@@ -20,12 +20,12 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import com.sliva.btc.scanner.db.DBConnection;
+import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import com.sliva.btc.scanner.db.DbQueryInput;
 import com.sliva.btc.scanner.db.DbQueryOutput;
 import com.sliva.btc.scanner.db.DbQueryTransaction;
-import com.sliva.btc.scanner.neo4j.NeoQueries;
 import com.sliva.btc.scanner.neo4j.NeoConnection;
+import com.sliva.btc.scanner.neo4j.NeoQueries;
 import com.sliva.btc.scanner.neo4j.NeoQueries.PrepData;
 import com.sliva.btc.scanner.src.DbAddress;
 import com.sliva.btc.scanner.src.DbBlockProvider;
@@ -67,7 +67,7 @@ public class RunNeoLoader {
     private static final int DEFAULT_START_TRANSACTION_ID = 1;
     private static final int DEFAULT_BATCH_SIZE = 5000;
     private static final String DEFAULT_STOP_FILE_NAME = "/tmp/btc-neo4j2-stop";
-    private final DBConnection dbCon;
+    private final DBConnectionSupplier dbCon;
 //    private final DbQueryAddress queryAddress;
     private final DbQueryTransaction queryTransaction;
     private final DbQueryInput queryInput;
@@ -102,7 +102,7 @@ public class RunNeoLoader {
     }
 
     public RunNeoLoader(CommandLine cmd) {
-        DBConnection.applyArguments(cmd);
+        DBConnectionSupplier.applyArguments(cmd);
         NeoConnection.applyArguments(cmd);
         startFromFile = cmd.hasOption("start-from") ? new Utils.NumberFile(cmd.getOptionValue("start-from", Integer.toString(DEFAULT_START_TRANSACTION_ID))) : null;
         batchSize = Integer.parseInt(cmd.getOptionValue("batch-size", Integer.toString(DEFAULT_BATCH_SIZE)));
@@ -112,7 +112,7 @@ public class RunNeoLoader {
         safeRun = cmd.hasOption("start-from") || recordsBack > 0 ? true
                 : (!cmd.hasOption("safe-run") ? DEFAULT_SAFE_RUN : "true".equalsIgnoreCase(cmd.getOptionValue("safe-run")));
         int nTxnThreads = Integer.parseInt(cmd.getOptionValue("threads", Integer.toString(DEFAULT_TXN_THREADS)));
-        dbCon = new DBConnection();
+        dbCon = new DBConnectionSupplier();
 //        queryAddress = new DbQueryAddressCombo(dbCon);
         queryTransaction = new DbQueryTransaction(dbCon);
         blockProvider = new DbBlockProvider(dbCon);
@@ -187,7 +187,7 @@ public class RunNeoLoader {
             final int lastTransactionId = neoQueries.getLastTransactionId();
             startTransaction = lastTransactionId + 1 - recordsBack;
         }
-        endTransaction = queryTransaction.getLastTransactionId();
+        endTransaction = queryTransaction.getLastTransactionId().orElse(0);
         log.debug("startTransaction: {}, endTransaction: {}", startTransaction, endTransaction);
     }
 
@@ -315,7 +315,7 @@ public class RunNeoLoader {
         options.addOption(null, "records-back", true, "Check last number of trasnactions. Process will run in safe mode (--safe-run=true)");
         options.addOption(null, "stop-file", true, "File to be watched on each new block to stop process. If file is present the process stops and file renamed by adding '1' to the end. Default: " + DEFAULT_STOP_FILE_NAME);
         options.addOption(null, "threads", true, "Number of threads to run. Default is " + DEFAULT_TXN_THREADS + ". To disable parallel threading set value to 0");
-        DBConnection.addOptions(options);
+        DBConnectionSupplier.addOptions(options);
         NeoConnection.addOptions(options);
         return options;
 

@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -58,7 +58,7 @@ public class RunPrepareBlockFiles {
 //        );
         Collection<File> files = BlockFileLoader.getReferenceClientBlockFileList(readDir);
         ExecutorService executor = Executors.newFixedThreadPool(THREADS);
-        for (File ff : files) {
+        files.stream().forEach(ff -> {
             log.info("File: " + ff);
             executor.execute(() -> {
                 log.info("Processing File: " + ff);
@@ -78,7 +78,7 @@ public class RunPrepareBlockFiles {
                     }
                 }
             });
-        }
+        });
         executor.shutdown();
         log.info("Waiting completion...");
         executor.awaitTermination(999, TimeUnit.DAYS);

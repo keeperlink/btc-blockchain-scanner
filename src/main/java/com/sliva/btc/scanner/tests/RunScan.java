@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,17 +15,16 @@
  */
 package com.sliva.btc.scanner.tests;
 
-import com.sliva.btc.scanner.rpc.RpcClient;
+import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import com.sliva.btc.scanner.db.DbAddBlock;
-import com.sliva.btc.scanner.db.DbUpdateTransaction;
-import com.sliva.btc.scanner.db.DBConnection;
 import com.sliva.btc.scanner.db.DbQueryBlock;
 import com.sliva.btc.scanner.db.DbQueryTransaction;
+import com.sliva.btc.scanner.db.DbUpdateTransaction;
 import com.sliva.btc.scanner.db.model.BtcBlock;
 import com.sliva.btc.scanner.db.model.BtcTransaction;
 import com.sliva.btc.scanner.rpc.ParallelGetBlock;
+import com.sliva.btc.scanner.rpc.RpcClient;
 import com.sliva.btc.scanner.util.Utils;
-import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
@@ -46,7 +45,7 @@ public class RunScan {
     private static final boolean RUN_SAFE_MODE = true;
     private static final boolean UPDATE_LATEST = true;
     private static BitcoinJSONRPCClient client;
-    private static final DBConnection conn= new DBConnection();
+    private static final DBConnectionSupplier conn = new DBConnectionSupplier();
     private static DbQueryBlock queryBlock;
     private static DbQueryTransaction queryTransaction;
 
@@ -62,7 +61,7 @@ public class RunScan {
         BitcoindRpcClient.BlockChainInfo bci = client.getBlockChainInfo();
         log.info("BlockChainInfo: {}", bci);
         if (UPDATE_LATEST) {
-            int firstBlock = queryBlock.findLastHeight() + 1;
+            int firstBlock = queryBlock.findLastHeight().orElse(-1) + 1;
             int numBlocks = bci.blocks() - firstBlock + 1;
             log.info("firstBlock={}, numBlocks={}", firstBlock, numBlocks);
             if (numBlocks > 0) {
@@ -103,12 +102,9 @@ public class RunScan {
         if (!RUN_SAFE_MODE || queryBlock.getBlockHash(block.height()) == null) {
             try {
                 addBlock.add(BtcBlock.builder().height(block.height()).hash(block.hash()).txnCount(block.tx().size()).build());
-            } catch (SQLException e) {
+            } catch (Exception e) {
                 log.info("saveBlock(): Err: " + e.getClass() + ": " + e.getMessage());
-                BtcBlock btcBlock = queryBlock.getBlock(block.height());
-                if (btcBlock == null) {
-                    throw e;
-                }
+                queryBlock.getBlock(block.height()).orElseThrow(() -> new SQLException(e));
                 txnsInDb = queryTransaction.getTxnsInBlock(block.height());
                 if (txnsInDb != null && txnsInDb.size() == block.tx().size()) {
                     return;

@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +16,8 @@
 package com.sliva.btc.scanner.tests;
 
 import com.sliva.btc.scanner.Main;
-import com.sliva.btc.scanner.db.DBConnection;
+import com.sliva.btc.scanner.db.DBConnectionSupplier;
+import com.sliva.btc.scanner.db.DBPreparedStatement;
 import com.sliva.btc.scanner.db.DBUtils;
 import com.sliva.btc.scanner.db.DbAddWallet;
 import com.sliva.btc.scanner.db.DbUpdateAddress;
@@ -25,8 +26,6 @@ import com.sliva.btc.scanner.db.model.BtcWallet;
 import com.sliva.btc.scanner.src.SrcAddressType;
 import com.sliva.btc.scanner.util.IntCollection;
 import java.io.File;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -44,7 +43,6 @@ import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
-import org.apache.commons.codec.binary.Hex;
 
 /**
  *
@@ -181,22 +179,22 @@ public class RunUpdateWallets {
             = "SELECT I.transaction_id FROM input I"
             + " INNER JOIN output O ON O.transaction_id=I.in_transaction_id AND O.pos=I.in_pos"
             + " WHERE O.address_id=?";
-    private final DBConnection dbCon;
-    private final ThreadLocal<PreparedStatement> psAddressesNoWallet;
-    private final ThreadLocal<PreparedStatement> psRelatedAddresses;
-    private final ThreadLocal<PreparedStatement> psRelatedWallets;
-    private final ThreadLocal<PreparedStatement> psRelatedWalletsByAddress;
-//    private  final ThreadLocal<PreparedStatement> psUpdateAddressWallet;
-    private final ThreadLocal<PreparedStatement> psQueryMergeTransaction;
-    private final ThreadLocal<PreparedStatement> psQueryAddressIdsByWallet;
-    private final ThreadLocal<PreparedStatement> psQueryAddressesByWallet;
-    private final ThreadLocal<PreparedStatement> psQueryUnusedWallets;
-    private final ThreadLocal<PreparedStatement> psQueryAllAddressesByWallet;
-    private final ThreadLocal<PreparedStatement> psQueryMissingWalletRecords;
-    private final ThreadLocal<PreparedStatement> psQueryTransactionsWithDifferentInputWallets;
-    private final ThreadLocal<PreparedStatement> psQueryWalletdByTransaction;
-    private final ThreadLocal<PreparedStatement> psQuerySpendTransactionsByAddress;
-    private final Collection<ThreadLocal<PreparedStatement>> psUpdateAddressWalletPerTable;
+    private final DBConnectionSupplier dbCon;
+    private final DBPreparedStatement psAddressesNoWallet;
+    private final DBPreparedStatement psRelatedAddresses;
+    private final DBPreparedStatement psRelatedWallets;
+    private final DBPreparedStatement psRelatedWalletsByAddress;
+//    private  final DBPreparedStatement psUpdateAddressWallet;
+    private final DBPreparedStatement psQueryMergeTransaction;
+    private final DBPreparedStatement psQueryAddressIdsByWallet;
+    private final DBPreparedStatement psQueryAddressesByWallet;
+    private final DBPreparedStatement psQueryUnusedWallets;
+    private final DBPreparedStatement psQueryAllAddressesByWallet;
+    private final DBPreparedStatement psQueryMissingWalletRecords;
+    private final DBPreparedStatement psQueryTransactionsWithDifferentInputWallets;
+    private final DBPreparedStatement psQueryWalletdByTransaction;
+    private final DBPreparedStatement psQuerySpendTransactionsByAddress;
+    private final Collection<DBPreparedStatement> psUpdateAddressWalletPerTable;
     private final ExecutorService execQuery;
     private final File stopFile;
     private final Set<Integer> addressesToUpdate = new HashSet<>();
@@ -222,9 +220,9 @@ public class RunUpdateWallets {
         readRowsBatch = Integer.parseInt(cmd.getOptionValue("batch-size", Integer.toString(DEFAULT_READ_ROWS_BATCH)));
         addressType = SrcAddressType.valueOf(cmd.getOptionValue("address-type", DEFAULT_ADDRESS_TYPE.name()));
         execQuery = Executors.newFixedThreadPool(Integer.parseInt(cmd.getOptionValue("threads", Integer.toString(DEFAULT_TXN_THREADS))));
-        DBConnection.applyArguments(cmd);
+        DBConnectionSupplier.applyArguments(cmd);
 
-        dbCon = new DBConnection();
+        dbCon = new DBConnectionSupplier();
         psAddressesNoWallet = dbCon.prepareStatement(fixTableName(SQL_QUERY_ADDRESSES_NO_WALLET));
         psRelatedAddresses = dbCon.prepareStatement(fixTableName(SQL_QUERY_RELATED_ADDRESSES));
         psRelatedWallets = dbCon.prepareStatement(fixTableName(SQL_QUERY_RELATED_WALLETS));
@@ -252,22 +250,15 @@ public class RunUpdateWallets {
         try (DbAddWallet addWallet = new DbAddWallet(dbCon);
                 DbUpdateAddress updateAddress = new DbUpdateAddress(dbCon)) {
 
-            try (ResultSet rs = psQueryMissingWalletRecords.get().executeQuery()) {
-                while (rs.next()) {
-                    int walletId = rs.getInt(1);
-                    log.warn("Found missing wallet record: {}", walletId);
-                    addWallet.add(BtcWallet.builder().walletId(walletId).build());
-                }
-                addWallet.flushCache();
-            }
-
-            try (ResultSet rs = psQueryUnusedWallets.get().executeQuery()) {
-                while (rs.next()) {
-                    unusedWallets.add(rs.getInt(1));
-                }
-            }
+            psQueryMissingWalletRecords.executeQuery(rs
+                    -> {
+                int walletId = rs.getInt(1);
+                log.warn("Found missing wallet record: {}", walletId);
+                addWallet.add(BtcWallet.builder().walletId(walletId).build());
+            });
+            addWallet.flushCache();
+            unusedWallets.addAll(DBUtils.readIntegersToSet(psQueryUnusedWallets));
             log.info("Unused wallets loaded: {}", unusedWallets.size());
-//            if (true) return;
 
             for (int batch = 0;; batch++) {
                 if (stopFile.exists()) {
@@ -276,12 +267,7 @@ public class RunUpdateWallets {
                     break;
                 }
                 log.debug("Start Batch #{}", batch);
-                psAddressesNoWallet.get().setMaxRows(readRowsBatch);
-                try (ResultSet rs = psAddressesNoWallet.get().executeQuery()) {
-                    while (rs.next()) {
-                        addressesToUpdate.add(rs.getInt(1));
-                    }
-                }
+                addressesToUpdate.addAll(DBUtils.readIntegersToSet(psAddressesNoWallet.setMaxRows(readRowsBatch)));
                 int loops = 0;
                 while (!addressesToUpdate.isEmpty()) {
                     int addressId;
@@ -304,29 +290,25 @@ public class RunUpdateWallets {
     }
 
     private void processAddress(int addressId, DbAddWallet addWallet, DbUpdateAddress updateAddress) throws SQLException, InterruptedException {
-        psRelatedAddresses.get().setInt(1, addressId);
-        psRelatedAddresses.get().setFetchSize(Integer.MIN_VALUE);
         Set<Integer> relatedWallets = new HashSet<>();
         IntCollection zeroWalletAddresses = new IntCollection(10000);
-        try (ResultSet rs = psRelatedAddresses.get().executeQuery()) {
-            int n = 0;
-            while (rs.next()) {
-                int adrId = rs.getInt(1);
-                Integer walletId = rs.getObject(2, Integer.class);
-                if (walletId == null) {
-                    log.warn("Unexpected: wallet_id is null for address_id={}", adrId);
+        AtomicInteger counter = new AtomicInteger();
+        psRelatedAddresses.setParameters(p -> p.setInt(addressId)).setFetchSize(Integer.MIN_VALUE).executeQuery(rs -> {
+            int adrId = rs.getInt(1);
+            Integer walletId = rs.getObject(2, Integer.class);
+            if (walletId == null) {
+                log.warn("Unexpected: wallet_id is null for address_id={}", adrId);
+            } else {
+                if (walletId != 0) {
+                    relatedWallets.add(walletId);
                 } else {
-                    if (walletId != 0) {
-                        relatedWallets.add(walletId);
-                    } else {
-                        zeroWalletAddresses.add(adrId);
-                    }
-                }
-                if (++n % 1000000 == 0) {
-                    log.debug("Loading addresses from DB: {} M", n / 1000000);
+                    zeroWalletAddresses.add(adrId);
                 }
             }
-        }
+            if (counter.incrementAndGet() % 1000000 == 0) {
+                log.debug("Loading addresses from DB: {} M", counter.get() / 1000000);
+            }
+        });
         Collection<Integer> transactionsToCheck = new HashSet<>();
         if (relatedWallets.isEmpty() && zeroWalletAddresses.isEmpty()) {
             //address never been spent - assign new wallet_id
@@ -370,8 +352,7 @@ public class RunUpdateWallets {
     }
 
     private Collection<Integer> getSpendTransactionsByAddress(int addressId) throws SQLException {
-        psQuerySpendTransactionsByAddress.get().setInt(1, addressId);
-        return DBUtils.readIntegersToSet(psQuerySpendTransactionsByAddress.get());
+        return DBUtils.readIntegersToSet(psQuerySpendTransactionsByAddress.setParameters(p -> p.setInt(addressId)));
     }
 
     private int processWallet(int walletId, Collection<Integer> relatedWallets) throws SQLException, InterruptedException {
@@ -384,12 +365,7 @@ public class RunUpdateWallets {
             log.debug("Merging wallets: ({}, {}) => {}", walletId, a, walletId);
 //            printMergeDetails(walletId, a);
             try {
-                int nUpdated = 0;
-                for (ThreadLocal<PreparedStatement> ps : psUpdateAddressWalletPerTable) {
-                    ps.get().setInt(1, walletId);
-                    ps.get().setInt(2, a);
-                    nUpdated += ps.get().executeUpdate();
-                }
+                int nUpdated = psUpdateAddressWalletPerTable.stream().map(ps -> ps.setParameters(p -> p.setInt(walletId).setInt(a)).executeUpdate()).reduce(0, Integer::sum);
                 result.addAndGet(nUpdated);
                 log.debug("Records merged: {}", nUpdated);
                 if (isWalletUsed(a)) {
@@ -415,42 +391,33 @@ public class RunUpdateWallets {
         }
         final Set<Integer> relatedWallets = new HashSet<>();
         if (addr.size() < 100) {
-            psRelatedWallets.get().setInt(1, walletId);
-            psRelatedWallets.get().setInt(2, walletId);
-            psRelatedWallets.get().setInt(3, walletId);
-            psRelatedWallets.get().setInt(4, walletId);
-            try (ResultSet rs = psRelatedWallets.get().executeQuery()) {
-                while (rs.next()) {
-                    Integer w = rs.getObject(1, Integer.class);
-                    if (w == null) {
-                        log.warn("Unexpected: wallet_id is null. Original wallet ID: {}", walletId);
-                    } else {
-                        if (w != 0) {
-                            relatedWallets.add(w);
-                        }
+            psRelatedWallets.setParameters(p -> p.setInt(walletId).setInt(walletId).setInt(walletId).setInt(walletId)).executeQuery(rs -> {
+                Integer w = rs.getObject(1, Integer.class);
+                if (w == null) {
+                    log.warn("Unexpected: wallet_id is null. Original wallet ID: {}", walletId);
+                } else {
+                    if (w != 0) {
+                        relatedWallets.add(w);
                     }
                 }
-            }
+            });
         } else {
-            //if wallet has too many addresses - run query for one address at a time 
+            //if wallet has too many addresses - run query for one address at a time
             List<Callable<Boolean>> todo = new ArrayList<>(addr.size());
             for (Integer addressId : addr) {
                 todo.add(() -> {
-                    psRelatedWalletsByAddress.get().setInt(1, addressId);
-                    try (ResultSet rs = psRelatedWalletsByAddress.get().executeQuery()) {
-                        while (rs.next()) {
-                            Integer w = rs.getObject(1, Integer.class);
-                            if (w == null) {
-                                log.warn("Unexpected: wallet_id is null. Original wallet ID: {}", walletId);
-                            } else {
-                                if (w != 0) {
-                                    synchronized (relatedWallets) {
-                                        relatedWallets.add(w);
-                                    }
+                    psRelatedWalletsByAddress.setParameters(p -> p.setInt(addressId)).executeQuery(rs -> {
+                        Integer w = rs.getObject(1, Integer.class);
+                        if (w == null) {
+                            log.warn("Unexpected: wallet_id is null. Original wallet ID: {}", walletId);
+                        } else {
+                            if (w != 0) {
+                                synchronized (relatedWallets) {
+                                    relatedWallets.add(w);
                                 }
                             }
                         }
-                    }
+                    });
                     return true;
                 });
             }
@@ -464,19 +431,13 @@ public class RunUpdateWallets {
     }
 
     private Collection<Integer> queryAddressIdsByWalletId(int walletId) throws SQLException {
-        psQueryAddressIdsByWallet.get().setInt(1, walletId);
-        psQueryAddressIdsByWallet.get().setInt(2, walletId);
-        psQueryAddressIdsByWallet.get().setInt(3, walletId);
-        psQueryAddressIdsByWallet.get().setInt(4, walletId);
-        return DBUtils.readIntegersToSet(psQueryAddressIdsByWallet.get());
+        return DBUtils.readIntegersToSet(psQueryAddressIdsByWallet.setParameters(p -> p.setInt(walletId).setInt(walletId).setInt(walletId).setInt(walletId)));
     }
 
     private int fixWalletsByTransactions(int minTransactionId, int maxTransactionId) throws SQLException, InterruptedException {
         log.debug("fixWalletsByTransactions(minTransactionId:{}, maxTransactionId:{})", minTransactionId, maxTransactionId);
-        psQueryTransactionsWithDifferentInputWallets.get().setInt(1, minTransactionId);
-        psQueryTransactionsWithDifferentInputWallets.get().setInt(2, maxTransactionId);
         final AtomicInteger result = new AtomicInteger(0);
-        for (Integer transactionId : DBUtils.readIntegersToSet(psQueryTransactionsWithDifferentInputWallets.get())) {
+        for (Integer transactionId : DBUtils.readIntegersToSet(psQueryTransactionsWithDifferentInputWallets.setParameters(p -> p.setInt(minTransactionId).setInt(maxTransactionId)))) {
             log.debug("Fixing transactionId: {}", transactionId);
             int nUpdated = fixTransaction(transactionId);
             result.addAndGet(nUpdated);
@@ -485,8 +446,7 @@ public class RunUpdateWallets {
     }
 
     private int fixTransaction(int transactionId) throws SQLException, InterruptedException {
-        psQueryWalletdByTransaction.get().setInt(1, transactionId);
-        Collection<Integer> wList = DBUtils.readIntegersToSet(psQueryWalletdByTransaction.get());
+        Collection<Integer> wList = DBUtils.readIntegersToSet(psQueryWalletdByTransaction.setParameters(p -> p.setInt(transactionId)));
         if (wList.size() < 2) {
             log.trace("Transaction {} has been fixed already: {}", transactionId, wList);
             return 0;
@@ -508,52 +468,45 @@ public class RunUpdateWallets {
     }
 
     private boolean isWalletUsed(int walletId) throws SQLException {
-        psQueryAllAddressesByWallet.get().setInt(1, walletId);
-        psQueryAllAddressesByWallet.get().setInt(2, walletId);
-        psQueryAllAddressesByWallet.get().setInt(3, walletId);
-        psQueryAllAddressesByWallet.get().setInt(4, walletId);
-        psQueryAllAddressesByWallet.get().setMaxRows(1);
-        try (ResultSet rs = psQueryAllAddressesByWallet.get().executeQuery()) {
-            return rs.next();
-        }
+        return psQueryAllAddressesByWallet.setParameters(p -> p.setInt(walletId).setInt(walletId).setInt(walletId).setInt(walletId)).setMaxRows(1).querySingleRow(rs -> true).orElse(false);
     }
-
-    private void printMergeDetails(int walletId1, int walletId2) {
-        if (log.isDebugEnabled()) {
-            try {
-                printWalletAddresses(walletId1);
-                printWalletAddresses(walletId2);
-                psQueryMergeTransaction.get().setInt(1, walletId1);
-                psQueryMergeTransaction.get().setInt(2, walletId2);
-                try (ResultSet rs = psQueryMergeTransaction.get().executeQuery()) {
-                    while (rs.next()) {
-                        BtcAddress adr1 = BtcAddress.builder().addressId(rs.getInt(1)).address(rs.getBytes(2)).walletId(walletId1).build();
-                        BtcAddress adr2 = BtcAddress.builder().addressId(rs.getInt(3)).address(rs.getBytes(4)).walletId(walletId2).build();
-                        String txid = Hex.encodeHexString(rs.getBytes(5));
-                        log.debug("[{},{}]: Addresses {} and {} merged in transaction {}", walletId1, walletId2, adr1.getBjAddress(), adr2.getBjAddress(), txid);
-                    }
-                }
-            } catch (SQLException e) {
-                log.error("walletId1=" + walletId1 + ", walletId2=" + walletId2, e);
-            }
-        }
-    }
-
-    private void printWalletAddresses(int walletId) throws SQLException {
-        if (log.isTraceEnabled()) {
-            log.trace("Wallet#{} addresses: ", walletId);
-            psQueryAddressesByWallet.get().setInt(1, walletId);
-            psQueryAddressesByWallet.get().setInt(2, walletId);
-            psQueryAddressesByWallet.get().setInt(3, walletId);
-            psQueryAddressesByWallet.get().setInt(4, walletId);
-            try (ResultSet rs = psQueryAddressesByWallet.get().executeQuery()) {
-                while (rs.next()) {
-                    BtcAddress adr = BtcAddress.builder().addressId(rs.getInt(1)).address(rs.getBytes(2)).walletId(walletId).build();
-                    log.trace("{}, id={}", adr.getBjAddress(), adr.getAddressId());
-                }
-            }
-        }
-    }
+//
+//    private void printMergeDetails(int walletId1, int walletId2) {
+//        if (log.isDebugEnabled()) {
+//            try {
+//                printWalletAddresses(walletId1);
+//                printWalletAddresses(walletId2);
+//                psQueryMergeTransaction.get().setInt(1, walletId1);
+//                psQueryMergeTransaction.get().setInt(2, walletId2);
+//                try (ResultSet rs = psQueryMergeTransaction.get().executeQuery()) {
+//                    while (rs.next()) {
+//                        BtcAddress adr1 = BtcAddress.builder().addressId(rs.getInt(1)).address(rs.getBytes(2)).walletId(walletId1).build();
+//                        BtcAddress adr2 = BtcAddress.builder().addressId(rs.getInt(3)).address(rs.getBytes(4)).walletId(walletId2).build();
+//                        String txid = Hex.encodeHexString(rs.getBytes(5));
+//                        log.debug("[{},{}]: Addresses {} and {} merged in transaction {}", walletId1, walletId2, adr1.getBjAddress(), adr2.getBjAddress(), txid);
+//                    }
+//                }
+//            } catch (SQLException e) {
+//                log.error("walletId1=" + walletId1 + ", walletId2=" + walletId2, e);
+//            }
+//        }
+//    }
+//
+//    private void printWalletAddresses(int walletId) throws SQLException {
+//        if (log.isTraceEnabled()) {
+//            log.trace("Wallet#{} addresses: ", walletId);
+//            psQueryAddressesByWallet.get().setInt(1, walletId);
+//            psQueryAddressesByWallet.get().setInt(2, walletId);
+//            psQueryAddressesByWallet.get().setInt(3, walletId);
+//            psQueryAddressesByWallet.get().setInt(4, walletId);
+//            try (ResultSet rs = psQueryAddressesByWallet.get().executeQuery()) {
+//                while (rs.next()) {
+//                    BtcAddress adr = BtcAddress.builder().addressId(rs.getInt(1)).address(rs.getBytes(2)).walletId(walletId).build();
+//                    log.trace("{}, id={}", adr.getBjAddress(), adr.getAddressId());
+//                }
+//            }
+//        }
+//    }
 
     private String getTableName(SrcAddressType addressType) {
         return "address_" + addressType.name().toLowerCase();
@@ -585,7 +538,7 @@ public class RunUpdateWallets {
         options.addOption(null, "batch-size", true, "Number or addresses to read in a batch. Default: " + DEFAULT_READ_ROWS_BATCH);
         options.addOption(null, "stop-file", true, "File to be watched on each new block to stop process. If file is present the process stops and file renamed by adding '1' to the end. Default: " + DEFAULT_STOP_FILE_NAME);
         options.addOption("t", "threads", true, "Number of threads to run. Default is " + DEFAULT_TXN_THREADS + ". To disable parallel threading set value to 0");
-        DBConnection.addOptions(options);
+        DBConnectionSupplier.addOptions(options);
         return options;
     }
 

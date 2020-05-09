@@ -20,6 +20,7 @@ import java.util.Optional;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.NonNull;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -32,6 +33,7 @@ import org.apache.commons.cli.ParseException;
  *
  * @author Sliva Co
  */
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class CommandLineUtils {
 
     public static CmdArguments buildCmdArguments(String[] args, String command, Collection<CmdOption> optionsList) throws ParseException {
@@ -93,6 +95,7 @@ public final class CommandLineUtils {
             return commandLine.hasOption(opt.getLongOpt());
         }
 
+        @NonNull
         public Optional<String> getOption(CmdOption opt) {
             return Optional.ofNullable(commandLine.getOptionValue(opt.getLongOpt()));
         }

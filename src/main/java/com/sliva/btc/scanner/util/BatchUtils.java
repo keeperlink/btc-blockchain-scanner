@@ -19,11 +19,14 @@ import static com.google.common.base.Preconditions.checkArgument;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.stream.Collectors;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 
 /**
  *
  * @author Sliva Co
  */
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class BatchUtils {
 
     /**

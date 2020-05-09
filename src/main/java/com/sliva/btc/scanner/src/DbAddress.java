@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,11 +15,9 @@
  */
 package com.sliva.btc.scanner.src;
 
+import com.sliva.btc.scanner.db.DBPreparedStatement;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.util.BJBlockHandler;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import lombok.EqualsAndHashCode;
 import org.apache.commons.codec.binary.Hex;
 
@@ -82,18 +80,11 @@ public class DbAddress implements SrcAddress {
     }
 
     private void loadAddress() {
-        PreparedStatement ps = blockProvider.psQueryAddress.get(getType()).get();
-        try {
-            ps.setInt(1, addressId);
-            try (ResultSet rs = ps.executeQuery()) {
-                if (!rs.next()) {
-                    throw new IllegalStateException("Address #" + addressId + " not found in DB");
-                }
-                hash = rs.getBytes(1);
-                walletId = rs.getInt(2);
-            }
-        } catch (SQLException e) {
-            throw new IllegalStateException(e);
-        }
+        DBPreparedStatement ps = blockProvider.psQueryAddress.get(getType());
+        ps.setParameters(p -> p.setInt(addressId)).querySingleRow(rs -> {
+            hash = rs.getBytes(1);
+            walletId = rs.getInt(2);
+            return true;
+        }).orElseThrow(() -> new IllegalStateException("Address #" + addressId + " not found in DB"));
     }
 }

@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -37,11 +37,11 @@ public class DbCachedTransaction implements AutoCloseable {
     private final DbQueryTransaction queryTransaction;
     private final CacheData cacheData;
 
-    public DbCachedTransaction(DBConnection conn) throws SQLException {
+    public DbCachedTransaction(DBConnectionSupplier conn) throws SQLException {
         this(conn, new CacheData());
     }
 
-    public DbCachedTransaction(DBConnection conn, CacheData cacheData) throws SQLException {
+    public DbCachedTransaction(DBConnectionSupplier conn, CacheData cacheData) throws SQLException {
         updateTransaction = new DbUpdateTransaction(conn, cacheData.updateCachedData);
         queryTransaction = new DbQueryTransaction(conn);
         this.cacheData = cacheData;
@@ -55,7 +55,7 @@ public class DbCachedTransaction implements AutoCloseable {
         synchronized (cacheData) {
             if (btcTransaction.getTransactionId() == 0) {
                 if (cacheData.lastTransactionId.get() == 0) {
-                    cacheData.lastTransactionId.set(queryTransaction.getLastTransactionId());
+                    cacheData.lastTransactionId.set(queryTransaction.getLastTransactionId().orElse(0));
                 }
                 btcTransaction = btcTransaction.toBuilder().transactionId(cacheData.lastTransactionId.incrementAndGet()).build();
             }

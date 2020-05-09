@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,6 +18,8 @@ package com.sliva.btc.scanner.util;
 import com.sliva.btc.scanner.src.SrcAddressType;
 import java.io.File;
 import java.io.IOException;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 import org.apache.commons.io.FileUtils;
 import org.bitcoinj.core.Address;
 import org.bitcoinj.core.BitcoinSerializer;
@@ -33,6 +35,7 @@ import org.bitcoinj.params.MainNetParams;
  * @author Sliva Co
  */
 @SuppressWarnings("ResultOfObjectAllocationIgnored")
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class BJBlockHandler {
 
     public static File FULL_BLOCKS_PATH = new File("/CryptoData/btc-scanner/full_blocks");

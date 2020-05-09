@@ -15,7 +15,6 @@
  */
 package com.sliva.btc.scanner.db.model;
 
-import org.apache.commons.codec.binary.Hex;
 import org.junit.After;
 import org.junit.AfterClass;
 import static org.junit.Assert.assertEquals;
@@ -60,7 +59,7 @@ public class SighashTypeTest {
         byte b = SighashType.SIGHASH_ALL | SighashType.SIGHASH_ANYONECANPAY;
         String expResult = "81";
         String result = SighashType.toHexString(b);
-        System.out.println("result="+result);
+        System.out.println("result=" + result);
         assertEquals(expResult, result);
     }
 
@@ -73,7 +72,7 @@ public class SighashTypeTest {
         byte b = SighashType.SIGHASH_NONE;
         String expResult = "02";
         String result = SighashType.toHexString(b);
-        System.out.println("result="+result);
+        System.out.println("result=" + result);
         assertEquals(expResult, result);
     }
 

@@ -15,20 +15,32 @@
  */
 package com.sliva.btc.scanner.db;
 
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 
 /**
  *
  * @author whost
  */
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class DBUtils {
+
+    /**
+     * Read integer value from single column result.
+     *
+     * @param ps PreparedStatement
+     * @return Optional integer value or empty
+     */
+    public static Optional<Integer> readInteger(DBPreparedStatement ps) {
+        return ps.querySingleRow(rs -> rs.getObject(1, Integer.class));
+    }
 
     /**
      * Read integer values from single column result set.
@@ -37,13 +49,9 @@ public final class DBUtils {
      * @return Collection
      * @throws SQLException
      */
-    public static Collection<Integer> readIntegersToSet(PreparedStatement ps) throws SQLException {
+    public static Collection<Integer> readIntegersToSet(DBPreparedStatement ps) throws SQLException {
         Set<Integer> result = new HashSet<>();
-        try (ResultSet rs = ps.executeQuery()) {
-            while (rs.next()) {
-                result.add(rs.getObject(1, Integer.class));
-            }
-        }
+        ps.executeQuery(rs -> result.add(rs.getObject(1, Integer.class)));
         return result;
     }
 
@@ -54,14 +62,9 @@ public final class DBUtils {
      * @return Map
      * @throws SQLException
      */
-    public static Map<Integer, Integer> readIntegersToMap(PreparedStatement ps) throws SQLException {
+    public static Map<Integer, Integer> readIntegersToMap(DBPreparedStatement ps) throws SQLException {
         Map<Integer, Integer> result = new HashMap<>();
-        try (ResultSet rs = ps.executeQuery()) {
-            while (rs.next()) {
-                result.put(rs.getObject(1, Integer.class), rs.getObject(2, Integer.class));
-            }
-        }
+        ps.executeQuery(rs -> result.put(rs.getObject(1, Integer.class), rs.getObject(2, Integer.class)));
         return result;
     }
-
 }

@@ -19,7 +19,7 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import com.sliva.btc.scanner.db.DBConnection;
+import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import com.sliva.btc.scanner.db.DbAddBlock;
 import com.sliva.btc.scanner.db.DbCachedAddress;
 import com.sliva.btc.scanner.db.DbCachedOutput;
@@ -111,7 +111,7 @@ public class RunFullScan {
     private static final CmdOption preprocBlockThreadsOpt = buildOption(CMD_OPTS, null, "preproc-block-threads", true, "Number of threads pre-processing blocks. Default: " + DEFAULT_PREPROC_BLOCK_THREADS);
 
     static {
-        CMD_OPTS.addAll(DBConnection.CMD_OPTS);
+        CMD_OPTS.addAll(DBConnectionSupplier.CMD_OPTS);
         CMD_OPTS.addAll(RpcClient.CMD_OPTS);
         CMD_OPTS.addAll(BJBlockProvider.CMD_OPTS);
     }
@@ -122,7 +122,7 @@ public class RunFullScan {
     private final boolean updateSpent;
     private final ExecutorService execTxn;
     private final ExecutorService execInsOuts;
-    private final DBConnection dbCon;
+    private final DBConnectionSupplier dbCon;
     private final DbQueryBlock queryBlock;
     private final DbQueryInput queryInput;
     private final DbQueryInputSpecial queryInputSpecial;
@@ -145,7 +145,7 @@ public class RunFullScan {
     public static void main(String[] args) throws Exception {
         try {
             CmdArguments cmd = CommandLineUtils.buildCmdArguments(args, Main.Command.update.name(), CMD_OPTS);
-            DBConnection.applyArguments(cmd);
+            DBConnectionSupplier.applyArguments(cmd);
             BJBlockProvider.applyArguments(cmd);
             RpcClient.applyArguments(cmd);
             RpcClientDirect.applyArguments(cmd);
@@ -185,7 +185,7 @@ public class RunFullScan {
                 new ThreadFactoryBuilder().setDaemon(true).setNameFormat("ExecTxn-%02d").build()) : null;
         execInsOuts = runParallel ? Executors.newFixedThreadPool(Math.max(1, nExecTxnThreads * 2 / 3),
                 new ThreadFactoryBuilder().setDaemon(true).setNameFormat("execInsOuts-%02d").build()) : null;
-        dbCon = new DBConnection();
+        dbCon = new DBConnectionSupplier();
         queryBlock = new DbQueryBlock(dbCon);
         queryInput = new DbQueryInput(dbCon);
         queryInputSpecial = new DbQueryInputSpecial(dbCon);
@@ -257,7 +257,7 @@ public class RunFullScan {
 
     @SneakyThrows(SQLException.class)
     private void processBlock(
-            SrcBlock<SrcTransaction<SrcInput, SrcOutput<SrcAddress>>> block,
+            SrcBlock<SrcTransaction> block,
             DbAddBlock addBlock,
             DbUpdateInput updateInput,
             DbUpdateInputSpecial updateInputSpecial,
@@ -267,7 +267,7 @@ public class RunFullScan {
         int blockHeight = block.getHeight();
         String blockHash = block.getHash();
         log.info("Block({}).hash: {}, nTxns={}", blockHeight, blockHash, block.getTransactions().count());
-        if (queryBlock.findBlockByHash(blockHash) == null) {
+        if (!queryBlock.findBlockByHash(blockHash).isPresent()) {
             addBlock.add(BtcBlock.builder()
                     .height(blockHeight)
                     .hash(blockHash)
@@ -299,7 +299,7 @@ public class RunFullScan {
 
     @SneakyThrows(SQLException.class)
     private int getFirstUnprocessedBlockFromDB() {
-        return queryBlock.findLastHeight() + 1;
+        return queryBlock.findLastHeight().orElse(-1) + 1;
     }
 
     private TxnProcessOutput processTransaction(
@@ -380,10 +380,7 @@ public class RunFullScan {
                     throw new IllegalStateException("Transaction not found in DB: " + inTxid + " referenced from input#" + ti.getPos() + " in tx " + tx.toString());
                 }
                 TxInput txInput = findInput(txInputs, ti.getPos());
-                TxOutput txOutput = cachedOutput.getOutput(inTxn.getTransactionId(), inPos);
-                if (txOutput == null) {
-                    throw new IllegalStateException("Output#" + ti.getPos() + " not found: " + inTxid + ":" + inPos + ". Src txn: " + tx.getTxid() + ". Ref tx: " + inTxn);
-                }
+                TxOutput txOutput = cachedOutput.getOutput(inTxn.getTransactionId(), inPos).orElseThrow(() -> new IllegalStateException("Output#" + ti.getPos() + " not found: " + inTxid + ":" + inPos + ". Src txn: " + tx.getTxid() + ". Ref tx: " + inTxn));
                 TxInput inputToAdd = TxInput.builder()
                         .transactionId(tx.getTransactionId())
                         .pos(ti.getPos())
@@ -544,8 +541,8 @@ public class RunFullScan {
         return block.getTransactions().filter((t) -> Utils.fixDupeTxid(t.getTxid(), blockHeight).equals(txid)).findAny().orElse(null);
     }
 
-    private SrcBlock<SrcTransaction<SrcInput, SrcOutput<SrcAddress>>> preloadBlockCaches(
-            SrcBlock<SrcTransaction<SrcInput, SrcOutput<SrcAddress>>> block,
+    private SrcBlock<SrcTransaction<SrcInput, SrcOutput>> preloadBlockCaches(
+            SrcBlock<SrcTransaction<SrcInput, SrcOutput>> block,
             DbCachedTransaction cachedTxn,
             DbCachedOutput cachedOutput,
             DbCachedAddress cachedAddress) {
@@ -560,8 +557,8 @@ public class RunFullScan {
         }
     }
 
-    private SrcTransaction<SrcInput, SrcOutput<SrcAddress>> preProcTransaction(
-            SrcTransaction<SrcInput, SrcOutput<SrcAddress>> t,
+    private SrcTransaction<SrcInput, SrcOutput> preProcTransaction(
+            SrcTransaction<SrcInput, SrcOutput> t,
             int blockHeight,
             DbCachedTransaction cachedTxn,
             DbCachedOutput cachedOutput,
@@ -622,8 +619,8 @@ public class RunFullScan {
     private static String frmtInput(TxInput in, DbCachedTransaction cachedTxn, DbCachedOutput cachedOutput, DbCachedAddress cachedAddress) throws SQLException {
         BtcTransaction tx = cachedTxn.getTransaction(in.getTransactionId());
         BtcTransaction intx = cachedTxn.getTransaction(in.getInTransactionId());
-        TxOutput out = cachedOutput.getOutput(in.getInTransactionId(), in.getInPos());
-        BtcAddress adr = out == null ? null : cachedAddress.getAddress(out.getAddressId(), true);
+        Optional<TxOutput> out = cachedOutput.getOutput(in.getInTransactionId(), in.getInPos());
+        BtcAddress adr = out.map(o -> cachedAddress.getAddress(o.getAddressId(), true)).orElse(null);
         return "Input#" + in.getPos() + " in tx " + (tx == null ? null : tx.getTxid())
                 + " (" + (tx == null ? null : tx.getBlockHeight()) + "." + in.getTransactionId() + ")"
                 + " pointing to output " + (intx == null ? null : intx.getTxid()) + ":" + in.getInPos()

@@ -17,11 +17,12 @@ package com.sliva.btc.scanner.db;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import com.sliva.btc.scanner.db.BatchExecutor.FillStatement;
+import com.sliva.btc.scanner.db.DBPreparedStatement.ParamSetter;
 import com.sliva.btc.scanner.util.BatchUtils;
 import com.sliva.btc.scanner.util.Utils;
 import static com.sliva.btc.scanner.util.Utils.synchronize;
-import java.sql.PreparedStatement;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -38,6 +39,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -54,7 +56,7 @@ public abstract class DbUpdate implements AutoCloseable {
 
     private static final Duration PRINT_STATS_PERIOD = Duration.ofSeconds(30);
     private static final int MYSQL_BULK_INSERT_BUFFER_SIZE = 256 * 1024 * 1024;
-    private static final int UPDATER_THREADS = 2;
+    private static final int UPDATER_THREADS = 3;
     private static ExecuteDbUpdate executeDbUpdateThread;
     private static final Collection<DbUpdate> dbUpdateInstances = new ArrayList<>();
     private static final Set<DbUpdate> executingInstances = new HashSet<>();
@@ -69,9 +71,9 @@ public abstract class DbUpdate implements AutoCloseable {
     protected final Object execSync = new Object();
 
     @SuppressWarnings({"LeakingThisInConstructor", "CallToThreadStartDuringObjectConstruction"})
-    public DbUpdate(DBConnection conn) {
+    public DbUpdate(DBConnectionSupplier conn) {
         try {
-            conn.getConnection().createStatement().execute("SET bulk_insert_buffer_size=" + MYSQL_BULK_INSERT_BUFFER_SIZE);
+            conn.get().createStatement().execute("SET bulk_insert_buffer_size=" + MYSQL_BULK_INSERT_BUFFER_SIZE);
         } catch (SQLException e) {
             log.error(e.getMessage(), e);
         }
@@ -136,7 +138,7 @@ public abstract class DbUpdate implements AutoCloseable {
      * @param postExecutor post-execution process, can be null
      * @return number of records executed
      */
-    public <T> int executeBatch(Object syncObject, Collection<T> source, ThreadLocal<PreparedStatement> ps, int batchMaxSize, FillStatement<T> fillCallback, Consumer<Collection<T>> postExecutor) {
+    public <T> int executeBatch(Object syncObject, Collection<T> source, DBPreparedStatement ps, int batchMaxSize, BiConsumer<T, ParamSetter> fillCallback, Consumer<Collection<T>> postExecutor) {
         checkArgument(syncObject != null, "Argument 'syncObject' is null");
         checkArgument(source != null, "Argument 'source' is null");
         checkArgument(batchMaxSize > 0, "Argument 'batchMaxSize' (%s) must be a positive number", batchMaxSize);
@@ -145,7 +147,7 @@ public abstract class DbUpdate implements AutoCloseable {
         Collection<T> batchToRun = synchronize(syncObject, () -> BatchUtils.pullData(source, batchMaxSize));
         if (batchToRun != null) {
             synchronized (execSync) {
-                BatchExecutor.executeBatch(batchToRun, ps.get(), fillCallback);
+                BatchExecutor.executeBatch(batchToRun, ps, fillCallback);
                 if (postExecutor != null) {
                     postExecutor.accept(batchToRun);
                 }
@@ -168,7 +170,7 @@ public abstract class DbUpdate implements AutoCloseable {
                 long runtimeNanos = System.nanoTime() - s;
                 updateRuntimeMap(getTableName(), nRecs, runtimeNanos);
                 if (nRecs > 0) {
-                    log.debug("{}.executeSync(): insert/update queries executed: {} runtime {} ms.", getTableName(), nRecs, TimeUnit.NANOSECONDS.toMillis(runtimeNanos));
+                    log.debug("{}.executeSync(): insert/update queries executed: {} runtime {} ms.", getTableName(), nRecs, BigDecimal.valueOf(runtimeNanos).movePointLeft(6).setScale(3, RoundingMode.HALF_DOWN));
                 }
             }
         } finally {
@@ -219,7 +221,7 @@ public abstract class DbUpdate implements AutoCloseable {
 
         private StopWatch startTime;
 
-        public ExecuteDbUpdate() {
+        private ExecuteDbUpdate() {
             super("ExecuteDbUpdate");
         }
 

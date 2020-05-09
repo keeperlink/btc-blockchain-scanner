@@ -24,10 +24,10 @@ import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.junit.After;
 import org.junit.AfterClass;
+import static org.junit.Assert.*;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import static org.junit.Assert.*;
 
 /**
  *
@@ -36,7 +36,7 @@ import static org.junit.Assert.*;
 public class RpcBlockTest {
 
     private static final String CONF_FILE = "/etc/rpc.conf";
-    private RpcBlock instance = new RpcBlock("00000000000001991b57a7f352ebc922fce2f6874a97e43b30fce9f21a6d925f");
+    private final RpcBlock instance = new RpcBlock("00000000000001991b57a7f352ebc922fce2f6874a97e43b30fce9f21a6d925f");
 
     public RpcBlockTest() {
     }
@@ -119,7 +119,7 @@ public class RpcBlockTest {
         RpcTransaction tx = result.filter(t -> "576600481ce4ff6626d2d5e79f73b9c2e03863b88f3fefe5036e90270b405b52".equals(t.getTxid())).findAny().get();
         RpcInput inp = tx.getInputs().findFirst().get();
         System.out.println("inp=" + inp);
-        System.out.println("inp.signhashType=" +SighashType.toHexString(inp.getSighashType()));
+        System.out.println("inp.signhashType=" + SighashType.toHexString(inp.getSighashType()));
     }
 
 }

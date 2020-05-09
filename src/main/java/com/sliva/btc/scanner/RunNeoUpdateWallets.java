@@ -16,7 +16,7 @@
 package com.sliva.btc.scanner;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import com.sliva.btc.scanner.db.DBConnection;
+import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import com.sliva.btc.scanner.db.DbQueryOutput;
 import com.sliva.btc.scanner.db.DbQueryOutput.OutputAddressWallet;
 import com.sliva.btc.scanner.db.model.BtcAddress;
@@ -59,7 +59,7 @@ public class RunNeoUpdateWallets {
     private static final int DEFAULT_START_TRANSACTION_ID = 1;
     private static final int DEFAULT_BATCH_SIZE = 5000;
     private static final String DEFAULT_STOP_FILE_NAME = "/tmp/btc-neoUpdateWallets-stop";
-    private final DBConnection dbCon;
+    private final DBConnectionSupplier dbCon;
 //    private final DbQueryAddress queryAddress;
     private final DbQueryOutput queryOutput;
 //    private final DbBlockProvider blockProvider;
@@ -92,14 +92,14 @@ public class RunNeoUpdateWallets {
     }
 
     public RunNeoUpdateWallets(CommandLine cmd) {
-        DBConnection.applyArguments(cmd);
+        DBConnectionSupplier.applyArguments(cmd);
         NeoConnection.applyArguments(cmd);
         startFromFile = cmd.hasOption("start-from") ? new Utils.NumberFile(cmd.getOptionValue("start-from", Integer.toString(DEFAULT_START_TRANSACTION_ID))) : null;
         batchSize = Integer.parseInt(cmd.getOptionValue("batch-size", Integer.toString(DEFAULT_BATCH_SIZE)));
         stopFile = new File(cmd.getOptionValue("stop-file", DEFAULT_STOP_FILE_NAME));
         recordsBack = cmd.hasOption("records-back") ? Integer.parseInt(cmd.getOptionValue("records-back")) : 0;
 //        int nTxnThreads = Integer.parseInt(cmd.getOptionValue("threads", Integer.toString(DEFAULT_TXN_THREADS)));
-        dbCon = new DBConnection();
+        dbCon = new DBConnectionSupplier();
 //        queryAddress = new DbQueryAddressCombo(dbCon);
 //        blockProvider = new DbBlockProvider(dbCon);
         queryOutput = new DbQueryOutput(dbCon);
@@ -259,7 +259,7 @@ public class RunNeoUpdateWallets {
         options.addOption(null, "records-back", true, "Check last number of trasnactions. Process will run in safe mode (--safe-run=true)");
         options.addOption(null, "stop-file", true, "File to be watched on each new block to stop process. If file is present the process stops and file renamed by adding '1' to the end. Default: " + DEFAULT_STOP_FILE_NAME);
         options.addOption(null, "threads", true, "Number of threads to run. Default is " + DEFAULT_TXN_THREADS + ". To disable parallel threading set value to 0");
-        DBConnection.addOptions(options);
+        DBConnectionSupplier.addOptions(options);
         NeoConnection.addOptions(options);
         return options;
 

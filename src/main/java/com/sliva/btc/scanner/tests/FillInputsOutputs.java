@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +15,8 @@
  */
 package com.sliva.btc.scanner.tests;
 
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -22,6 +24,7 @@ import lombok.extern.slf4j.Slf4j;
  * @author Sliva Co
  */
 @Slf4j
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public class FillInputsOutputs {
 //
 //    private static final int NUM_RPC_THREADS = 100;

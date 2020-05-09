@@ -22,7 +22,6 @@ import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.DefaultParser;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
-import org.bitcoinj.core.Transaction;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;

@@ -15,7 +15,7 @@
  */
 package com.sliva.btc.scanner.tests;
 
-import com.sliva.btc.scanner.db.DBConnection;
+import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import java.lang.reflect.Field;
 import java.util.Arrays;
 import org.bitcoinj.core.Address;
@@ -35,7 +35,7 @@ import org.spongycastle.util.encoders.Hex;
  */
 public class TestInfile {
 
-    private static final DBConnection dbConOld = new DBConnection("btc");
+    private static final DBConnectionSupplier dbConOld = new DBConnectionSupplier("btc");
     private static final ThreadLocal<NetworkParameters> np = new ThreadLocal<NetworkParameters>() {
         @Override
         protected NetworkParameters initialValue() {
@@ -48,7 +48,7 @@ public class TestInfile {
      * @throws java.lang.Exception
      */
     public static void main(String[] args) throws Exception {
-        //dbConOld.getConnection().prepareCall("LOAD DATA LOCAL INFILE '/ProgramData/MySQL/MySQL Server 8.0/Uploads/addr.txt' INTO TABLE address_test").execute();
+        //dbConOld.get().prepareCall("LOAD DATA LOCAL INFILE '/ProgramData/MySQL/MySQL Server 8.0/Uploads/addr.txt' INTO TABLE address_test").execute();
         bc1addr("bc1qjmyx8fpqc0j3nta7p24st2aa84mnd998m0pc3vsg6454t6j5funskg0hfk");
         bc1addr("bc1qpkuy609cpcl7dpvrgkpavgtdqumtcynxp33z0h");
 

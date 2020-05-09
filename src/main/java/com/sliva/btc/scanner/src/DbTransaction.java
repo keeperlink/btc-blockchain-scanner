@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -44,8 +44,7 @@ public class DbTransaction implements SrcTransaction<DbInput, DbOutput> {
     public String getTxid() {
         if (txid == null) {
             try {
-                blockProvider.psQueryTransactionHash.get().setInt(1, transactionId);
-                try (ResultSet rs = blockProvider.psQueryTransactionHash.get().executeQuery()) {
+                try (ResultSet rs = blockProvider.psQueryTransactionHash.setParameters(p -> p.setInt(transactionId)).executeQuery()) {
                     if (!rs.next()) {
                         throw new IllegalStateException("Transaction #" + transactionId + " not found in DB");
                     }
@@ -62,8 +61,7 @@ public class DbTransaction implements SrcTransaction<DbInput, DbOutput> {
     public Stream<DbInput> getInputs() {
         if (inputs == null) {
             try {
-                blockProvider.psQueryTransactionInputs.get().setInt(1, transactionId);
-                try (ResultSet rs = blockProvider.psQueryTransactionInputs.get().executeQuery()) {
+                try (ResultSet rs = blockProvider.psQueryTransactionInputs.setParameters(p -> p.setInt(transactionId)).executeQuery()) {
                     Collection<DbInput> t = new ArrayList<>();
                     while (rs.next()) {
                         t.add(new DbInput(blockProvider, rs.getShort(1), rs.getShort(2), rs.getInt(3), null, rs.getByte(4), rs.getBoolean(5), rs.getBoolean(6)));
@@ -81,8 +79,7 @@ public class DbTransaction implements SrcTransaction<DbInput, DbOutput> {
     public Stream<DbOutput> getOutputs() {
         if (outputs == null) {
             try {
-                blockProvider.psQueryTransactionOutputs.get().setInt(1, transactionId);
-                try (ResultSet rs = blockProvider.psQueryTransactionOutputs.get().executeQuery()) {
+                try (ResultSet rs = blockProvider.psQueryTransactionOutputs.setParameters(p -> p.setInt(transactionId)).executeQuery()) {
                     Collection<DbOutput> t = new ArrayList<>();
                     while (rs.next()) {
                         t.add(new DbOutput(blockProvider, rs.getShort(1), rs.getInt(2), rs.getLong(3), rs.getByte(4)));

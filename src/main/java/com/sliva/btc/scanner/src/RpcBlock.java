@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -46,7 +46,7 @@ public class RpcBlock implements SrcBlock<RpcTransaction> {
         this.block = getBlock(hash);
     }
 
-    private final Block getBlock(String hash) {
+    private Block getBlock(String hash) {
         try {
             return BJBlockHandler.parseBlcok(Hex.decode(RpcClientDirect.getInstance().getRawBlock(hash)));
         } catch (IOException e) {

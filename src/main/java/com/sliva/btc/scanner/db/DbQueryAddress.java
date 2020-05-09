@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,11 +15,13 @@
  */
 package com.sliva.btc.scanner.db;
 
+import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkState;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.src.SrcAddressType;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Optional;
+import lombok.NonNull;
 
 /**
  *
@@ -27,17 +29,28 @@ import java.sql.SQLException;
  */
 public class DbQueryAddress {
 
+    private static final String ADDRESS_TABLE_NAME = "address_table_name";
     private static final String SQL_FIND_BY_ADDRESS_ID = "SELECT address,wallet_id FROM address_table_name WHERE address_id=?";
     private static final String SQL_FIND_BY_ADDRESS = "SELECT address_id FROM address_table_name WHERE address=? LIMIT 1";
     private static final String SQL_QUERY_WALLET_ID = "SELECT wallet_id FROM address_table_name WHERE address_id=?";
     private static final String SQL_QUERY_LAST_ADDRESS_ID = "SELECT address_id FROM address_table_name ORDER BY address_id DESC LIMIT 1";
     private final SrcAddressType addressType;
-    private final ThreadLocal<PreparedStatement> psFindByAddressId;
-    private final ThreadLocal<PreparedStatement> psFindByAddress;
-    private final ThreadLocal<PreparedStatement> psQueryWalletId;
-    private final ThreadLocal<PreparedStatement> psQueryLastAddressId;
+    private final DBPreparedStatement psFindByAddressId;
+    private final DBPreparedStatement psFindByAddress;
+    private final DBPreparedStatement psQueryWalletId;
+    private final DBPreparedStatement psQueryLastAddressId;
 
-    public DbQueryAddress(DBConnection conn, SrcAddressType addressType) {
+    public DbQueryAddress() {
+        this.addressType = null;
+        this.psFindByAddressId = null;
+        this.psFindByAddress = null;
+        this.psQueryWalletId = null;
+        this.psQueryLastAddressId = null;
+    }
+
+    public DbQueryAddress(DBConnectionSupplier conn, SrcAddressType addressType) {
+        checkArgument(conn != null, "Argument 'conn' is null");
+        checkArgument(addressType != null, "Argument 'addressType' is null");
         this.addressType = addressType;
         this.psFindByAddressId = conn == null ? null : conn.prepareStatement(fixTableName(SQL_FIND_BY_ADDRESS_ID));
         this.psFindByAddress = conn == null ? null : conn.prepareStatement(fixTableName(SQL_FIND_BY_ADDRESS));
@@ -49,45 +62,42 @@ public class DbQueryAddress {
         return getTableName(addressType);
     }
 
-    public BtcAddress findByAddressId(int addressId) throws SQLException {
-        psFindByAddressId.get().setInt(1, addressId);
-        try (ResultSet rs = psFindByAddressId.get().executeQuery()) {
-            return rs.next() ? BtcAddress.builder()
-                    .type(addressType)
-                    .addressId(addressId)
-                    .address(rs.getBytes(1))
-                    .walletId(rs.getInt(2))
-                    .build() : null;
-        }
+    @NonNull
+    public Optional<BtcAddress> findByAddressId(int addressId) throws SQLException {
+        checkState(addressType != null, "Method not supported due to instance created with no-arguments constructor");
+        return psFindByAddressId.setParameters(ps -> ps.setInt(addressId)).querySingleRow(rs -> BtcAddress.builder()
+                .type(addressType)
+                .addressId(addressId)
+                .address(rs.getBytes(1))
+                .walletId(rs.getInt(2))
+                .build());
     }
 
-    public BtcAddress findByAddress(byte[] address) throws SQLException {
-        psFindByAddress.get().setBytes(1, address);
-        try (ResultSet rs = psFindByAddress.get().executeQuery()) {
-            return rs.next() ? BtcAddress.builder()
-                    .type(addressType)
-                    .addressId(rs.getInt(1))
-                    .address(address)
-                    .build() : null;
-        }
+    @NonNull
+    public Optional<BtcAddress> findByAddress(byte[] address) throws SQLException {
+        checkState(addressType != null, "Method not supported due to instance created with no-arguments constructor");
+        return DBUtils.readInteger(psFindByAddress.setParameters(ps -> ps.setBytes(address)))
+                .map(addressId -> BtcAddress.builder()
+                .type(addressType)
+                .addressId(addressId)
+                .address(address)
+                .build());
     }
 
-    public int getWalletId(int addressId) throws SQLException {
-        psQueryWalletId.get().setInt(1, addressId);
-        try (ResultSet rs = psQueryWalletId.get().executeQuery()) {
-            return rs.next() ? rs.getInt(1) : 0;
-        }
+    @NonNull
+    public Optional<Integer> getWalletId(int addressId) throws SQLException {
+        checkState(addressType != null, "Method not supported due to instance created with no-arguments constructor");
+        return DBUtils.readInteger(psQueryWalletId.setParameters(p -> p.setInt(addressId)));
     }
 
     public int getLastAddressId() throws SQLException {
-        try (ResultSet rs = psQueryLastAddressId.get().executeQuery()) {
-            return rs.next() ? rs.getInt(1)
-                    : addressType == SrcAddressType.P2PKH ? BtcAddress.ADDR_P2PKH_MIN
-                            : addressType == SrcAddressType.P2SH ? BtcAddress.ADDR_P2SH_MIN
-                                    : addressType == SrcAddressType.P2WPKH ? BtcAddress.ADDR_P2WPKH_MIN
-                                            : addressType == SrcAddressType.P2WSH ? BtcAddress.ADDR_P2WSH_MIN
-                                                    : BtcAddress.ADDR_OTHER_MIN;
-        }
+        checkState(addressType != null, "Method not supported due to instance created with no-arguments constructor");
+        return DBUtils.readInteger(psQueryLastAddressId).orElseGet(()
+                -> addressType == SrcAddressType.P2PKH ? BtcAddress.ADDR_P2PKH_MIN
+                        : addressType == SrcAddressType.P2SH ? BtcAddress.ADDR_P2SH_MIN
+                                : addressType == SrcAddressType.P2WPKH ? BtcAddress.ADDR_P2WPKH_MIN
+                                        : addressType == SrcAddressType.P2WSH ? BtcAddress.ADDR_P2WSH_MIN
+                                                : BtcAddress.ADDR_OTHER_MIN);
     }
 
     private String fixTableName(String sql) {
@@ -99,6 +109,6 @@ public class DbQueryAddress {
     }
 
     public static String updateQueryTableName(String query, SrcAddressType addressType) {
-        return query.replaceAll("address_table_name", getTableName(addressType));
+        return query.replaceAll(ADDRESS_TABLE_NAME, getTableName(addressType));
     }
 }
