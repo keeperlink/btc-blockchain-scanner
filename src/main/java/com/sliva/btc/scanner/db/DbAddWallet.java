@@ -31,7 +31,7 @@ import lombok.extern.slf4j.Slf4j;
 public class DbAddWallet extends DbUpdate {
 
     private static int MIN_BATCH_SIZE = 1;
-    public static int MAX_BATCH_SIZE = 1000;
+    private static int MAX_BATCH_SIZE = 5000;
     private static int MAX_INSERT_QUEUE_LENGTH = 2000;
     private static final String TABLE_NAME = "wallet";
     private static final String SQL = "INSERT INTO wallet(wallet_id,name,details)VALUES(?,?,?)";

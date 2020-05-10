@@ -35,10 +35,10 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class DbUpdateInput extends DbUpdate {
 
-    public static int MIN_BATCH_SIZE = 1;
-    public static int MAX_BATCH_SIZE = 40000;
-    public static int MAX_INSERT_QUEUE_LENGTH = 1000000;
-    private static int MAX_UPDATE_QUEUE_LENGTH = 2000;
+    private static int MIN_BATCH_SIZE = 1;
+    private static int MAX_BATCH_SIZE = 40000;
+    private static int MAX_INSERT_QUEUE_LENGTH = 10000;
+    private static int MAX_UPDATE_QUEUE_LENGTH = 5000;
     private static final String TABLE_NAME = "input";
     private static final String SQL_ADD = "INSERT INTO input(transaction_id,pos,in_transaction_id,in_pos)VALUES(?,?,?,?)";
     private static final String SQL_DELETE = "DELETE FROM input WHERE transaction_id=? AND pos=?";

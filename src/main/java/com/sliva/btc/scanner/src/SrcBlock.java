@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +15,7 @@
  */
 package com.sliva.btc.scanner.src;
 
-import java.util.stream.Stream;
+import java.util.Collection;
 
 /**
  *
@@ -28,5 +28,5 @@ public interface SrcBlock<T extends SrcTransaction> {
 
     int getHeight();
 
-    Stream<T> getTransactions();
+    Collection<T> getTransactions();
 }

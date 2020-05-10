@@ -30,7 +30,7 @@ import lombok.extern.slf4j.Slf4j;
 public class DbAddBlock extends DbUpdate {
 
     private static int MIN_BATCH_SIZE = 1;
-    public static int MAX_BATCH_SIZE = 10000;
+    private static int MAX_BATCH_SIZE = 10000;
     private static int MAX_INSERT_QUEUE_LENGTH = 30000;
     private static final String TABLE_NAME = "block";
     private static final String SQL_ADD = "INSERT INTO block(height,hash,txn_count)VALUES(?,?,?)";

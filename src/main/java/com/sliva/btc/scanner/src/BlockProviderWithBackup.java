@@ -19,7 +19,7 @@ package com.sliva.btc.scanner.src;
  *
  * @author Sliva Co
  */
-public class BlockProviderWithBackup implements BlockProvider<SrcBlock> {
+public class BlockProviderWithBackup implements BlockProvider<SrcBlock<?>> {
 
     private final BlockProvider primaryBlockProvider;
     private final BlockProvider backupBlockProvider;

@@ -18,7 +18,8 @@ package com.sliva.btc.scanner.src;
 import com.sliva.btc.scanner.rpc.RpcClientDirect;
 import com.sliva.btc.scanner.util.BJBlockHandler;
 import java.io.IOException;
-import java.util.stream.Stream;
+import java.util.Collection;
+import java.util.stream.Collectors;
 import lombok.ToString;
 import org.bitcoinj.core.Block;
 import org.spongycastle.util.encoders.Hex;
@@ -72,7 +73,7 @@ public class RpcBlock implements SrcBlock<RpcTransaction> {
     }
 
     @Override
-    public Stream<RpcTransaction> getTransactions() {
-        return block.getTransactions().stream().map(t -> new RpcTransaction(t));
+    public Collection<RpcTransaction> getTransactions() {
+        return block.getTransactions().stream().map(t -> new RpcTransaction(t)).collect(Collectors.toList());
     }
 }

@@ -58,6 +58,7 @@ public class DbQueryAddress {
         this.psQueryLastAddressId = conn == null ? null : conn.prepareStatement(fixTableName(SQL_QUERY_LAST_ADDRESS_ID));
     }
 
+    @NonNull
     public String getTableName() {
         return getTableName(addressType);
     }
@@ -100,14 +101,17 @@ public class DbQueryAddress {
                                                 : BtcAddress.ADDR_OTHER_MIN);
     }
 
+    @NonNull
     private String fixTableName(String sql) {
         return updateQueryTableName(sql, addressType);
     }
 
+    @NonNull
     public static String getTableName(SrcAddressType addressType) {
         return "address_" + addressType.name().toLowerCase();
     }
 
+    @NonNull
     public static String updateQueryTableName(String query, SrcAddressType addressType) {
         return query.replaceAll(ADDRESS_TABLE_NAME, getTableName(addressType));
     }

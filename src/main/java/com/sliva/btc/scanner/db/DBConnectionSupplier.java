@@ -15,15 +15,14 @@
  */
 package com.sliva.btc.scanner.db;
 
-import com.sliva.btc.scanner.util.CommandLineUtils;
 import com.sliva.btc.scanner.util.CommandLineUtils.CmdArguments;
+import com.sliva.btc.scanner.util.CommandLineUtils.CmdOption;
+import com.sliva.btc.scanner.util.CommandLineUtils.CmdOptions;
 import static com.sliva.btc.scanner.util.CommandLineUtils.buildOption;
 import com.sliva.btc.scanner.util.Utils;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Properties;
 import java.util.function.Supplier;
 import lombok.SneakyThrows;
@@ -42,7 +41,7 @@ import org.apache.commons.cli.Options;
 @Slf4j
 public class DBConnectionSupplier implements Supplier<Connection> {
 
-    public static String DEFAULT_CONN_URL = "jdbc:mysql://localhost:3306/btc_default_db"
+    private static String DEFAULT_CONN_URL = "jdbc:mysql://localhost:3306/btc_default_db"
             + "?verifyServerCertificate=false&useSSL=true"
             + "&useUnicode=true"
             + "&characterEncoding=UTF-8"
@@ -51,11 +50,11 @@ public class DBConnectionSupplier implements Supplier<Connection> {
     private static String DEFAULT_DB_USER = "root";
     private static String DEFAULT_DB_PASSWORD = "password";
 
-    public static final Collection<CommandLineUtils.CmdOption> CMD_OPTS = new ArrayList<>();
-    public static final CommandLineUtils.CmdOption dbUrlOpt = buildOption(CMD_OPTS, null, "db-url", true, "DB URL, i.e. 'jdbc:mysql://localhost:3306/'.");
-    public static final CommandLineUtils.CmdOption dbUserOpt = buildOption(CMD_OPTS, null, "db-user", true, "DB user name.");
-    public static final CommandLineUtils.CmdOption dbPasswordOpt = buildOption(CMD_OPTS, null, "db-password", true, "DB password.");
-    public static final CommandLineUtils.CmdOption dbConfigOpt = buildOption(CMD_OPTS, null, "db-config", true, "Configuration file name with db url, user and password values.");
+    public static final CmdOptions CMD_OPTS = new CmdOptions();
+    public static final CmdOption dbUrlOpt = buildOption(CMD_OPTS, null, "db-url", true, "DB URL, i.e. 'jdbc:mysql://localhost:3306/'.");
+    public static final CmdOption dbUserOpt = buildOption(CMD_OPTS, null, "db-user", true, "DB user name.");
+    public static final CmdOption dbPasswordOpt = buildOption(CMD_OPTS, null, "db-password", true, "DB password.");
+    public static final CmdOption dbConfigOpt = buildOption(CMD_OPTS, null, "db-config", true, "Configuration file name with db url, user and password values.");
 
     private final String dbname;
     private final ThreadLocal<Connection> conn;

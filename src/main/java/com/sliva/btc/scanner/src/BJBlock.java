@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +17,8 @@ package com.sliva.btc.scanner.src;
 
 import com.sliva.btc.scanner.util.BJBlockHandler;
 import java.io.IOException;
-import java.util.stream.Stream;
+import java.util.Collection;
+import java.util.stream.Collectors;
 import lombok.ToString;
 import org.bitcoinj.core.Block;
 
@@ -48,8 +49,7 @@ public class BJBlock implements SrcBlock<BJTransaction> {
 
     @Override
     @SuppressWarnings("null")
-    public Stream<BJTransaction> getTransactions() {
-        return block.getTransactions().stream().map((t) -> new BJTransaction(t));
+    public Collection<BJTransaction> getTransactions() {
+        return block.getTransactions().stream().map((t) -> new BJTransaction(t)).collect(Collectors.toList());
     }
-
 }

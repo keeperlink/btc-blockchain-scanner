@@ -17,7 +17,6 @@ package com.sliva.btc.scanner.src;
 
 import static com.sliva.btc.scanner.util.Utils.id2hex;
 import java.util.Collection;
-import java.util.stream.Stream;
 
 /**
  *
@@ -49,23 +48,23 @@ public class DbTransaction implements SrcTransaction<DbInput, DbOutput> {
     }
 
     @Override
-    public Stream<DbInput> getInputs() {
+    public Collection<DbInput> getInputs() {
         if (inputs == null) {
             inputs = blockProvider.psQueryTransactionInputs
                     .setParameters(p -> p.setInt(transactionId))
                     .executeQueryToList(rs -> new DbInput(blockProvider, rs.getShort(1), rs.getShort(2), rs.getInt(3), null, rs.getByte(4), rs.getBoolean(5), rs.getBoolean(6)));
         }
-        return inputs.stream();
+        return inputs;
     }
 
     @Override
-    public Stream<DbOutput> getOutputs() {
+    public Collection<DbOutput> getOutputs() {
         if (outputs == null) {
             outputs = blockProvider.psQueryTransactionOutputs
                     .setParameters(p -> p.setInt(transactionId))
                     .executeQueryToList(rs -> new DbOutput(blockProvider, rs.getShort(1), rs.getInt(2), rs.getLong(3), rs.getByte(4)));
         }
-        return outputs.stream();
+        return outputs;
     }
 
     public int getTransactionId() {

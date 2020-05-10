@@ -17,16 +17,18 @@ package com.sliva.btc.scanner;
 
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import com.sliva.btc.scanner.db.DBPreparedStatement;
+import com.sliva.btc.scanner.db.DbUpdate;
 import com.sliva.btc.scanner.db.DbUpdateOutput;
 import com.sliva.btc.scanner.db.model.OutputStatus;
 import com.sliva.btc.scanner.util.CommandLineUtils;
 import com.sliva.btc.scanner.util.CommandLineUtils.CmdArguments;
+import com.sliva.btc.scanner.util.CommandLineUtils.CmdOption;
+import com.sliva.btc.scanner.util.CommandLineUtils.CmdOptions;
 import static com.sliva.btc.scanner.util.CommandLineUtils.buildOption;
+import com.sliva.btc.scanner.util.ShutdownHook;
 import com.sliva.btc.scanner.util.Utils;
 import com.sliva.btc.scanner.util.Utils.NumberFile;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.concurrent.atomic.AtomicInteger;
 import lombok.extern.slf4j.Slf4j;
 
@@ -40,18 +42,16 @@ public class RunUpdateSpent {
     private static final int DEFAULT_START_TRANSACTION_ID = 0;
     private static final int DEFAULT_BATCH_SIZE = 200_000;
 
-    public static final Collection<CommandLineUtils.CmdOption> CMD_OPTS = new ArrayList<>();
-    private static final CommandLineUtils.CmdOption batchSizeOpt = buildOption(CMD_OPTS, null, "batch-size", true, "Number or transactions to process in a batch. Default: " + DEFAULT_BATCH_SIZE);
-    private static final CommandLineUtils.CmdOption startFromOpt = buildOption(CMD_OPTS, null, "start-from", true, "Start process from this transaction ID. Beside a number this parameter can be set to a file name that stores the numeric value updated on every batch");
-
-    static {
-        CMD_OPTS.addAll(DBConnectionSupplier.CMD_OPTS);
-    }
+    private static final CmdOptions CMD_OPTS = new CmdOptions().add(DBConnectionSupplier.class);
+    private static final CmdOption batchSizeOpt = buildOption(CMD_OPTS, null, "batch-size", true, "Number or transactions to process in a batch. Default: " + DEFAULT_BATCH_SIZE);
+    private static final CmdOption startFromOpt = buildOption(CMD_OPTS, null, "start-from", true, "Start process from this transaction ID. Beside a number this parameter can be set to a file name that stores the numeric value updated on every batch");
 
     private static final String SQL_QUERY_OUTPUTS
             = "SELECT O.transaction_id,O.pos,O.address_id,O.spent,I.in_transaction_id FROM output O"
             + " LEFT JOIN input I ON I.in_transaction_id=O.transaction_id AND I.in_pos=O.pos"
-            + " WHERE O.transaction_id BETWEEN ? AND ?";
+            + " WHERE (O.address_id <> 0 OR O.spent <> " + OutputStatus.UNSPENDABLE + ") AND O.transaction_id BETWEEN ? AND ?";
+
+    private static final ShutdownHook shutdownHook = new ShutdownHook();
 
     private final DBConnectionSupplier dbCon;
     private final DBPreparedStatement psQueryOutputs;
@@ -64,13 +64,14 @@ public class RunUpdateSpent {
      * @throws java.sql.SQLException
      */
     public static void main(String[] args) throws Exception {
-        DbUpdateOutput.MAX_UPDATE_QUEUE_LENGTH = 50000;
         CmdArguments cmd = CommandLineUtils.buildCmdArguments(args, Main.Command.update_spent.name(), CMD_OPTS);
         log.info("START");
         try {
             new RunUpdateSpent(cmd).runProcess();
         } finally {
             log.info("FINISH");
+            DbUpdate.printStats();
+            shutdownHook.finished();
         }
     }
 
@@ -83,11 +84,12 @@ public class RunUpdateSpent {
     }
 
     private void runProcess() throws SQLException {
-        for (AtomicInteger i = new AtomicInteger(startTransactionId);; i.addAndGet(batchSize)) {
-            log.info("Processing batch of outputs for transaction IDs between {} and {}", i.get(), i.get() + batchSize);
-            startFromFile.updateNumber(i.get());
-            try (DbUpdateOutput updateOutput = new DbUpdateOutput(dbCon)) {
-                if (psQueryOutputs.setParameters(p -> p.setInt(i.get()).setInt(i.get() + batchSize)).executeQuery(rs -> {
+        try (DbUpdateOutput updateOutput = new DbUpdateOutput(dbCon)) {
+            for (AtomicInteger ai = new AtomicInteger(startTransactionId); !shutdownHook.isInterrupted(); ai.addAndGet(batchSize)) {
+                int i = ai.get();
+                log.info("Processing batch of outputs for transaction IDs between {} and {}", i, i + batchSize);
+                startFromFile.updateNumber(i);
+                if (psQueryOutputs.setParameters(p -> p.setInt(i).setInt(i + batchSize)).executeQuery(rs -> {
                     int transactionId = rs.getInt(1);
                     short pos = rs.getShort(2);
                     int addressId = rs.getInt(3);
@@ -106,6 +108,7 @@ public class RunUpdateSpent {
                     log.info("Reached end of transactions table");
                     break;
                 }
+                updateOutput.flushCache();
             }
         }
     }

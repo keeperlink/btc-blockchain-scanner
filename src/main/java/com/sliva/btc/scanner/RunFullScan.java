@@ -28,11 +28,8 @@ import com.sliva.btc.scanner.db.DbQueryBlock;
 import com.sliva.btc.scanner.db.DbQueryInput;
 import com.sliva.btc.scanner.db.DbQueryInputSpecial;
 import com.sliva.btc.scanner.db.DbUpdate;
-import com.sliva.btc.scanner.db.DbUpdateAddressOne;
 import com.sliva.btc.scanner.db.DbUpdateInput;
 import com.sliva.btc.scanner.db.DbUpdateInputSpecial;
-import com.sliva.btc.scanner.db.DbUpdateOutput;
-import com.sliva.btc.scanner.db.DbUpdateTransaction;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.db.model.BtcBlock;
 import com.sliva.btc.scanner.db.model.BtcTransaction;
@@ -56,7 +53,9 @@ import com.sliva.btc.scanner.util.BufferingAheadSupplier;
 import com.sliva.btc.scanner.util.CommandLineUtils;
 import com.sliva.btc.scanner.util.CommandLineUtils.CmdArguments;
 import com.sliva.btc.scanner.util.CommandLineUtils.CmdOption;
+import com.sliva.btc.scanner.util.CommandLineUtils.CmdOptions;
 import static com.sliva.btc.scanner.util.CommandLineUtils.buildOption;
+import com.sliva.btc.scanner.util.ShutdownHook;
 import com.sliva.btc.scanner.util.Utils;
 import java.io.File;
 import java.io.IOException;
@@ -96,7 +95,7 @@ public class RunFullScan {
     private static final int DEFAULT_LOAD_BLOCK_THREADS = 5;
     private static final int DEFAULT_PREPROC_BLOCK_THREADS = 3;
 
-    public static final Collection<CmdOption> CMD_OPTS = new ArrayList<>();
+    private static final CmdOptions CMD_OPTS = new CmdOptions().add(DBConnectionSupplier.class).add(RpcClient.class).add(RpcClientDirect.class).add(BJBlockProvider.class);
     private static final CmdOption safeRunOpt = buildOption(CMD_OPTS, null, "safe-run", true, "Run in safe mode - check DB for existing records before adding new");
     private static final CmdOption updateSpentOpt = buildOption(CMD_OPTS, null, "update-spent", true, "Update spent flag on outpus. Default is true. For better performance of massive update you might want to disable it and run separate process after this update is done.");
     private static final CmdOption blocksBackOpt = buildOption(CMD_OPTS, null, "blocks-back", true, "Check last number of blocks. Process will run in safe mode (option --safe-run=true)");
@@ -109,11 +108,8 @@ public class RunFullScan {
     private static final CmdOption loadBlockThreadsOpt = buildOption(CMD_OPTS, null, "load-block-threads", true, "Number of threads loading blocks. Default: " + DEFAULT_LOAD_BLOCK_THREADS);
     private static final CmdOption preprocBlockThreadsOpt = buildOption(CMD_OPTS, null, "preproc-block-threads", true, "Number of threads pre-processing blocks. Default: " + DEFAULT_PREPROC_BLOCK_THREADS);
 
-    static {
-        CMD_OPTS.addAll(DBConnectionSupplier.CMD_OPTS);
-        CMD_OPTS.addAll(RpcClient.CMD_OPTS);
-        CMD_OPTS.addAll(BJBlockProvider.CMD_OPTS);
-    }
+    private static final ShutdownHook shutdownHook = new ShutdownHook();
+    private static boolean terminateLoop;
 
     private final File stopFile;
     private final boolean safeRun;
@@ -125,7 +121,7 @@ public class RunFullScan {
     private final DbQueryBlock queryBlock;
     private final DbQueryInput queryInput;
     private final DbQueryInputSpecial queryInputSpecial;
-    private final BlockProvider blockProvider;
+    private final BlockProvider<?> blockProvider;
     private final Optional<Integer> startBlock;
     private final Optional<Integer> lastBlock;
     private final int blocksBack;
@@ -134,7 +130,6 @@ public class RunFullScan {
     private final int loadBlockThreads;
     private final int preprocBlockThreads;
     private final LoadingCache<Integer, Collection<TxInput>> inputsCache;
-    private static boolean terminateLoop;
 
     /**
      * @param args the command line arguments
@@ -142,32 +137,26 @@ public class RunFullScan {
      */
     @SuppressWarnings({"SleepWhileInLoop"})
     public static void main(String[] args) throws Exception {
+        log.info("MAIN STARTED");
         try {
             CmdArguments cmd = CommandLineUtils.buildCmdArguments(args, Main.Command.update.name(), CMD_OPTS);
-            DBConnectionSupplier.applyArguments(cmd);
-            BJBlockProvider.applyArguments(cmd);
-            RpcClient.applyArguments(cmd);
-            RpcClientDirect.applyArguments(cmd);
             Integer loopTime = cmd.getOption(loopOpt).map(Integer::parseInt).orElse(null);
             do {
                 new RunFullScan(cmd).runProcess();
-                if (loopTime != null && loopTime > 0 && !terminateLoop) {
+                if (loopTime != null && loopTime > 0 && !terminateLoop && !shutdownHook.isInterrupted()) {
                     log.info("Execution finished. Sleeping for " + loopTime + " seconds...");
                     TimeUnit.SECONDS.sleep(loopTime);
                 }
-            } while (loopTime != null && !terminateLoop);
+            } while (loopTime != null && !terminateLoop && !shutdownHook.isInterrupted());
         } catch (Exception e) {
             log.error(null, e);
+        } finally {
+            log.info("MAIN FINISHED");
+            shutdownHook.finished();
         }
     }
 
     public RunFullScan(CmdArguments cmd) throws Exception {
-        DbUpdateAddressOne.MAX_INSERT_QUEUE_LENGTH = 5000;
-        DbUpdateInput.MAX_INSERT_QUEUE_LENGTH = 5000;
-        DbUpdateInputSpecial.MAX_INSERT_QUEUE_LENGTH = 5000;
-        DbUpdateOutput.MAX_INSERT_QUEUE_LENGTH = 5000;
-        DbUpdateTransaction.MAX_INSERT_QUEUE_LENGTH = 5000;
-
         safeRun = cmd.getOption(safeRunOpt).map(Boolean::valueOf)
                 .orElse(cmd.hasOption(startFromBlockOpt) || cmd.hasOption(blocksBackOpt) || DEFAULT_SAFE_RUN);
         startBlock = cmd.getOption(startFromBlockOpt).map(Integer::valueOf);
@@ -265,12 +254,12 @@ public class RunFullScan {
             DbCachedOutput cachedOutput) {
         int blockHeight = block.getHeight();
         String blockHash = block.getHash();
-        log.info("Block({}).hash: {}, nTxns={}", blockHeight, blockHash, block.getTransactions().count());
+        log.info("Block({}).hash: {}, nTxns={}", blockHeight, blockHash, block.getTransactions().size());
         if (!queryBlock.findBlockByHash(blockHash).isPresent()) {
             addBlock.add(BtcBlock.builder()
                     .height(blockHeight)
                     .hash(blockHash)
-                    .txnCount((int) block.getTransactions().count())
+                    .txnCount(block.getTransactions().size())
                     .build());
         }
         List<BtcTransaction> listTxn = safeRun ? cachedTxn.getTransactionsInBlock(blockHeight) : null;
@@ -336,8 +325,8 @@ public class RunFullScan {
             btcTx = BtcTransaction.builder()
                     .txid(txid)
                     .blockHeight(blockHeight)
-                    .nInputs(t.getInputs() == null ? 0 : (int) t.getInputs().count())
-                    .nOutputs((int) t.getOutputs().count())
+                    .nInputs(t.getInputs() == null ? 0 : t.getInputs().size())
+                    .nOutputs(t.getOutputs().size())
                     .build();
             btcTx = cachedTxn.add(btcTx);
         } else {
@@ -493,7 +482,7 @@ public class RunFullScan {
                         .pos(to.getPos())
                         .amount(to.getValue())
                         .addressId(addressId)
-                        .status(OutputStatus.UNDEFINED)
+                        .status(addressId == 0 ? OutputStatus.UNSPENDABLE : OutputStatus.UNSPENT)
                         .build();
                 TxOutput txOutput = findOutput(txOutputs, txOutputToAdd.getPos());
                 if (txOutput == null) {
@@ -531,7 +520,7 @@ public class RunFullScan {
     }
 
     private static SrcTransaction<SrcInput, SrcOutput<SrcAddress>> findBJTransaction(SrcBlock<SrcTransaction<SrcInput, SrcOutput<SrcAddress>>> block, int blockHeight, String txid) throws SQLException, IOException {
-        return block.getTransactions().filter((t) -> Utils.fixDupeTxid(t.getTxid(), blockHeight).equals(txid)).findAny().orElse(null);
+        return block.getTransactions().stream().filter((t) -> Utils.fixDupeTxid(t.getTxid(), blockHeight).equals(txid)).findAny().orElse(null);
     }
 
     private SrcBlock<SrcTransaction<SrcInput, SrcOutput<SrcAddress>>> preloadBlockCaches(
@@ -541,7 +530,7 @@ public class RunFullScan {
             DbCachedAddress cachedAddress) {
         log.trace("preloadBlockCaches({}) STARTED", block.getHeight());
         try {
-            block.getTransactions()
+            block.getTransactions().stream()
                     .map(txn -> CompletableFuture.completedFuture(txn).thenApplyAsync(t -> preProcTransaction(t, block.getHeight(), cachedTxn, cachedOutput, cachedAddress), execTxn))
                     .collect(Collectors.toList()).forEach(CompletableFuture::join);
             return block;
@@ -565,10 +554,10 @@ public class RunFullScan {
                     inputsCache.getUnchecked(tx.getTransactionId());
                 });
             }
-            List<CompletableFuture<Void>> outFutures = t.getOutputs().map(to -> CompletableFuture.runAsync(() -> getAddress(to).map(to3 -> getOrAdd(to3, cachedAddress)), execInsOuts))
+            List<CompletableFuture<Void>> outFutures = t.getOutputs().stream().map(to -> CompletableFuture.runAsync(() -> getAddress(to).map(to3 -> getOrAdd(to3, cachedAddress)), execInsOuts))
                     .collect(Collectors.toList());
             if (t.getInputs() != null) {
-                t.getInputs().map(ti -> CompletableFuture.runAsync(() -> getTransaction(ti.getInTxid(), cachedTxn).map(ti3 -> getOutputs(ti3.getTransactionId(), cachedOutput)), execInsOuts))
+                t.getInputs().stream().map(ti -> CompletableFuture.runAsync(() -> getTransaction(ti.getInTxid(), cachedTxn).map(ti3 -> getOutputs(ti3.getTransactionId(), cachedOutput)), execInsOuts))
                         .collect(Collectors.toList())
                         .forEach(CompletableFuture::join);
             }
@@ -606,7 +595,7 @@ public class RunFullScan {
             terminateLoop = true;
             stopFile.renameTo(new File(stopFile.getAbsoluteFile() + "1"));
         }
-        return terminateLoop;
+        return terminateLoop || shutdownHook.isInterrupted();
     }
 
     @SneakyThrows(SQLException.class)

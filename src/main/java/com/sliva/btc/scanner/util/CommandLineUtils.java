@@ -15,19 +15,28 @@
  */
 package com.sliva.btc.scanner.util;
 
+import static com.google.common.base.Preconditions.checkArgument;
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Optional;
+import java.util.function.Consumer;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.NonNull;
+import lombok.SneakyThrows;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
+import org.apache.commons.lang3.reflect.FieldUtils;
+import org.apache.commons.lang3.reflect.MethodUtils;
 
 /**
  *
@@ -36,11 +45,15 @@ import org.apache.commons.cli.ParseException;
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class CommandLineUtils {
 
-    public static CmdArguments buildCmdArguments(String[] args, String command, Collection<CmdOption> optionsList) throws ParseException {
-        return new CmdArguments(args, command, optionsList);
+    @NonNull
+    public static CmdArguments buildCmdArguments(String[] args, String command, CmdOptions optionsList) throws ParseException {
+        CmdArguments cmd = new CmdArguments(args, command, optionsList);
+        optionsList.applyArgumentsMethods.forEach(m -> invokeStaticMethod(m, cmd));
+        return cmd;
     }
 
-    public static CommandLine parseCommandLine(String[] args, String command, Collection<CmdOption> optionsList)
+    @NonNull
+    public static CommandLine parseCommandLine(String[] args, String command, CmdOptions optionsList)
             throws ParseException {
         CommandLineParser parser = new DefaultParser();
         Options opts = prepOptions(optionsList);
@@ -51,7 +64,8 @@ public final class CommandLineUtils {
         return cmd;
     }
 
-    public static CmdOption buildOption(Collection<CmdOption> optionsList, String opt, String longOpt, boolean hasArg, String description) {
+    @NonNull
+    public static CmdOption buildOption(CmdOptions optionsList, String opt, String longOpt, boolean hasArg, String description) {
         CmdOption cmdOption = new CmdOption(opt, longOpt, hasArg, description);
         optionsList.add(cmdOption);
         return cmdOption;
@@ -64,11 +78,17 @@ public final class CommandLineUtils {
         System.exit(1);
     }
 
-    private static Options prepOptions(Collection<CmdOption> optionsList) {
+    @NonNull
+    private static Options prepOptions(CmdOptions optionsList) {
         Options options = new Options();
         options.addOption("h", "help", false, "Print help");
-        optionsList.forEach(c -> options.addOption(c.getOpt(), c.getLongOpt(), c.isHasArg(), c.getDescription()));
+        optionsList.optionsList.forEach(c -> options.addOption(c.getOpt(), c.getLongOpt(), c.isHasArg(), c.getDescription()));
         return options;
+    }
+
+    @SneakyThrows({IllegalAccessException.class, InvocationTargetException.class})
+    private static void invokeStaticMethod(Method m, Object... args) {
+        m.invoke(null, args);
     }
 
     @AllArgsConstructor(access = AccessLevel.PRIVATE)
@@ -83,11 +103,42 @@ public final class CommandLineUtils {
         private final String description;
     }
 
+    public static class CmdOptions {
+
+        private final Collection<CmdOption> optionsList = new ArrayList<>();
+        private final Collection<Method> applyArgumentsMethods = new ArrayList<>();
+
+        @NonNull
+        private CmdOptions add(CmdOption cmdOption) {
+            optionsList.add(cmdOption);
+            return this;
+        }
+
+        @NonNull
+        @SneakyThrows(IllegalAccessException.class)
+        public CmdOptions add(Class<?> classWithOptions) {
+            Method m = MethodUtils.getAccessibleMethod(classWithOptions, "applyArguments", CmdArguments.class);
+            checkArgument(m != null, "Class %s does not expose static method applyArguments(CmdArguments)", classWithOptions);
+            applyArgumentsMethods.add(m);
+            Field f = FieldUtils.getDeclaredField(classWithOptions, "CMD_OPTS", true);
+            checkArgument(f != null, "Class %s does not expose static field CMD_OPTS", classWithOptions);
+            checkArgument(f.get(null) instanceof CmdOptions, "Static CMD_OPTS field in class %s should contain non null instance of of CmdOptions", classWithOptions);
+            CmdOptions cmdOptsValue = (CmdOptions) f.get(null);
+            optionsList.addAll(cmdOptsValue.optionsList);
+            return this;
+        }
+
+        @Deprecated
+        public void forEach(Consumer<CmdOption> action) {
+            optionsList.forEach(action);
+        }
+    }
+
     public static class CmdArguments {
 
         private final CommandLine commandLine;
 
-        private CmdArguments(String[] args, String command, Collection<CmdOption> optionsList) throws ParseException {
+        private CmdArguments(String[] args, String command, CmdOptions optionsList) throws ParseException {
             this.commandLine = parseCommandLine(args, command, optionsList);
         }
 

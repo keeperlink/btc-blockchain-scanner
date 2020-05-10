@@ -17,10 +17,11 @@ package com.sliva.btc.scanner.src;
 
 import com.sliva.btc.scanner.rpc.RpcClient;
 import java.math.BigDecimal;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Stream;
+import java.util.stream.Collectors;
 import lombok.ToString;
 import org.bitcoinj.core.Transaction;
 import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient;
@@ -34,7 +35,7 @@ import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient.RawTransaction.In;
 @ToString(doNotUseGetters = true)
 public class RpcTransaction implements SrcTransaction<RpcInput, RpcOutput> {
 
-    public static final String TRANSACTION_ZERO = "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b";
+    public static final String TRANSACTION_ZERO_ID = "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b";
 
     private final String txid;
     private Transaction tran;
@@ -55,8 +56,8 @@ public class RpcTransaction implements SrcTransaction<RpcInput, RpcOutput> {
     }
 
     @Override
-    public Stream<RpcInput> getInputs() {
-        if (TRANSACTION_ZERO.equalsIgnoreCase(txid)) {
+    public Collection<RpcInput> getInputs() {
+        if (TRANSACTION_ZERO_ID.equalsIgnoreCase(txid)) {
             //Bitcoin Core RPC does not return first transaction - generate it here
             return null;
         }
@@ -72,72 +73,22 @@ public class RpcTransaction implements SrcTransaction<RpcInput, RpcOutput> {
         }
         final AtomicInteger pos = new AtomicInteger(0);
         if (tran != null) {
-            return tran.getInputs().stream().map((t) -> new RpcInput(t, (short) pos.getAndIncrement()));
+            return tran.getInputs().stream().map((t) -> new RpcInput(t, (short) pos.getAndIncrement())).collect(Collectors.toList());
         } else {
-            return getRawTransaction().vIn().stream().map((t) -> new RpcInput(t, (short) pos.getAndIncrement()));
+            return getRawTransaction().vIn().stream().map((t) -> new RpcInput(t, (short) pos.getAndIncrement())).collect(Collectors.toList());
         }
     }
 
     @Override
-    public Stream<RpcOutput> getOutputs() {
-        if (TRANSACTION_ZERO.equalsIgnoreCase(txid)) {
+    public Collection<RpcOutput> getOutputs() {
+        if (TRANSACTION_ZERO_ID.equalsIgnoreCase(txid)) {
             //Bitcoin Core RPC does not return first transaction - generate it here
-            return Collections.singletonList(new RpcOutput(new RawTransaction.Out() {
-                @Override
-                public BigDecimal value() {
-                    return new BigDecimal("50");
-                }
-
-                @Override
-                public int n() {
-                    return 0;
-                }
-
-                @Override
-                public ScriptPubKey scriptPubKey() {
-                    return new ScriptPubKey() {
-                        @Override
-                        public String asm() {
-                            throw new UnsupportedOperationException("Not supported");
-                        }
-
-                        @Override
-                        public String hex() {
-                            throw new UnsupportedOperationException("Not supported");
-                        }
-
-                        @Override
-                        public int reqSigs() {
-                            throw new UnsupportedOperationException("Not supported");
-                        }
-
-                        @Override
-                        public String type() {
-                            throw new UnsupportedOperationException("Not supported");
-                        }
-
-                        @Override
-                        public List<String> addresses() {
-                            return Collections.singletonList("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa");
-                        }
-                    };
-                }
-
-                @Override
-                public BitcoindRpcClient.TxInput toInput() {
-                    throw new UnsupportedOperationException("Not supported");
-                }
-
-                @Override
-                public RawTransaction transaction() {
-                    throw new UnsupportedOperationException("Not supported");
-                }
-            })).stream();
+            return Collections.singletonList(buildTransactionZero());
         }
         if (tran != null) {
-            return tran.getOutputs().stream().map(t -> new RpcOutput(t));
+            return tran.getOutputs().stream().map(t -> new RpcOutput(t)).collect(Collectors.toList());
         } else {
-            return getRawTransaction().vOut().stream().map(t -> new RpcOutput(t));
+            return getRawTransaction().vOut().stream().map(t -> new RpcOutput(t)).collect(Collectors.toList());
         }
     }
 
@@ -146,5 +97,59 @@ public class RpcTransaction implements SrcTransaction<RpcInput, RpcOutput> {
             rawTransaction = RpcClient.getInstance().getRawTransaction(txid);
         }
         return rawTransaction;
+    }
+
+    private RpcOutput buildTransactionZero() {
+        return new RpcOutput(new RawTransaction.Out() {
+            @Override
+            public BigDecimal value() {
+                return new BigDecimal("50");
+            }
+
+            @Override
+            public int n() {
+                return 0;
+            }
+
+            @Override
+            public ScriptPubKey scriptPubKey() {
+                return new ScriptPubKey() {
+                    @Override
+                    public String asm() {
+                        throw new UnsupportedOperationException("Not supported");
+                    }
+
+                    @Override
+                    public String hex() {
+                        throw new UnsupportedOperationException("Not supported");
+                    }
+
+                    @Override
+                    public int reqSigs() {
+                        throw new UnsupportedOperationException("Not supported");
+                    }
+
+                    @Override
+                    public String type() {
+                        throw new UnsupportedOperationException("Not supported");
+                    }
+
+                    @Override
+                    public List<String> addresses() {
+                        return Collections.singletonList("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa");
+                    }
+                };
+            }
+
+            @Override
+            public BitcoindRpcClient.TxInput toInput() {
+                throw new UnsupportedOperationException("Not supported");
+            }
+
+            @Override
+            public RawTransaction transaction() {
+                throw new UnsupportedOperationException("Not supported");
+            }
+        });
     }
 }

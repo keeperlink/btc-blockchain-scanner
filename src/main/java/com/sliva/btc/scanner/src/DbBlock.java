@@ -18,7 +18,6 @@ package com.sliva.btc.scanner.src;
 import static com.sliva.btc.scanner.util.Utils.decodeHex;
 import static com.sliva.btc.scanner.util.Utils.encodeHex;
 import java.util.Collection;
-import java.util.stream.Stream;
 import org.apache.commons.codec.binary.Hex;
 
 /**
@@ -69,12 +68,12 @@ public class DbBlock implements SrcBlock<DbTransaction> {
     }
 
     @Override
-    public Stream<DbTransaction> getTransactions() {
+    public Collection<DbTransaction> getTransactions() {
         if (transactions == null) {
             transactions = blockProvider.psQueryBlockTransactions
                     .setParameters(p -> p.setInt(getHeight()))
                     .executeQueryToList(rs -> new DbTransaction(blockProvider, rs.getInt(1), encodeHex(rs.getBytes(2))));
         }
-        return transactions.stream();
+        return transactions;
     }
 }

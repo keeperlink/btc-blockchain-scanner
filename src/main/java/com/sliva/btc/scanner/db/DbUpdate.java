@@ -113,16 +113,9 @@ public abstract class DbUpdate implements AutoCloseable {
 
     public abstract int executeUpdates();
 
-    protected static void waitFullQueue(Collection queue, int maxQueueLength) {
+    protected static void waitFullQueue(Collection<?> queue, int maxQueueLength) {
         while (queue.size() >= maxQueueLength) {
             Utils.sleep(10);
-        }
-    }
-
-    private static void updateRuntimeMap(String tableName, long records, long runtimeNanos) {
-        synchronized (execStats) {
-            execStats.computeIfAbsent(tableName, ExecStats::new)
-                    .addExecution(records, runtimeNanos);
         }
     }
 
@@ -169,8 +162,8 @@ public abstract class DbUpdate implements AutoCloseable {
                 log.error(e.getMessage(), e);
             } finally {
                 long runtimeNanos = System.nanoTime() - s;
-                updateRuntimeMap(getTableName(), nRecs, runtimeNanos);
                 if (nRecs > 0) {
+                    updateRuntimeMap(getTableName(), nRecs, runtimeNanos);
                     log.debug("{}.executeSync(): insert/update queries executed: {} runtime {} ms.", getTableName(), nRecs, BigDecimal.valueOf(runtimeNanos).movePointLeft(6).setScale(3, RoundingMode.HALF_DOWN));
                 }
             }
@@ -196,6 +189,13 @@ public abstract class DbUpdate implements AutoCloseable {
                 log.trace("Err: {}: {}", e.getClass(), e.getMessage());
                 Utils.sleep(100);
             }
+        }
+    }
+
+    private static void updateRuntimeMap(String tableName, long records, long runtimeNanos) {
+        synchronized (execStats) {
+            execStats.computeIfAbsent(tableName, ExecStats::new)
+                    .addExecution(records, runtimeNanos);
         }
     }
 

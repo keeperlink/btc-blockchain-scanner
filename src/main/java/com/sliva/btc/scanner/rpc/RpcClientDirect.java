@@ -16,12 +16,11 @@
 package com.sliva.btc.scanner.rpc;
 
 import com.google.gson.Gson;
-import static com.sliva.btc.scanner.rpc.RpcClient.rpcConfigOpt;
-import static com.sliva.btc.scanner.rpc.RpcClient.rpcPasswordOpt;
-import static com.sliva.btc.scanner.rpc.RpcClient.rpcUrlOpt;
-import static com.sliva.btc.scanner.rpc.RpcClient.rpcUserOpt;
 import static com.sliva.btc.scanner.rpc.RpcMethod.*;
-import com.sliva.btc.scanner.util.CommandLineUtils;
+import com.sliva.btc.scanner.util.CommandLineUtils.CmdArguments;
+import com.sliva.btc.scanner.util.CommandLineUtils.CmdOption;
+import com.sliva.btc.scanner.util.CommandLineUtils.CmdOptions;
+import static com.sliva.btc.scanner.util.CommandLineUtils.buildOption;
 import com.sliva.btc.scanner.util.Utils;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -48,9 +47,16 @@ import org.apache.commons.httpclient.methods.StringRequestEntity;
 @Slf4j
 public class RpcClientDirect {
 
-    public static String RPC_URL = "http://localhost:17955";
-    public static String RPC_USER = "user";
-    public static String RPC_PASSWORD = "password";
+    private static String RPC_URL = "http://localhost:17955";
+    private static String RPC_USER = "user";
+    private static String RPC_PASSWORD = "password";
+
+    public static final CmdOptions CMD_OPTS = new CmdOptions();
+    public static final CmdOption rpcUrlOpt = buildOption(CMD_OPTS, "r", "rpc-url", true, "RPC URL to running bitcoin core. Default is '" + RPC_URL + "'.");
+    public static final CmdOption rpcUserOpt = buildOption(CMD_OPTS, "x", "rpc-user", true, "RPC user name.");
+    public static final CmdOption rpcPasswordOpt = buildOption(CMD_OPTS, "y", "rpc-password", true, "RPC password.");
+    public static final CmdOption rpcConfigOpt = buildOption(CMD_OPTS, null, "rpc-config", true, "Configuration file name with RPC url, user and password values.");
+
     private static RpcClientDirect instance;
     private static final ThreadLocal<HttpClient> clientPool = ThreadLocal.withInitial(() -> new HttpClient());
     private final AtomicLong reqCounter = new AtomicLong();
@@ -103,7 +109,7 @@ public class RpcClientDirect {
         return response.get("result");
     }
 
-    public static void applyArguments(CommandLineUtils.CmdArguments cmdArguments) {
+    public static void applyArguments(CmdArguments cmdArguments) {
         Properties prop = Utils.loadProperties(cmdArguments.getOption(rpcConfigOpt).orElse(null));
         RPC_URL = cmdArguments.getOption(rpcUrlOpt).orElseGet(() -> prop.getProperty(rpcUrlOpt.getLongOpt(), RPC_URL));
         RPC_USER = cmdArguments.getOption(rpcUserOpt).orElseGet(() -> prop.getProperty(rpcUserOpt.getLongOpt(), RPC_USER));
@@ -121,7 +127,7 @@ public class RpcClientDirect {
 
     @Deprecated
     public static Options addOptions(Options options) {
-        options.addOption("r", "rpc-url", true, "RPC URL to running bitcoin core. Default is '" + RpcClient.RPC_URL + "'.");
+        options.addOption("r", "rpc-url", true, "RPC URL to running bitcoin core. Default is '" + RPC_URL + "'.");
         options.addOption("x", "rpc-user", true, "RPC user name.");
         options.addOption("y", "rpc-password", true, "RPC password.");
         options.addOption(null, "rpc-config", true, "Configuration file name with RPC url, user and password values.");
