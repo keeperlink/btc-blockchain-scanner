@@ -21,8 +21,11 @@ import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import lombok.Getter;
+import lombok.NonNull;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.spongycastle.util.encoders.Hex;
 
@@ -50,25 +53,24 @@ public class DbCachedAddressOne implements AutoCloseable {
         this.cacheData = cacheData;
     }
 
+    @NonNull
     public CacheData getCacheData() {
         return cacheData;
     }
 
     public int getOrAdd(byte[] address, boolean updateCache) throws SQLException {
-        BtcAddress a = getAddress(address, updateCache);
-        if (a == null) {
-            a = _getOrAddSync(address, updateCache);
-        }
-        return a.getAddressId();
+        return getAddress(address, updateCache).orElseGet(() -> _getOrAddSync(address, updateCache)).getAddressId();
     }
 
-    private BtcAddress _getOrAddSync(byte[] address, boolean updateCache) throws SQLException {
+    @NonNull
+    private BtcAddress _getOrAddSync(byte[] address, boolean updateCache) {
         synchronized (cacheData) {
             return _getOrAddNotSync(address, updateCache);
         }
     }
 
-    private BtcAddress _getOrAddNotSync(byte[] address, boolean updateCache) throws SQLException {
+    @NonNull
+    private BtcAddress _getOrAddNotSync(byte[] address, boolean updateCache) {
         BtcAddress a = cacheData.cacheMap.get(Hex.toHexString(address));
         if (a == null) {
             a = add(BtcAddress.builder().type(addressType).address(address).build(), updateCache);
@@ -76,7 +78,9 @@ public class DbCachedAddressOne implements AutoCloseable {
         return a;
     }
 
-    public BtcAddress add(BtcAddress btcAddress, boolean updateCache) throws SQLException {
+    @NonNull
+    @SneakyThrows(SQLException.class)
+    public BtcAddress add(BtcAddress btcAddress, boolean updateCache) {
         BtcAddress a = btcAddress;
         if (a.getAddressId() == 0) {
             a = a.toBuilder().addressId(getNextAddressId()).build();
@@ -88,31 +92,35 @@ public class DbCachedAddressOne implements AutoCloseable {
         return a;
     }
 
-    public BtcAddress getAddress(int addressId, boolean updateCache) throws SQLException {
-        BtcAddress result = cacheData.cacheMapId.get(addressId);
-        if (result == null) {
-            result = updateAddress.getCacheData().getAddMapId().get(addressId);
+    @NonNull
+    @SneakyThrows(SQLException.class)
+    public Optional<BtcAddress> getAddress(int addressId, boolean updateCache) {
+        Optional<BtcAddress> result = Optional.ofNullable(cacheData.cacheMapId.get(addressId));
+        if (!result.isPresent()) {
+            result = Optional.ofNullable(updateAddress.getCacheData().getAddMapId().get(addressId));
         }
-        if (result == null) {
-            result = queryAddress.findByAddressId(addressId).orElse(null);
+        if (!result.isPresent()) {
+            result = queryAddress.findByAddressId(addressId);
         }
-        if (result != null && updateCache) {
-            updateCache(result);
+        if (updateCache) {
+            result.ifPresent(r -> updateCache(r));
         }
         return result;
     }
 
-    public BtcAddress getAddress(byte[] address, boolean updateCache) throws SQLException {
+    @NonNull
+    @SneakyThrows(SQLException.class)
+    public Optional<BtcAddress> getAddress(byte[] address, boolean updateCache) {
         String hexAddr = Hex.toHexString(address);
-        BtcAddress result = cacheData.cacheMap.get(hexAddr);
-        if (result == null) {
-            result = updateAddress.getCacheData().getAddMap().get(hexAddr);
+        Optional<BtcAddress> result = Optional.ofNullable(cacheData.cacheMap.get(hexAddr));
+        if (!result.isPresent()) {
+            result = Optional.ofNullable(updateAddress.getCacheData().getAddMap().get(hexAddr));
         }
-        if (result == null) {
-            result = queryAddress.findByAddress(address).orElse(null);
+        if (!result.isPresent()) {
+            result = queryAddress.findByAddress(address);
         }
-        if (result != null && updateCache) {
-            updateCache(result);
+        if (updateCache) {
+            result.ifPresent(r -> updateCache(r));
         }
         return result;
     }
@@ -126,7 +134,7 @@ public class DbCachedAddressOne implements AutoCloseable {
         }
     }
 
-    private void updateCache(BtcAddress btcAddress) throws SQLException {
+    private void updateCache(BtcAddress btcAddress) {
         synchronized (cacheData) {
             String hexAddr = Hex.toHexString(btcAddress.getAddress());
             cacheData.cacheMap.remove(hexAddr);

@@ -23,7 +23,9 @@ import com.sliva.btc.scanner.util.Utils;
 import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.bitcoinj.core.Address;
@@ -47,29 +49,32 @@ public class DbCachedAddress implements AutoCloseable {
         BtcAddress.getRealTypes().forEach((t) -> updaters.put(t, new DbCachedAddressOne(conn, t, cacheData.dataOneMap.get(t))));
     }
 
+    @NonNull
     public CacheData getCacheData() {
         return cacheData;
     }
 
     @SuppressWarnings("DoubleCheckedLocking")
-    public int getOrAdd(SrcAddress address, boolean updateCache) throws SQLException {
+    @SneakyThrows(SQLException.class)
+    public int getOrAdd(SrcAddress address, boolean updateCache) {
         checkArgument(address != null, "Argument 'address' is null");
         return getOne(BtcAddress.builder()
                 .type(address.getType()).build())
                 .getOrAdd(address.getHash(), updateCache);
     }
 
-    public BtcAddress add(BtcAddress btcAddress, boolean updateCache) throws SQLException {
+    @NonNull
+    public BtcAddress add(BtcAddress btcAddress, boolean updateCache) {
         return getOne(btcAddress).add(btcAddress, updateCache);
     }
 
-    @SneakyThrows(SQLException.class)
-    public BtcAddress getAddress(int addressId, boolean updateCache) {
+    @NonNull
+    public Optional<BtcAddress> getAddress(int addressId, boolean updateCache) {
         return getOne(BtcAddress.builder().addressId(addressId).build()).getAddress(addressId, updateCache);
     }
 
-    @SneakyThrows(SQLException.class)
-    public BtcAddress getAddress(Address address, boolean updateCache) {
+    @NonNull
+    public Optional<BtcAddress> getAddress(Address address, boolean updateCache) {
         return getOne(BtcAddress.builder()
                 .type(Utils.getBtcAddressType(address.getOutputScriptType()))
                 .build()).getAddress(address.getHash(), updateCache);

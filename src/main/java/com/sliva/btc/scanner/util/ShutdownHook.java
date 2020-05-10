@@ -30,11 +30,18 @@ public class ShutdownHook {
     private boolean finished;
 
     public ShutdownHook() {
+        this(null);
+    }
+
+    public ShutdownHook(Runnable onBreak) {
         Runtime.getRuntime().addShutdownHook(new Thread() {
             @Override
             public void run() {
                 log.info("Shutting down...");
                 interrupted = true;
+                if (onBreak != null) {
+                    onBreak.run();
+                }
                 while (!finished) {
                     Utils.sleep(100);
                 }

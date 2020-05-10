@@ -27,6 +27,7 @@ import java.util.Optional;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.NonNull;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -51,6 +52,7 @@ public class DbCachedOutput implements AutoCloseable {
         this.cacheData = cacheData;
     }
 
+    @NonNull
     public CacheData getCacheData() {
         return cacheData;
     }
@@ -62,7 +64,8 @@ public class DbCachedOutput implements AutoCloseable {
         }
     }
 
-    public void delete(TxOutput txOutput) throws SQLException {
+    @SneakyThrows(SQLException.class)
+    public void delete(TxOutput txOutput) {
         synchronized (cacheData) {
             updateOutput.delete(txOutput);
             OutputsList ol = cacheData.cacheMap.get(txOutput.getTransactionId());
@@ -75,7 +78,8 @@ public class DbCachedOutput implements AutoCloseable {
         }
     }
 
-    public void updateStatus(int transactionId, short pos, byte status) throws SQLException {
+    @SneakyThrows(SQLException.class)
+    public void updateStatus(int transactionId, short pos, byte status) {
         synchronized (cacheData) {
             updateOutput.updateSpent(transactionId, pos, status);
             OutputsList ol = cacheData.cacheMap.get(transactionId);
@@ -88,7 +92,8 @@ public class DbCachedOutput implements AutoCloseable {
         }
     }
 
-    public void updateAddress(int transactionId, short pos, int addressId) throws SQLException {
+    @SneakyThrows(SQLException.class)
+    public void updateAddress(int transactionId, short pos, int addressId) {
         synchronized (cacheData) {
             updateOutput.updateAddress(transactionId, pos, addressId);
             OutputsList ol = cacheData.cacheMap.get(transactionId);
@@ -101,7 +106,8 @@ public class DbCachedOutput implements AutoCloseable {
         }
     }
 
-    public void updateAmount(int transactionId, short pos, long amount) throws SQLException {
+    @SneakyThrows(SQLException.class)
+    public void updateAmount(int transactionId, short pos, long amount) {
         synchronized (cacheData) {
             updateOutput.updateAmount(transactionId, pos, amount);
             OutputsList ol = cacheData.cacheMap.get(transactionId);
@@ -114,6 +120,7 @@ public class DbCachedOutput implements AutoCloseable {
         }
     }
 
+    @NonNull
     public List<TxOutput> getOutputs(int transactionId) throws SQLException {
         OutputsList ol = cacheData.cacheMap.get(transactionId);
         if (ol != null && ol.isComplete()) {

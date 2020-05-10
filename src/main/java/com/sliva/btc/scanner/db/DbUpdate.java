@@ -164,7 +164,10 @@ public abstract class DbUpdate implements AutoCloseable {
                 long runtimeNanos = System.nanoTime() - s;
                 if (nRecs > 0) {
                     updateRuntimeMap(getTableName(), nRecs, runtimeNanos);
-                    log.debug("{}.executeSync(): insert/update queries executed: {} runtime {} ms.", getTableName(), nRecs, BigDecimal.valueOf(runtimeNanos).movePointLeft(6).setScale(3, RoundingMode.HALF_DOWN));
+                    if (log.isDebugEnabled()) {
+                        log.debug("{}.executeSync(): insert/update queries executed: {} runtime {} ms.",
+                                getTableName(), nRecs, BigDecimal.valueOf(runtimeNanos).movePointLeft(6).setScale(3, RoundingMode.HALF_DOWN));
+                    }
                 }
             }
         } finally {

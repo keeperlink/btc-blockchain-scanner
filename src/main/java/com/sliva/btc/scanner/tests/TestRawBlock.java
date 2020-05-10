@@ -28,7 +28,6 @@ import com.sliva.btc.scanner.db.model.TxInput;
 import com.sliva.btc.scanner.db.model.TxOutput;
 import java.io.File;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import org.bitcoinj.core.Block;
@@ -121,10 +120,7 @@ public class TestRawBlock {
                             if (txOutput.getAmount() != to.getValue().longValue()) {
                                 throw new IllegalStateException("Value doesn't match with DB: " + to.getValue().longValue() + " <> " + txOutput.getAmount());
                             }
-                            BtcAddress btcAddress = queryAddress.getAddress(txOutput.getAddressId(), true);
-                            if (btcAddress == null) {
-                                throw new IllegalStateException("Address not found in DB: " + txOutput.getAddressId());
-                            }
+                            BtcAddress btcAddress = queryAddress.getAddress(txOutput.getAddressId(), true).orElseThrow(() -> new IllegalStateException("Address not found in DB: " + txOutput.getAddressId()));
                             if (!btcAddress.getAddress().equals(addrStr)) { //TODO wrong comare
                                 throw new IllegalStateException("Address doesn't match with DB: " + addrStr + " <> " + btcAddress.getAddress());
                             }
@@ -137,13 +133,13 @@ public class TestRawBlock {
                         }
                     });
                     if (!txOutputs.isEmpty()) {
-                        for (Iterator<TxOutput> i = txOutputs.iterator(); i.hasNext();) {
-                            TxOutput o = i.next();
-                            BtcAddress btcAddress = queryAddress.getAddress(o.getAddressId(), true);
+//                        for (Iterator<TxOutput> i = txOutputs.iterator(); i.hasNext();) {
+//                            TxOutput o = i.next();
+//                            BtcAddress btcAddress = queryAddress.getAddress(o.getAddressId(), true);
 //                        if (btcAddress != null && btcAddress.getAddress().startsWith("z+")) {
 //                            i.remove();
 //                        }
-                        }
+//                        }
                         if (!txOutputs.isEmpty()) {
                             throw new IllegalStateException("More outputs in DB: " + txOutputs);
                         }
