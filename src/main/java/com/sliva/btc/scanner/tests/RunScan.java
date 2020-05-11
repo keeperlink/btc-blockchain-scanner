@@ -118,14 +118,10 @@ public class RunScan {
             txid = Utils.fixDupeTxid(txid, block.height());
             if (txnsInDb == null || !txnsInDb.contains(txid)) {
 //                log.info("addTxn: " + txid + ", block: " + block.height());
-                try {
-                    addTxn.add(BtcTransaction.builder()
-                            .txid(txid)
-                            .blockHeight(block.height())
-                            .build());
-                } catch (SQLException e) {
-                    e.printStackTrace();
-                }
+                addTxn.add(BtcTransaction.builder()
+                        .txid(txid)
+                        .blockHeight(block.height())
+                        .build());
             }
         }
     }

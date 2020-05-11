@@ -17,7 +17,6 @@ package com.sliva.btc.scanner.db;
 
 import com.sliva.btc.scanner.db.model.BtcTransaction;
 import com.sliva.btc.scanner.util.Utils;
-import java.sql.SQLException;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -67,7 +66,7 @@ public class DbQueryTransaction {
     }
 
     @NonNull
-    public Optional<BtcTransaction> findTransaction(String txid) throws SQLException {
+    public Optional<BtcTransaction> findTransaction(String txid) {
         return psFindTransactionByTxid
                 .setParameters(ps -> ps.setBytes(Utils.id2bin(txid)))
                 .querySingleRow(
@@ -81,12 +80,12 @@ public class DbQueryTransaction {
     }
 
     @NonNull
-    public Optional<Integer> findTransactionId(String txid) throws SQLException {
+    public Optional<Integer> findTransactionId(String txid) {
         return DBUtils.readInteger(psFindTransactionIdByTxid.setParameters(ps -> ps.setBytes(Utils.id2bin(txid))));
     }
 
     @NonNull
-    public Optional<BtcTransaction> findTransaction(int transactionId) throws SQLException {
+    public Optional<BtcTransaction> findTransaction(int transactionId) {
         return psFindTransactionById
                 .setParameters(ps -> ps.setInt(transactionId))
                 .querySingleRow(
@@ -100,7 +99,7 @@ public class DbQueryTransaction {
     }
 
     @NonNull
-    public List<BtcTransaction> getTxnsNoOutputs(int limit) throws SQLException {
+    public List<BtcTransaction> getTxnsNoOutputs(int limit) {
         return psQueryTxnsNoOutputs.setMaxRows(limit).executeQueryToList(
                 rs -> BtcTransaction.builder()
                         .transactionId(rs.getInt(1))
@@ -112,7 +111,7 @@ public class DbQueryTransaction {
     }
 
     @NonNull
-    public List<BtcTransaction> getTxnsRangle(int startTransactionId, int endTransactionId) throws SQLException {
+    public List<BtcTransaction> getTxnsRangle(int startTransactionId, int endTransactionId) {
         return psQueryTxnsRange.
                 setParameters(ps -> ps.setInt(startTransactionId).setInt(endTransactionId))
                 .executeQueryToList(
@@ -126,18 +125,18 @@ public class DbQueryTransaction {
     }
 
     @NonNull
-    public List<String> getTxnsInBlock(int blockHeight) throws SQLException {
+    public List<String> getTxnsInBlock(int blockHeight) {
         return psQueryTxnsInBlock
                 .setParameters(ps -> ps.setInt(blockHeight))
                 .executeQueryToList(rs -> Utils.id2hex(rs.getBytes(1)));
     }
 
-    public int countTxnsInBlock(int blockHeight) throws SQLException {
+    public int countTxnsInBlock(int blockHeight) {
         return DBUtils.readInteger(psCountTxnsInBlock.setParameters(ps -> ps.setInt(blockHeight))).orElse(0);
     }
 
     @NonNull
-    public List<BtcTransaction> getTransactionsInBlock(int blockHeight) throws SQLException {
+    public List<BtcTransaction> getTransactionsInBlock(int blockHeight) {
         return psQueryTransactionsInBlock
                 .setParameters(ps -> ps.setInt(blockHeight))
                 .executeQueryToList(
@@ -151,7 +150,7 @@ public class DbQueryTransaction {
     }
 
     @NonNull
-    public Optional<BtcTransaction> getLastTransaction() throws SQLException {
+    public Optional<BtcTransaction> getLastTransaction() {
         return psFindLastTransaction.querySingleRow(
                 rs -> BtcTransaction.builder()
                         .transactionId(rs.getInt(1))
@@ -163,11 +162,12 @@ public class DbQueryTransaction {
     }
 
     @NonNull
-    public Optional<Integer> getLastTransactionId() throws SQLException {
+    public Optional<Integer> getLastTransactionId() {
         return DBUtils.readInteger(psFindLastTransaction);
     }
 
-    public Collection<Integer> getSpendingTransactionsByAddress(int addressId) throws SQLException {
+    @NonNull
+    public Collection<Integer> getSpendingTransactionsByAddress(int addressId) {
         return DBUtils.readIntegersToSet(psQuerySpeninfTransactionsByAddress.setParameters(ps -> ps.setInt(addressId)));
     }
 }

@@ -15,8 +15,14 @@
  */
 package com.sliva.btc.scanner.src;
 
+import static com.google.common.base.Preconditions.checkArgument;
+import com.sliva.btc.scanner.util.LazyInitializer;
 import static com.sliva.btc.scanner.util.Utils.id2hex;
 import java.util.Collection;
+import javax.annotation.Nullable;
+import lombok.NonNull;
+import lombok.SneakyThrows;
+import org.apache.commons.lang3.concurrent.ConcurrentException;
 
 /**
  *
@@ -24,47 +30,45 @@ import java.util.Collection;
  */
 public class DbTransaction implements SrcTransaction<DbInput, DbOutput> {
 
-    private final DbBlockProvider blockProvider;
     private final int transactionId;
-    private String txid;
-    private Collection<DbInput> inputs;
-    private Collection<DbOutput> outputs;
+    private final LazyInitializer<String> txid;
+    private final LazyInitializer<Collection<DbInput>> inputs;
+    private final LazyInitializer<Collection<DbOutput>> outputs;
 
-    public DbTransaction(DbBlockProvider blockProvider, int transactionId, String txid) {
-        this.blockProvider = blockProvider;
+    public DbTransaction(DbBlockProvider blockProvider, int transactionId, @Nullable String txid) {
+        checkArgument(blockProvider != null, "Afgument 'blockProvider' is nul");
         this.transactionId = transactionId;
-        this.txid = txid;
+        this.txid = new LazyInitializer<>(() -> blockProvider.psQueryTransactionHash
+                .setParameters(p -> p.setInt(transactionId))
+                .querySingleRow(rs -> id2hex(rs.getBytes(1)))
+                .orElseThrow(() -> new IllegalStateException("Transaction #" + transactionId + " not found in DB")));
+        this.inputs = new LazyInitializer<>(() -> blockProvider.psQueryTransactionInputs
+                .setParameters(p -> p.setInt(transactionId))
+                .executeQueryToList(rs -> new DbInput(blockProvider, rs.getShort(1), rs.getShort(2), rs.getInt(3), null, rs.getByte(4), rs.getBoolean(5), rs.getBoolean(6))));
+        this.outputs = new LazyInitializer<>(() -> blockProvider.psQueryTransactionOutputs
+                .setParameters(p -> p.setInt(transactionId))
+                .executeQueryToList(rs -> new DbOutput(blockProvider, rs.getShort(1), rs.getInt(2), rs.getLong(3), rs.getByte(4))));
     }
 
+    @NonNull
     @Override
+    @SneakyThrows(ConcurrentException.class)
     public String getTxid() {
-        if (txid == null) {
-            txid = blockProvider.psQueryTransactionHash
-                    .setParameters(p -> p.setInt(transactionId))
-                    .querySingleRow(rs -> id2hex(rs.getBytes(1)))
-                    .orElseThrow(() -> new IllegalStateException("Transaction #" + transactionId + " not found in DB"));
-        }
-        return txid;
+        return txid.get();
     }
 
+    @NonNull
     @Override
+    @SneakyThrows(ConcurrentException.class)
     public Collection<DbInput> getInputs() {
-        if (inputs == null) {
-            inputs = blockProvider.psQueryTransactionInputs
-                    .setParameters(p -> p.setInt(transactionId))
-                    .executeQueryToList(rs -> new DbInput(blockProvider, rs.getShort(1), rs.getShort(2), rs.getInt(3), null, rs.getByte(4), rs.getBoolean(5), rs.getBoolean(6)));
-        }
-        return inputs;
+        return inputs.get();
     }
 
+    @NonNull
     @Override
+    @SneakyThrows(ConcurrentException.class)
     public Collection<DbOutput> getOutputs() {
-        if (outputs == null) {
-            outputs = blockProvider.psQueryTransactionOutputs
-                    .setParameters(p -> p.setInt(transactionId))
-                    .executeQueryToList(rs -> new DbOutput(blockProvider, rs.getShort(1), rs.getInt(2), rs.getLong(3), rs.getByte(4)));
-        }
-        return outputs;
+        return outputs.get();
     }
 
     public int getTransactionId() {

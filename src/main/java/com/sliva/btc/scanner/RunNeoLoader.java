@@ -280,7 +280,7 @@ public class RunNeoLoader {
             } finally {
                 log.debug("prepareData [{} - {}]: FINISHED. Runtime: {} msec.", start, end, (System.currentTimeMillis() - s));
             }
-        } catch (InterruptedException | SQLException e) {
+        } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
         return data;

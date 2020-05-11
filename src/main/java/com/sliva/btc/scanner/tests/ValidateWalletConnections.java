@@ -30,7 +30,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
-import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -109,7 +108,7 @@ public class ValidateWalletConnections {
         allSpentTransactions.forEach((transactionId) -> {
             DbTransaction tx = new DbTransaction(dbBlockProvider, transactionId, null);
             log.trace("Transaction #{}: {}", tx.getTransactionId(), tx.getTxid());
-            getInputAddresses(transactionId).forEach((addressId) -> {
+            getInputAddresses(transactionId).forEach(addressId -> {
                 DbAddress a = new DbAddress(dbBlockProvider, addressId, null, -1);
                 if (wholeSet.contains(a)) {
                     disconnectedSet.remove(a);
@@ -135,12 +134,10 @@ public class ValidateWalletConnections {
         }
     }
 
-    @SneakyThrows(SQLException.class)
     private Collection<Integer> getSpentTransactions(int addressId) {
         return DBUtils.readIntegersToSet(psQuerySpentTransactionsByAddress.setParameters(p -> p.setInt(addressId)));
     }
 
-    @SneakyThrows(SQLException.class)
     private Collection<Integer> getInputAddresses(int transactionId) {
         return DBUtils.readIntegersToSet(psQueryInputAddressesByTransactionId.setParameters(p -> p.setInt(transactionId)));
     }

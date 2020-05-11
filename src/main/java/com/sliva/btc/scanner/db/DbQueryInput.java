@@ -18,7 +18,6 @@ package com.sliva.btc.scanner.db;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.db.model.TxInput;
 import com.sliva.btc.scanner.db.model.TxOutput;
-import java.sql.SQLException;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -65,7 +64,7 @@ public class DbQueryInput {
     }
 
     @NonNull
-    public List<TxInput> getInputs(int transactionId) throws SQLException {
+    public List<TxInput> getInputs(int transactionId) {
         return psQueryInputs
                 .setParameters(ps -> ps.setInt(transactionId))
                 .executeQueryToList(
@@ -78,7 +77,7 @@ public class DbQueryInput {
     }
 
     @NonNull
-    public Optional<TxInput> findInputByOutTx(int inTransactionId, short inPos) throws SQLException {
+    public Optional<TxInput> findInputByOutTx(int inTransactionId, short inPos) {
         return psFindInputByOutTx
                 .setParameters(ps -> ps.setInt(inTransactionId).setInt(inPos))
                 .querySingleRow(
@@ -91,7 +90,7 @@ public class DbQueryInput {
     }
 
     @NonNull
-    public List<TxInputOutput> getInputsWithOutput(int transactionId) throws SQLException {
+    public List<TxInputOutput> getInputsWithOutput(int transactionId) {
         return psQueryInputsWithOutput
                 .setParameters(ps -> ps.setInt(transactionId))
                 .executeQueryToList(
@@ -117,7 +116,7 @@ public class DbQueryInput {
     }
 
     @NonNull
-    public Collection<BtcAddress> getInputAddresses(int transactionId) throws SQLException {
+    public Collection<BtcAddress> getInputAddresses(int transactionId) {
         return psQueryInputAddresses
                 .setParameters(ps -> ps.setInt(transactionId))
                 .executeQueryToList(

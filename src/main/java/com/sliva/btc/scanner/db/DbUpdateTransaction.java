@@ -18,7 +18,6 @@ package com.sliva.btc.scanner.db;
 import static com.sliva.btc.scanner.db.DbUpdate.waitFullQueue;
 import com.sliva.btc.scanner.db.model.BtcTransaction;
 import com.sliva.btc.scanner.util.Utils;
-import java.sql.SQLException;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -79,7 +78,7 @@ public class DbUpdateTransaction extends DbUpdate {
         return cacheData != null && (cacheData.addQueue.size() >= MIN_BATCH_SIZE || cacheData.updateInOutQueue.size() >= MIN_BATCH_SIZE);
     }
 
-    public void add(BtcTransaction tx) throws SQLException {
+    public void add(BtcTransaction tx) {
         log.trace("add(t:{})", tx);
         waitFullQueue(cacheData.addQueue, MAX_INSERT_QUEUE_LENGTH);
         synchronized (cacheData) {
@@ -89,7 +88,7 @@ public class DbUpdateTransaction extends DbUpdate {
         }
     }
 
-    public void delete(BtcTransaction tx) throws SQLException {
+    public void delete(BtcTransaction tx) {
         log.trace("delete(tx:{})", tx);
         synchronized (cacheData) {
             psDelete.setParameters(p -> p.setInt(tx.getTransactionId())).execute();

@@ -42,11 +42,11 @@ public class DbCachedOutput implements AutoCloseable {
     private final DbQueryOutput queryOutput;
     private final CacheData cacheData;
 
-    public DbCachedOutput(DBConnectionSupplier conn) throws SQLException {
+    public DbCachedOutput(DBConnectionSupplier conn) {
         this(conn, new CacheData());
     }
 
-    public DbCachedOutput(DBConnectionSupplier conn, CacheData cacheData) throws SQLException {
+    public DbCachedOutput(DBConnectionSupplier conn, CacheData cacheData) {
         updateOutput = new DbUpdateOutput(conn, cacheData.updateCachedData);
         queryOutput = new DbQueryOutput(conn);
         this.cacheData = cacheData;
@@ -120,7 +120,8 @@ public class DbCachedOutput implements AutoCloseable {
     }
 
     @NonNull
-    public List<TxOutput> getOutputs(int transactionId) throws SQLException {
+    @SneakyThrows(SQLException.class)
+    public List<TxOutput> getOutputs(int transactionId) {
         OutputsList ol = cacheData.cacheMap.get(transactionId);
         if (ol != null && ol.isComplete()) {
             updateCache(transactionId, ol);
@@ -143,7 +144,8 @@ public class DbCachedOutput implements AutoCloseable {
     }
 
     @NonNull
-    public Optional<TxOutput> getOutput(int transactionId, short pos) throws SQLException {
+    @SneakyThrows(SQLException.class)
+    public Optional<TxOutput> getOutput(int transactionId, short pos) {
         Optional<OutputsList> ol = Optional.ofNullable(cacheData.cacheMap.get(transactionId));
         Optional<TxOutput> result = ol.map(o -> o.find(pos));
         if (result.isPresent()) {
@@ -162,7 +164,7 @@ public class DbCachedOutput implements AutoCloseable {
         return result;
     }
 
-    private void updateCache(int transactionId) throws SQLException {
+    private void updateCache(int transactionId) {
         synchronized (cacheData) {
             OutputsList ol = cacheData.cacheMap.remove(transactionId);
             if (ol != null) {
@@ -171,7 +173,7 @@ public class DbCachedOutput implements AutoCloseable {
         }
     }
 
-    private void updateCache(int transactionId, OutputsList ol) throws SQLException {
+    private void updateCache(int transactionId, OutputsList ol) {
         synchronized (cacheData) {
             cacheData.cacheMap.remove(transactionId);
             cacheData.cacheMap.put(transactionId, ol);
@@ -195,7 +197,7 @@ public class DbCachedOutput implements AutoCloseable {
         }
     }
 
-    private void updateCache(List<TxOutput> lt) throws SQLException {
+    private void updateCache(List<TxOutput> lt) {
         synchronized (cacheData) {
             if (!lt.isEmpty()) {
                 int transactionId = lt.get(0).getTransactionId();
@@ -211,7 +213,7 @@ public class DbCachedOutput implements AutoCloseable {
     }
 
     @Override
-    public void close() throws SQLException {
+    public void close() {
         log.debug("DbCachedOutput.close()");
         synchronized (cacheData) {
             updateOutput.close();

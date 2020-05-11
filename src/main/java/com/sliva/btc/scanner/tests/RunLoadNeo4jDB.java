@@ -232,7 +232,7 @@ public class RunLoadNeo4jDB {
             } finally {
                 log.debug("prepareFiles [{} - {}]: FINISHED. Runtime: {} msec.", startTransactionId, endTrasnactionId, (System.currentTimeMillis() - s));
             }
-        } catch (InterruptedException | SQLException | IOException e) {
+        } catch (InterruptedException | IOException e) {
             throw new RuntimeException(e);
         }
         return f;

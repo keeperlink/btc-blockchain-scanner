@@ -15,7 +15,6 @@
  */
 package com.sliva.btc.scanner.db;
 
-import java.sql.SQLException;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -49,10 +48,9 @@ public final class DBUtils {
      *
      * @param ps PreparedStatement
      * @return Collection
-     * @throws SQLException
      */
     @NonNull
-    public static Collection<Integer> readIntegersToSet(DBPreparedStatement ps) throws SQLException {
+    public static Collection<Integer> readIntegersToSet(DBPreparedStatement ps) {
         Set<Integer> result = new HashSet<>();
         ps.executeQuery(rs -> result.add(rs.getObject(1, Integer.class)));
         return result;
@@ -63,10 +61,9 @@ public final class DBUtils {
      *
      * @param ps PreparedStatement
      * @return Map
-     * @throws SQLException
      */
     @NonNull
-    public static Map<Integer, Integer> readIntegersToMap(DBPreparedStatement ps) throws SQLException {
+    public static Map<Integer, Integer> readIntegersToMap(DBPreparedStatement ps) {
         Map<Integer, Integer> result = new HashMap<>();
         ps.executeQuery(rs -> result.put(rs.getObject(1, Integer.class), rs.getObject(2, Integer.class)));
         return result;

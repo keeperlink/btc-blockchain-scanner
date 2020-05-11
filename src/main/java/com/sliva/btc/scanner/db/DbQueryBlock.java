@@ -17,7 +17,6 @@ package com.sliva.btc.scanner.db;
 
 import com.sliva.btc.scanner.db.model.BtcBlock;
 import com.sliva.btc.scanner.util.Utils;
-import java.sql.SQLException;
 import java.util.Optional;
 import lombok.NonNull;
 import org.apache.commons.codec.binary.Hex;
@@ -42,12 +41,12 @@ public class DbQueryBlock {
     }
 
     @NonNull
-    public Optional<byte[]> getBlockHash(int blockHeight) throws SQLException {
+    public Optional<byte[]> getBlockHash(int blockHeight) {
         return psQueryBlockHash.setParameters(ps -> ps.setInt(blockHeight)).querySingleRow(rs -> rs.getBytes(1));
     }
 
     @NonNull
-    public Optional<BtcBlock> getBlock(int blockHeight) throws SQLException {
+    public Optional<BtcBlock> getBlock(int blockHeight) {
         return psQueryBlockHash.setParameters(ps -> ps.setInt(blockHeight)).querySingleRow(rs -> BtcBlock.builder()
                 .height(blockHeight)
                 .hash(Hex.encodeHexString(rs.getBytes(1)))
@@ -56,7 +55,7 @@ public class DbQueryBlock {
     }
 
     @NonNull
-    public Optional<BtcBlock> findBlockByHash(String hash) throws SQLException {
+    public Optional<BtcBlock> findBlockByHash(String hash) {
         return psFindBlockByHash.setParameters(ps -> ps.setBytes(Utils.id2bin(hash))).querySingleRow(rs -> BtcBlock.builder()
                 .height(rs.getInt(1))
                 .hash(hash)
@@ -65,7 +64,7 @@ public class DbQueryBlock {
     }
 
     @NonNull
-    public Optional<Integer> findLastHeight() throws SQLException {
+    public Optional<Integer> findLastHeight() {
         return DBUtils.readInteger(psFindLastHeight);
     }
 }

@@ -17,7 +17,6 @@ package com.sliva.btc.scanner.db;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import com.sliva.btc.scanner.db.model.BtcTransaction;
-import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -26,7 +25,6 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import lombok.Getter;
 import lombok.NonNull;
-import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -41,22 +39,25 @@ public class DbCachedTransaction implements AutoCloseable {
     private final DbQueryTransaction queryTransaction;
     private final CacheData cacheData;
 
-    public DbCachedTransaction(DBConnectionSupplier conn) throws SQLException {
+    public DbCachedTransaction(DBConnectionSupplier conn) {
         this(conn, new CacheData());
     }
 
-    public DbCachedTransaction(DBConnectionSupplier conn, CacheData cacheData) throws SQLException {
+    public DbCachedTransaction(DBConnectionSupplier conn, CacheData cacheData) {
+        checkArgument(conn != null, "Argument 'conn' is null");
+        checkArgument(cacheData != null, "Argument 'cacheData' is null");
         updateTransaction = new DbUpdateTransaction(conn, cacheData.updateCachedData);
         queryTransaction = new DbQueryTransaction(conn);
         this.cacheData = cacheData;
     }
 
+    @NonNull
     public CacheData getCacheData() {
         return cacheData;
     }
 
     @NonNull
-    public BtcTransaction add(BtcTransaction btcTransaction) throws SQLException {
+    public BtcTransaction add(BtcTransaction btcTransaction) {
         checkArgument(btcTransaction != null, "Argument 'btcTransaction' is null");
         synchronized (cacheData) {
             BtcTransaction result = btcTransaction;
@@ -72,7 +73,8 @@ public class DbCachedTransaction implements AutoCloseable {
         }
     }
 
-    public void delete(BtcTransaction tx) throws SQLException {
+    public void delete(BtcTransaction tx) {
+        checkArgument(tx != null, "Argument 'tx' is null");
         synchronized (cacheData) {
             updateTransaction.delete(tx);
             cacheData.cacheMap.remove(tx.getTxid());
@@ -81,7 +83,6 @@ public class DbCachedTransaction implements AutoCloseable {
     }
 
     @NonNull
-    @SneakyThrows(SQLException.class)
     public Optional<BtcTransaction> getTransaction(int transactionId) {
         Optional<BtcTransaction> result = Optional.ofNullable(cacheData.cacheMapId.get(transactionId));
         if (!result.isPresent()) {
@@ -90,12 +91,13 @@ public class DbCachedTransaction implements AutoCloseable {
         if (!result.isPresent()) {
             result = queryTransaction.findTransaction(transactionId);
         }
-        result.ifPresent(r -> updateCache(r));
+        result.ifPresent(this::updateCache);
         return result;
     }
 
     @NonNull
-    public Optional<BtcTransaction> getTransaction(String txid) throws SQLException {
+    public Optional<BtcTransaction> getTransaction(String txid) {
+        checkArgument(txid != null, "Argument 'txid' is null");
         Optional<BtcTransaction> result = Optional.ofNullable(cacheData.cacheMap.get(txid));
         if (!result.isPresent()) {
             result = Optional.ofNullable(updateTransaction.getCacheData().getAddMap().get(txid));
@@ -103,18 +105,19 @@ public class DbCachedTransaction implements AutoCloseable {
         if (!result.isPresent()) {
             result = queryTransaction.findTransaction(txid);
         }
-        result.ifPresent(r -> updateCache(r));
+        result.ifPresent(this::updateCache);
         return result;
     }
 
     @NonNull
-    public List<BtcTransaction> getTransactionsInBlock(int blockHeight) throws SQLException {
+    public List<BtcTransaction> getTransactionsInBlock(int blockHeight) {
         List<BtcTransaction> result = queryTransaction.getTransactionsInBlock(blockHeight);
-        result.forEach(t -> updateCache(t));
+        result.forEach(this::updateCache);
         return result;
     }
 
     private void updateCache(BtcTransaction btcTransaction) {
+        checkArgument(btcTransaction != null, "Argument 'btcTransaction' is null");
         synchronized (cacheData) {
             cacheData.cacheMap.remove(btcTransaction.getTxid());
             cacheData.cacheMap.put(btcTransaction.getTxid(), btcTransaction);
@@ -128,7 +131,7 @@ public class DbCachedTransaction implements AutoCloseable {
     }
 
     @Override
-    public void close() throws SQLException {
+    public void close() {
         log.debug("DbCachedTransaction.close()");
         synchronized (cacheData) {
             updateTransaction.close();
