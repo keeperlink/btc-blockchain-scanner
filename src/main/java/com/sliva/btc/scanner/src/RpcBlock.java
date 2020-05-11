@@ -19,6 +19,8 @@ import com.sliva.btc.scanner.rpc.RpcClientDirect;
 import com.sliva.btc.scanner.util.BJBlockHandler;
 import java.io.IOException;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import lombok.ToString;
 import org.bitcoinj.core.Block;
@@ -29,7 +31,7 @@ import org.spongycastle.util.encoders.Hex;
  * @author Sliva Co
  */
 @ToString
-public class RpcBlock implements SrcBlock<RpcTransaction> {
+public class RpcBlock<T extends RpcTransaction<RpcInput, RpcOutput<RpcAddress>>> implements SrcBlock<RpcTransaction<RpcInput, RpcOutput<RpcAddress>>> {
 
     private final Block block;
     private Integer blockHeight;
@@ -73,7 +75,7 @@ public class RpcBlock implements SrcBlock<RpcTransaction> {
     }
 
     @Override
-    public Collection<RpcTransaction> getTransactions() {
-        return block.getTransactions().stream().map(t -> new RpcTransaction(t)).collect(Collectors.toList());
+    public Collection<RpcTransaction<RpcInput, RpcOutput<RpcAddress>>> getTransactions() {
+        return Optional.ofNullable(block.getTransactions()).map(tx -> tx.stream().map(t -> new RpcTransaction<>(t)).collect(Collectors.toList())).orElse(Collections.EMPTY_LIST);
     }
 }

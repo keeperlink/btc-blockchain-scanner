@@ -22,9 +22,10 @@ import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient.RawTransaction.Out;
 /**
  *
  * @author Sliva Co
+ * @param <A>
  */
 @ToString
-public class RpcOutput implements SrcOutput<RpcAddress> {
+public class RpcOutput<A extends RpcAddress> implements SrcOutput<RpcAddress> {
 
     private final Out out;
     private final TransactionOutput txout;
@@ -47,7 +48,7 @@ public class RpcOutput implements SrcOutput<RpcAddress> {
     @Override
     public RpcAddress getAddress() {
         try {
-            return RpcAddress.fromString(txout != null ? new BJOutput(txout).getAddress().getName() : out.scriptPubKey().addresses().get(0));
+            return RpcAddress.fromString(txout != null ? new BJOutput<>(txout).getAddress().getName() : out.scriptPubKey().addresses().get(0));
         } catch (Exception e) {
             return null;
         }

@@ -26,7 +26,8 @@ import org.bitcoinj.core.Transaction;
  * @author Sliva Co
  */
 @ToString
-public class BJTransaction implements SrcTransaction<BJInput, BJOutput> {
+public class BJTransaction<I extends BJInput, O extends BJOutput<BJAddress>>
+        implements SrcTransaction<BJInput, BJOutput<BJAddress>> {
 
     private final Transaction t;
 
@@ -49,8 +50,7 @@ public class BJTransaction implements SrcTransaction<BJInput, BJOutput> {
     }
 
     @Override
-    public Collection<BJOutput> getOutputs() {
-        return t.getOutputs().stream().map((o) -> new BJOutput(o)).collect(Collectors.toList());
+    public Collection<BJOutput<BJAddress>> getOutputs() {
+        return t.getOutputs().stream().map((o) -> new BJOutput<>(o)).collect(Collectors.toList());
     }
-
 }

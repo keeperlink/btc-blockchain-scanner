@@ -23,10 +23,10 @@ import com.sliva.btc.scanner.db.DbUpdate;
 import com.sliva.btc.scanner.db.DbUpdateOutput;
 import com.sliva.btc.scanner.db.model.OutputStatus;
 import com.sliva.btc.scanner.util.BufferingAheadSupplier;
-import com.sliva.btc.scanner.util.CommandLineUtils;
 import com.sliva.btc.scanner.util.CommandLineUtils.CmdArguments;
 import com.sliva.btc.scanner.util.CommandLineUtils.CmdOption;
 import com.sliva.btc.scanner.util.CommandLineUtils.CmdOptions;
+import static com.sliva.btc.scanner.util.CommandLineUtils.buildCmdArguments;
 import static com.sliva.btc.scanner.util.CommandLineUtils.buildOption;
 import com.sliva.btc.scanner.util.ShutdownHook;
 import com.sliva.btc.scanner.util.Utils;
@@ -83,7 +83,7 @@ public class RunUpdateSpent {
      * @throws java.sql.SQLException
      */
     public static void main(String[] args) throws Exception {
-        CmdArguments cmd = CommandLineUtils.buildCmdArguments(args, Main.Command.update_spent.name(), "Update \"spent\" column for existing transactions in in DB", null, CMD_OPTS);
+        CmdArguments cmd = buildCmdArguments(args, Main.Command.update_spent.name(), "Update \"spent\" column for existing transactions in in DB", null, CMD_OPTS);
         log.info("START");
         try {
             new RunUpdateSpent(cmd).runProcess();

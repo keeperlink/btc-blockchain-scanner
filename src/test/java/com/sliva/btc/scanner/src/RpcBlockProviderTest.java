@@ -73,7 +73,7 @@ public class RpcBlockProviderTest {
     public void testGetBlock_int() {
         System.out.println("testGetBlock_int");
         int height = 123456;
-        RpcBlock result = instance.getBlock(height);
+        RpcBlock<?> result = instance.getBlock(height);
         assertEquals("0000000000002917ed80650c6174aac8dfc46f5fe36480aaef682ff6cd83c3ca", result.getHash());
     }
 
@@ -84,7 +84,7 @@ public class RpcBlockProviderTest {
     public void testGetBlock_String() {
         System.out.println("testGetBlock_String");
         String hash = "0000000000002917ed80650c6174aac8dfc46f5fe36480aaef682ff6cd83c3ca";
-        RpcBlock result = instance.getBlock(hash);
+        RpcBlock<?> result = instance.getBlock(hash);
         assertEquals(hash, result.getHash());
         assertEquals(123456, result.getHeight());
     }
@@ -96,16 +96,16 @@ public class RpcBlockProviderTest {
     public void testGetBlock_transactions() {
         System.out.println("testGetBlock_transactions");
         int height = 1;
-        RpcBlock result = instance.getBlock(height);
+        RpcBlock<?> result = instance.getBlock(height);
         assertEquals("00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048", result.getHash());
-        Collection<RpcTransaction> tlist = result.getTransactions();
+        Collection<? extends RpcTransaction<?, ?>> tlist = result.getTransactions();
         assertNotNull(tlist);
         assertEquals(1, tlist.size());
-        RpcTransaction t = tlist.iterator().next();
+        RpcTransaction<?, ?> t = tlist.iterator().next();
         assertNull(t.getInputs());
         assertNotNull(t.getOutputs());
         assertEquals(1, t.getOutputs().size());
-        RpcOutput out = t.getOutputs().iterator().next();
+        RpcOutput<?> out = t.getOutputs().iterator().next();
         assertEquals("12c6DSiU4Rq3P4ZxziKxzrL5LmMBrzjrJX", out.getAddress().getName());
     }
 
@@ -116,9 +116,9 @@ public class RpcBlockProviderTest {
     public void testGetBlock_transactions2() {
         System.out.println("testGetBlock_transactions2");
         int height = 123456;
-        RpcBlock result = instance.getBlock(height);
+        RpcBlock<?> result = instance.getBlock(height);
         assertEquals("0000000000002917ed80650c6174aac8dfc46f5fe36480aaef682ff6cd83c3ca", result.getHash());
-        Collection<RpcTransaction> tlist = result.getTransactions();
+        Collection<? extends RpcTransaction<?, ?>> tlist = result.getTransactions();
         assertNotNull(tlist);
 //        RpcTransaction t = tlist.get(10);
 //        assertEquals("dda726e3dad9504dce5098dfab5064ecd4a7650bfe854bb2606da3152b60e427", t.getTxid());

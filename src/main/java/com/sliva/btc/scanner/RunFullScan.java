@@ -46,7 +46,6 @@ import com.sliva.btc.scanner.src.BlockProviderWithBackup;
 import com.sliva.btc.scanner.src.RpcBlockProvider;
 import com.sliva.btc.scanner.src.SrcAddress;
 import com.sliva.btc.scanner.src.SrcBlock;
-import com.sliva.btc.scanner.src.SrcInput;
 import com.sliva.btc.scanner.src.SrcOutput;
 import com.sliva.btc.scanner.src.SrcTransaction;
 import com.sliva.btc.scanner.util.BufferingAheadSupplier;
@@ -77,6 +76,7 @@ import java.util.stream.Collectors;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.SneakyThrows;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
@@ -213,12 +213,12 @@ public class RunFullScan {
             ExecutorService loadThreadpool = Executors.newFixedThreadPool(loadBlockThreads, new ThreadFactoryBuilder().setDaemon(true).setNameFormat("loadBlock-%d").build());
             ExecutorService preprocThreadpool = Executors.newFixedThreadPool(preprocBlockThreads, new ThreadFactoryBuilder().setDaemon(true).setNameFormat("preprocBlock-%d").build());
             Supplier<Integer> blockNumberSupplier = getNumberSupplier(firstBlockToProcess, 1, n -> n <= lastBlockToProcess && !isTerminatingLoop());
-            Supplier<CompletableFuture<SrcBlock<SrcTransaction<SrcInput, SrcOutput<SrcAddress>>>>> preProcFeatureSupplier
+            Supplier<CompletableFuture<SrcBlock<?>>> preProcFeatureSupplier
                     = () -> CompletableFuture
                             .completedFuture(blockNumberSupplier.get())
                             .thenApplyAsync(blockProvider::getBlock, loadThreadpool)
                             .thenApplyAsync(block -> preloadBlockCaches(block, db), preprocThreadpool);
-            BufferingAheadSupplier<CompletableFuture<SrcBlock<SrcTransaction<SrcInput, SrcOutput<SrcAddress>>>>> bufferingSupplier
+            BufferingAheadSupplier<CompletableFuture<SrcBlock<?>>> bufferingSupplier
                     = new BufferingAheadSupplier<>(preProcFeatureSupplier, prefetchBufferSize);
             for (;;) {
                 try {
@@ -239,7 +239,7 @@ public class RunFullScan {
     }
 
     @SneakyThrows(SQLException.class)
-    private void processBlock(SrcBlock<SrcTransaction<SrcInput, SrcOutput<SrcAddress>>> block, DbAccess db) {
+    private void processBlock(SrcBlock<?> block, DbAccess db) {
         int blockHeight = block.getHeight();
         String blockHash = block.getHash();
         log.info("Block({}).hash: {}, nTxns={}", blockHeight, blockHash, block.getTransactions().size());
@@ -280,11 +280,11 @@ public class RunFullScan {
 
     @SneakyThrows(SQLException.class)
     private TxnProcessOutput processTransaction(
-            SrcTransaction<SrcInput, SrcOutput<SrcAddress>> t,
+            SrcTransaction<?, ?> t,
             int blockHeight, List<BtcTransaction> listTxn, DbAccess db) {
         String txid = Utils.fixDupeTxid(t.getTxid(), blockHeight);
         log.trace("Tx.hash: {}", txid);
-        BtcTransaction btcTx = findTx(listTxn, txid);
+        BtcTransaction btcTx = findTx(listTxn, txid).orElse(null);
         if (btcTx == null) {
             btcTx = BtcTransaction.builder()
                     .txid(txid)
@@ -304,7 +304,7 @@ public class RunFullScan {
     }
 
     @SuppressWarnings("UseSpecificCatch")
-    private Collection<TxInput> processTransactionInputs(SrcTransaction<SrcInput, SrcOutput<SrcAddress>> t, BtcTransaction tx, DbAccess db) {
+    private Collection<TxInput> processTransactionInputs(SrcTransaction<?, ?> t, BtcTransaction tx, DbAccess db) {
         if (t.getInputs() == null) {
             return null;
         }
@@ -321,7 +321,6 @@ public class RunFullScan {
             log.trace("In.Outpoint: {}:{}", inTxid, inPos);
             try {
                 final BtcTransaction inTxn = db.cachedTxn.getTransaction(inTxid).orElseThrow(() -> new IllegalStateException("Transaction not found in DB: " + inTxid + " referenced from input#" + ti.getPos() + " in tx " + tx.toString()));
-                TxInput txInput = findInput(txInputs, ti.getPos());
                 TxOutput txOutput = db.cachedOutput.getOutput(inTxn.getTransactionId(), inPos).orElseThrow(() -> new IllegalStateException("Output#" + ti.getPos() + " not found: " + inTxid + ":" + inPos + ". Src txn: " + tx.getTxid() + ". Ref tx: " + inTxn));
                 TxInput inputToAdd = TxInput.builder()
                         .transactionId(tx.getTransactionId())
@@ -329,6 +328,7 @@ public class RunFullScan {
                         .inTransactionId(inTxn.getTransactionId())
                         .inPos(inPos)
                         .build();
+                TxInput txInput = findInput(txInputs, ti.getPos()).orElse(null);
                 if (txInput == null) {
                     if (safeRun) {
                         queryInput.findInputByOutTx(inTxn.getTransactionId(), inPos).ifPresent(in2 -> {
@@ -418,11 +418,10 @@ public class RunFullScan {
      * @throws SQLException
      */
     @SneakyThrows(SQLException.class)
-    private Collection<TxOutput> processTransactionOutputs(SrcTransaction<SrcInput, SrcOutput<SrcAddress>> t, BtcTransaction tx, DbAccess db) {
+    private Collection<TxOutput> processTransactionOutputs(SrcTransaction<?, ?> t, BtcTransaction tx, DbAccess db) {
         final Collection<TxOutput> txOutputs;
         if (safeRun) {
-            Collection<TxOutput> c = db.cachedOutput.getOutputs(tx.getTransactionId());
-            txOutputs = c == null ? null : new ArrayList<>(c);
+            txOutputs = new ArrayList<>(db.cachedOutput.getOutputs(tx.getTransactionId()));
         } else {
             txOutputs = null;
         }
@@ -436,7 +435,7 @@ public class RunFullScan {
                     .addressId(addressId)
                     .status(addressId == 0 ? OutputStatus.UNSPENDABLE : OutputStatus.UNSPENT)
                     .build();
-            TxOutput txOutput = findOutput(txOutputs, txOutputToAdd.getPos());
+            TxOutput txOutput = findOutput(txOutputs, txOutputToAdd.getPos()).orElse(null);
             if (txOutput == null) {
                 db.cachedOutput.add(txOutputToAdd);
             } else {
@@ -451,25 +450,24 @@ public class RunFullScan {
             }
         });
         if (txOutputs != null) {
-            for (TxOutput txOut : txOutputs) {
+            txOutputs.forEach(txOut -> {
                 log.debug("processTransactionOutputs: Deleting record: " + txOut);
                 db.cachedOutput.delete(txOut);
-            }
+            });
         }
         return txOutputs;
     }
 
-    private SrcTransaction<SrcInput, SrcOutput<SrcAddress>> findBJTransaction(int blockHeight, String txid) throws SQLException, IOException {
-        SrcBlock<SrcTransaction<SrcInput, SrcOutput<SrcAddress>>> block = blockProvider.getBlock(blockHeight);
+    private SrcTransaction<?, ?> findBJTransaction(int blockHeight, String txid) throws SQLException, IOException {
+        SrcBlock<?> block = blockProvider.getBlock(blockHeight);
         return findBJTransaction(block, blockHeight, txid);
     }
 
-    private static SrcTransaction<SrcInput, SrcOutput<SrcAddress>> findBJTransaction(SrcBlock<SrcTransaction<SrcInput, SrcOutput<SrcAddress>>> block, int blockHeight, String txid) throws SQLException, IOException {
+    private static SrcTransaction<?, ?> findBJTransaction(SrcBlock<?> block, int blockHeight, String txid) throws SQLException, IOException {
         return block.getTransactions().stream().filter((t) -> Utils.fixDupeTxid(t.getTxid(), blockHeight).equals(txid)).findAny().orElse(null);
     }
 
-    private SrcBlock<SrcTransaction<SrcInput, SrcOutput<SrcAddress>>> preloadBlockCaches(
-            SrcBlock<SrcTransaction<SrcInput, SrcOutput<SrcAddress>>> block, DbAccess db) {
+    private SrcBlock<?> preloadBlockCaches(SrcBlock<?> block, DbAccess db) {
         log.trace("preloadBlockCaches({}) STARTED", block.getHeight());
         try {
             block.getTransactions().stream()
@@ -481,8 +479,7 @@ public class RunFullScan {
         }
     }
 
-    private SrcTransaction<SrcInput, SrcOutput<SrcAddress>> preProcTransaction(
-            SrcTransaction<SrcInput, SrcOutput<SrcAddress>> t, int blockHeight, DbAccess db) {
+    private SrcTransaction<?, ?> preProcTransaction(SrcTransaction<?, ?> t, int blockHeight, DbAccess db) {
         long started = System.nanoTime();
         try {
             if (safeRun) {
@@ -520,7 +517,7 @@ public class RunFullScan {
         return cachedOutput.getOutputs(transactionId);
     }
 
-    private Optional<SrcAddress> getAddress(SrcOutput<SrcAddress> to) {
+    private Optional<SrcAddress> getAddress(SrcOutput<?> to) {
         return Optional.ofNullable(to.getAddress());
     }
 
@@ -547,43 +544,19 @@ public class RunFullScan {
 
     }
 
-    private static BtcTransaction findTx(Collection<BtcTransaction> list, String hash) {
-        if (list == null) {
-            return null;
-        }
-        for (BtcTransaction t : list) {
-            if (t.getTxid().equalsIgnoreCase(hash)) {
-                list.remove(t);
-                return t;
-            }
-        }
-        return null;
+    @NonNull
+    private static Optional<BtcTransaction> findTx(Collection<BtcTransaction> list, String hash) {
+        return list == null ? Optional.empty() : list.stream().filter(t -> t.getTxid().equalsIgnoreCase(hash)).peek(t -> list.remove(t)).findFirst();
     }
 
-    private static TxInput findInput(Collection<TxInput> list, int pos) {
-        if (list == null) {
-            return null;
-        }
-        for (TxInput t : list) {
-            if (t.getPos() == pos) {
-                list.remove(t);
-                return t;
-            }
-        }
-        return null;
+    @NonNull
+    private static Optional<TxInput> findInput(Collection<TxInput> list, int pos) {
+        return list == null ? Optional.empty() : list.stream().filter(t -> t.getPos() == pos).peek(t -> list.remove(t)).findFirst();
     }
 
-    private static TxOutput findOutput(Collection<TxOutput> list, int pos) {
-        if (list == null) {
-            return null;
-        }
-        for (TxOutput t : list) {
-            if (t.getPos() == pos) {
-                list.remove(t);
-                return t;
-            }
-        }
-        return null;
+    @NonNull
+    private static Optional<TxOutput> findOutput(Collection<TxOutput> list, int pos) {
+        return list == null ? Optional.empty() : list.stream().filter(t -> t.getPos() == pos).peek(t -> list.remove(t)).findFirst();
     }
 
     @AllArgsConstructor

@@ -31,9 +31,11 @@ import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient.RawTransaction.In;
 /**
  *
  * @author Sliva Co
+ * @param <I>
+ * @param <O>
  */
 @ToString(doNotUseGetters = true)
-public class RpcTransaction implements SrcTransaction<RpcInput, RpcOutput> {
+public class RpcTransaction<I extends RpcInput, O extends RpcOutput<RpcAddress>> implements SrcTransaction<RpcInput, RpcOutput<RpcAddress>> {
 
     public static final String TRANSACTION_ZERO_ID = "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b";
 
@@ -80,15 +82,15 @@ public class RpcTransaction implements SrcTransaction<RpcInput, RpcOutput> {
     }
 
     @Override
-    public Collection<RpcOutput> getOutputs() {
+    public Collection<RpcOutput<RpcAddress>> getOutputs() {
         if (TRANSACTION_ZERO_ID.equalsIgnoreCase(txid)) {
             //Bitcoin Core RPC does not return first transaction - generate it here
             return Collections.singletonList(buildTransactionZero());
         }
         if (tran != null) {
-            return tran.getOutputs().stream().map(t -> new RpcOutput(t)).collect(Collectors.toList());
+            return tran.getOutputs().stream().map(t -> new RpcOutput<>(t)).collect(Collectors.toList());
         } else {
-            return getRawTransaction().vOut().stream().map(t -> new RpcOutput(t)).collect(Collectors.toList());
+            return getRawTransaction().vOut().stream().map(t -> new RpcOutput<>(t)).collect(Collectors.toList());
         }
     }
 
@@ -99,8 +101,8 @@ public class RpcTransaction implements SrcTransaction<RpcInput, RpcOutput> {
         return rawTransaction;
     }
 
-    private RpcOutput buildTransactionZero() {
-        return new RpcOutput(new RawTransaction.Out() {
+    private RpcOutput<RpcAddress> buildTransactionZero() {
+        return new RpcOutput<>(new RawTransaction.Out() {
             @Override
             public BigDecimal value() {
                 return new BigDecimal("50");

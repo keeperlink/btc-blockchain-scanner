@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,9 +26,10 @@ import org.bitcoinj.script.ScriptOpCodes;
 /**
  *
  * @author Sliva Co
+ * @param <A>
  */
 @ToString
-public class BJOutput implements SrcOutput<BJAddress> {
+public class BJOutput<A extends BJAddress> implements SrcOutput<BJAddress> {
 
     private final TransactionOutput to;
 
@@ -38,7 +39,7 @@ public class BJOutput implements SrcOutput<BJAddress> {
 
     @Override
     public short getPos() {
-        return (short)to.getIndex();
+        return (short) to.getIndex();
     }
 
     @Override
