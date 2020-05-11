@@ -85,7 +85,7 @@ public class DbUpdateInput extends DbUpdate {
         synchronized (cacheData) {
             cacheData.addQueue.add(txInput);
             cacheData.queueMap.put(txInput, txInput);
-            List<TxInput> list = cacheData.queueMapTx.computeIfAbsent(txInput.getTransactionId(), id -> new ArrayList(1));
+            List<TxInput> list = cacheData.queueMapTx.computeIfAbsent(txInput.getTransactionId(), id -> new ArrayList<>(1));
             list.add(txInput);
         }
     }

@@ -46,20 +46,19 @@ import org.apache.commons.lang3.reflect.MethodUtils;
 public final class CommandLineUtils {
 
     @NonNull
-    public static CmdArguments buildCmdArguments(String[] args, String command, CmdOptions optionsList) throws ParseException {
-        CmdArguments cmd = new CmdArguments(args, command, optionsList);
+    public static CmdArguments buildCmdArguments(String[] args, String command, String description, String cmdArguments, CmdOptions optionsList) throws ParseException {
+        CmdArguments cmd = new CmdArguments(args, command, description, cmdArguments, optionsList);
         optionsList.applyArgumentsMethods.forEach(m -> invokeStaticMethod(m, cmd));
         return cmd;
     }
 
     @NonNull
-    public static CommandLine parseCommandLine(String[] args, String command, CmdOptions optionsList)
+    public static CommandLine parseCommandLine(String[] args, String command, String description, String cmdArguments, Options opts)
             throws ParseException {
         CommandLineParser parser = new DefaultParser();
-        Options opts = prepOptions(optionsList);
         CommandLine cmd = parser.parse(opts, args);
         if (cmd.hasOption("help")) {
-            printHelpAndExit(command, opts);
+            printHelpAndExit(command, description, cmdArguments, opts);
         }
         return cmd;
     }
@@ -71,10 +70,21 @@ public final class CommandLineUtils {
         return cmdOption;
     }
 
-    public static void printHelpAndExit(String command, Options opts) {
-        System.out.println("Available options:");
+    /**
+     * Print Help and exit
+     *
+     * @param command Command name
+     * @param description Description or null
+     * @param opts List of available options
+     */
+    public static void printHelpAndExit(String command, String description, String cmdArguments, Options opts) {
+        System.out.println(command);
+        if (description != null) {
+            System.out.println(description);
+        }
+        System.out.println("Syntax with available options:");
         HelpFormatter formatter = new HelpFormatter();
-        formatter.printHelp("java <jar> " + command + " [options]", opts);
+        formatter.printHelp("java <jar> " + command + " [options]" + (cmdArguments == null ? "" : " " + cmdArguments), opts);
         System.exit(1);
     }
 
@@ -136,10 +146,18 @@ public final class CommandLineUtils {
 
     public static class CmdArguments {
 
+        private final String command;
+        private final String description;
+        private final String cmdArguments;
+        private final Options opts;
         private final CommandLine commandLine;
 
-        private CmdArguments(String[] args, String command, CmdOptions optionsList) throws ParseException {
-            this.commandLine = parseCommandLine(args, command, optionsList);
+        private CmdArguments(String[] args, String command, String description, String cmdArguments, CmdOptions optionsList) throws ParseException {
+            this.command = command;
+            this.description = description;
+            this.cmdArguments = cmdArguments;
+            this.opts = prepOptions(optionsList);
+            this.commandLine = parseCommandLine(args, command, description, cmdArguments, this.opts);
         }
 
         public boolean hasOption(CmdOption opt) {
@@ -149,6 +167,10 @@ public final class CommandLineUtils {
         @NonNull
         public Optional<String> getOption(CmdOption opt) {
             return Optional.ofNullable(commandLine.getOptionValue(opt.getLongOpt()));
+        }
+
+        public void printHelpAndExit() {
+            CommandLineUtils.printHelpAndExit(command, description, cmdArguments, opts);
         }
     }
 }

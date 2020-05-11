@@ -17,9 +17,10 @@ package com.sliva.btc.scanner.src;
 
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import com.sliva.btc.scanner.db.DBPreparedStatement;
-import com.sliva.btc.scanner.db.model.BtcAddress;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.stream.Stream;
+import lombok.NonNull;
 
 /**
  *
@@ -60,21 +61,24 @@ public class DbBlockProvider implements BlockProvider<DbBlock> {
         this.psQueryTransactionHash = conn.prepareStatement(SQL_QUERY_TRANSACTION_HASH);
         this.psQueryTransactionInputs = conn.prepareStatement(SQL_QUERY_TRANSACTION_INPUTS);
         this.psQueryTransactionOutputs = conn.prepareStatement(SQL_QUERY_TRANSACTION_OUTPUTS);
-        BtcAddress.getRealTypes().forEach((type) -> psQueryAddress.put(type, conn.prepareStatement(fixTableName(SQL_QUERY_ADDRESS, type))));
+        Stream.of(SrcAddressType.values()).filter(SrcAddressType::isReal).forEach((type) -> psQueryAddress.put(type, conn.prepareStatement(fixTableName(SQL_QUERY_ADDRESS, type))));
         this.psQueryWallet = conn.prepareStatement(SQL_QUERY_WALLET);
         this.psQueryWalletAddresses = conn.prepareStatement(SQL_QUERY_WALLET_ADDRESSES);
     }
 
     @Override
+    @NonNull
     public DbBlock getBlock(int height) {
         return new DbBlock(this, height);
     }
 
     @Override
+    @NonNull
     public DbBlock getBlock(String hash) {
         return new DbBlock(this, hash);
     }
 
+    @NonNull
     private String fixTableName(String sql, SrcAddressType type) {
         return sql.replaceAll("address_table_name", "address_" + type.name().toLowerCase());
     }

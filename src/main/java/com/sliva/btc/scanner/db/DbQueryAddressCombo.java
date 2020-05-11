@@ -17,10 +17,10 @@ package com.sliva.btc.scanner.db;
 
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.src.SrcAddressType;
-import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Stream;
 import lombok.NonNull;
 
 /**
@@ -33,41 +33,39 @@ public class DbQueryAddressCombo extends DbQueryAddress {
 
     public DbQueryAddressCombo(DBConnectionSupplier conn) {
         super();
-        BtcAddress.getRealTypes().forEach((t) -> queryAddressMap.put(t, new DbQueryAddress(conn, t)));
+        Stream.of(SrcAddressType.values()).filter(SrcAddressType::isReal).forEach(t -> queryAddressMap.put(t, new DbQueryAddress(conn, t)));
     }
 
     @Override
     @NonNull
-    public Optional<BtcAddress> findByAddress(byte[] address) throws SQLException {
-        for (SrcAddressType type : BtcAddress.getRealTypes()) {
-            if (address.length == 20 ^ type == SrcAddressType.P2WSH) {
-                Optional<BtcAddress> a = queryAddressMap.get(type).findByAddress(address);
-                if (a.isPresent()) {
-                    return a;
-                }
-            }
-        }
-        return null;
+    public Optional<BtcAddress> findByAddress(byte[] address) {
+        return Stream.of(SrcAddressType.values()).filter(SrcAddressType::isReal)
+                .filter(type -> address.length == 20 ^ type == SrcAddressType.P2WSH)
+                .map(type -> queryAddressMap.get(type).findByAddress(address))
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .findAny();
     }
 
     @Override
     @NonNull
-    public Optional<BtcAddress> findByAddressId(int addressId) throws SQLException {
+    public Optional<BtcAddress> findByAddressId(int addressId) {
         return queryAddressMap.get(BtcAddress.getTypeFromId(addressId)).findByAddressId(addressId);
     }
 
     @Override
-    public int getLastAddressId() throws SQLException {
+    public int getLastAddressId() {
         throw new UnsupportedOperationException();
     }
 
     @Override
     @NonNull
-    public Optional<Integer> getWalletId(int addressId) throws SQLException {
+    public Optional<Integer> getWalletId(int addressId) {
         return findByAddressId(addressId).map(BtcAddress::getWalletId);
     }
 
     @Override
+    @NonNull
     public String getTableName() {
         return "";
     }

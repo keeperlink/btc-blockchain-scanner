@@ -78,7 +78,6 @@ public class DbCachedOutput implements AutoCloseable {
         }
     }
 
-    @SneakyThrows(SQLException.class)
     public void updateStatus(int transactionId, short pos, byte status) {
         synchronized (cacheData) {
             updateOutput.updateSpent(transactionId, pos, status);

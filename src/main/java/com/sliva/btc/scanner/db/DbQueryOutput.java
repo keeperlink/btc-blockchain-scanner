@@ -15,7 +15,6 @@
  */
 package com.sliva.btc.scanner.db;
 
-import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.db.model.InOutKey;
 import com.sliva.btc.scanner.db.model.TxInput;
 import com.sliva.btc.scanner.db.model.TxOutput;
@@ -26,6 +25,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
@@ -59,7 +60,7 @@ public class DbQueryOutput {
         this.psQueryOutputs = conn.prepareStatement(SQL_QUERY_OUTPUTS);
         this.psQueryOutput = conn.prepareStatement(SQL_QUERY_OUTPUT);
         this.psQueryOutputsWithInput = conn.prepareStatement(SQL_QUERY_OUTPUTS_WITH_INPUT);
-        BtcAddress.getRealTypes().forEach(t -> psQueryOutputsInTxnRange.put(t, conn.prepareStatement(DbQueryAddress.updateQueryTableName(SQL_QUERY_OUTPUTS_IN_TXN_RANGE, t))));
+        Stream.of(SrcAddressType.values()).filter(SrcAddressType::isReal).forEach(t -> psQueryOutputsInTxnRange.put(t, conn.prepareStatement(DbQueryAddress.updateQueryTableName(SQL_QUERY_OUTPUTS_IN_TXN_RANGE, t))));
     }
 
     @NonNull
@@ -108,8 +109,8 @@ public class DbQueryOutput {
     }
 
     public Collection<OutputAddressWallet> queryOutputsInTxnRange(int startTxId, int endTxId, SrcAddressType addressType) throws SQLException {
-        if (!BtcAddress.getRealTypes().contains(addressType)) {
-            throw new IllegalArgumentException("addressType=" + addressType + ", allowed only real types: " + BtcAddress.getRealTypes());
+        if (!addressType.isReal()) {
+            throw new IllegalArgumentException("addressType=" + addressType + ", allowed only real types: " + Stream.of(SrcAddressType.values()).filter(SrcAddressType::isReal).collect(Collectors.toSet()));
         }
         return psQueryOutputsInTxnRange.get(addressType).setParameters(p -> p.setInt(startTxId).setInt(endTxId))
                 .executeQueryToList(rs

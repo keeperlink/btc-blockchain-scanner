@@ -20,6 +20,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.sliva.btc.scanner.db.DBPreparedStatement.ParamSetter;
 import com.sliva.btc.scanner.util.BatchUtils;
 import com.sliva.btc.scanner.util.Utils;
+import static com.sliva.btc.scanner.util.Utils.getPercentage;
 import static com.sliva.btc.scanner.util.Utils.synchronize;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -165,7 +166,7 @@ public abstract class DbUpdate implements AutoCloseable {
                 if (nRecs > 0) {
                     updateRuntimeMap(getTableName(), nRecs, runtimeNanos);
                     if (log.isDebugEnabled()) {
-                        log.debug("{}.executeSync(): insert/update queries executed: {} runtime {} ms.",
+                        log.debug("{}.executeSync(): insert/update queries executed: {}. Runtime {} ms.",
                                 getTableName(), nRecs, BigDecimal.valueOf(runtimeNanos).movePointLeft(6).setScale(3, RoundingMode.HALF_DOWN));
                     }
                 }
@@ -208,13 +209,13 @@ public abstract class DbUpdate implements AutoCloseable {
             synchronized (execStats) {
                 execStats.entrySet().forEach((e) -> {
                     ExecStats s = e.getValue();
-                    log.debug("{}\t Executions: {},\t Records: {},\t speed: {} rec/sec,\t runtime: {} sec.\t ({}%)",
+                    log.debug("{}\t Executions: {},\t Records: {},\t speed: {} rec/sec,\t runtime: {}\t ({}%)",
                             StringUtils.rightPad(e.getKey(), 16),
                             s.getExecutions(),
                             s.getTotalRecords(),
-                            runtimeInSec == 0 ? null : s.getTotalRecords() / runtimeInSec,
-                            TimeUnit.NANOSECONDS.toSeconds(s.getTotalRuntimeNanos()),
-                            runtimeInSec == 0 ? null : TimeUnit.NANOSECONDS.toSeconds(s.getTotalRuntimeNanos() * 100 / (runtimeInSec * UPDATER_THREADS))
+                            s.getTotalRecords() / runtimeInSec,
+                            Duration.ofMillis(TimeUnit.NANOSECONDS.toMillis(s.getTotalRuntimeNanos())),
+                            getPercentage(TimeUnit.NANOSECONDS.toSeconds(s.getTotalRuntimeNanos()), runtimeInSec * UPDATER_THREADS)
                     );
                 });
             }
@@ -230,7 +231,6 @@ public abstract class DbUpdate implements AutoCloseable {
         }
 
         @Override
-        @SuppressWarnings({"SleepWhileInLoop"})
         public void run() {
             Utils.sleep(500);
             log.info(getName() + ": STARTED");

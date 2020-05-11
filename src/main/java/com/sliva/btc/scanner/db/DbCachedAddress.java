@@ -24,6 +24,7 @@ import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Stream;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.SneakyThrows;
@@ -46,7 +47,8 @@ public class DbCachedAddress implements AutoCloseable {
 
     public DbCachedAddress(DBConnectionSupplier conn, CacheData cacheData) {
         this.cacheData = cacheData;
-        BtcAddress.getRealTypes().forEach((t) -> updaters.put(t, new DbCachedAddressOne(conn, t, cacheData.dataOneMap.get(t))));
+        Stream.of(SrcAddressType.values()).filter(SrcAddressType::isReal)
+                .forEach((t) -> updaters.put(t, new DbCachedAddressOne(conn, t, cacheData.dataOneMap.get(t))));
     }
 
     @NonNull
@@ -82,7 +84,7 @@ public class DbCachedAddress implements AutoCloseable {
 
     private DbCachedAddressOne getOne(BtcAddress addr) {
         final SrcAddressType addrType = addr.getType();
-        if (!BtcAddress.getRealTypes().contains(addrType)) {
+        if (!addrType.isReal()) {
             throw new IllegalArgumentException("Bad address type: " + addrType + ", addr=" + addr);
         }
         return updaters.get(addr.getType());
@@ -99,7 +101,7 @@ public class DbCachedAddress implements AutoCloseable {
         private final Map<SrcAddressType, DbCachedAddressOne.CacheData> dataOneMap = new HashMap<>();
 
         public CacheData() {
-            BtcAddress.getRealTypes().forEach((t) -> dataOneMap.put(t, new DbCachedAddressOne.CacheData()));
+            Stream.of(SrcAddressType.values()).filter(SrcAddressType::isReal).forEach((t) -> dataOneMap.put(t, new DbCachedAddressOne.CacheData()));
         }
     }
 }

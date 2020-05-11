@@ -57,6 +57,7 @@ import com.sliva.btc.scanner.util.CommandLineUtils.CmdOptions;
 import static com.sliva.btc.scanner.util.CommandLineUtils.buildOption;
 import com.sliva.btc.scanner.util.ShutdownHook;
 import com.sliva.btc.scanner.util.Utils;
+import static com.sliva.btc.scanner.util.Utils.getNumberSupplier;
 import java.io.File;
 import java.io.IOException;
 import java.sql.SQLException;
@@ -71,7 +72,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import lombok.AllArgsConstructor;
@@ -141,7 +141,7 @@ public class RunFullScan {
     public static void main(String[] args) throws Exception {
         log.info("MAIN STARTED");
         try {
-            CmdArguments cmd = CommandLineUtils.buildCmdArguments(args, Main.Command.update.name(), CMD_OPTS);
+            CmdArguments cmd = CommandLineUtils.buildCmdArguments(args, Main.Command.update.name(), "Fill DB with block data retrieved from blockchain", null, CMD_OPTS);
             Integer loopTime = cmd.getOption(loopOpt).map(Integer::parseInt).orElse(null);
             do {
                 new RunFullScan(cmd).runProcess();
@@ -212,7 +212,7 @@ public class RunFullScan {
 
             ExecutorService loadThreadpool = Executors.newFixedThreadPool(loadBlockThreads, new ThreadFactoryBuilder().setDaemon(true).setNameFormat("loadBlock-%d").build());
             ExecutorService preprocThreadpool = Executors.newFixedThreadPool(preprocBlockThreads, new ThreadFactoryBuilder().setDaemon(true).setNameFormat("preprocBlock-%d").build());
-            Supplier<Integer> blockNumberSupplier = buildBlockNumberSupplier(firstBlockToProcess, lastBlockToProcess);
+            Supplier<Integer> blockNumberSupplier = getNumberSupplier(firstBlockToProcess, 1, n -> n <= lastBlockToProcess && !isTerminatingLoop());
             Supplier<CompletableFuture<SrcBlock<SrcTransaction<SrcInput, SrcOutput<SrcAddress>>>>> preProcFeatureSupplier
                     = () -> CompletableFuture
                             .completedFuture(blockNumberSupplier.get())
@@ -237,18 +237,6 @@ public class RunFullScan {
             DbUpdate.printStats();
         }
     }
-//
-//    private SrcBlock<SrcTransaction<SrcInput, SrcOutput<SrcAddress>>> getBlock(int blockHeight) {
-//        log.debug("getBlock({}): STARTED", blockHeight);
-//        try {
-//            return blockProvider.getBlock(blockHeight);
-//        } catch (Exception ex) {
-//            log.debug("Exception: {}: {}", ex.getClass().getSimpleName(), ex.getMessage());
-//            throw new RuntimeException(ex);
-//        } finally {
-//            log.debug("getBlock({}): FINISHED", blockHeight);
-//        }
-//    }
 
     @SneakyThrows(SQLException.class)
     private void processBlock(SrcBlock<SrcTransaction<SrcInput, SrcOutput<SrcAddress>>> block, DbAccess db) {
@@ -271,18 +259,6 @@ public class RunFullScan {
             }
         }
         log.trace("processBlock({}): FINISHED", blockHeight);
-    }
-
-    private Supplier<Integer> buildBlockNumberSupplier(int firstBlockToProcess, int lastBlockToProcess) {
-        AtomicInteger currentBlock = new AtomicInteger(firstBlockToProcess);
-        return () -> {
-            synchronized (currentBlock) {
-                if (currentBlock.get() > lastBlockToProcess || isTerminatingLoop()) {
-                    throw new NoSuchElementException("No More Elements");
-                }
-                return currentBlock.getAndIncrement();
-            }
-        };
     }
 
     @SneakyThrows(SQLException.class)

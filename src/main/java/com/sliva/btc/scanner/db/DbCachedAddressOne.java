@@ -93,7 +93,6 @@ public class DbCachedAddressOne implements AutoCloseable {
     }
 
     @NonNull
-    @SneakyThrows(SQLException.class)
     public Optional<BtcAddress> getAddress(int addressId, boolean updateCache) {
         Optional<BtcAddress> result = Optional.ofNullable(cacheData.cacheMapId.get(addressId));
         if (!result.isPresent()) {
@@ -109,7 +108,6 @@ public class DbCachedAddressOne implements AutoCloseable {
     }
 
     @NonNull
-    @SneakyThrows(SQLException.class)
     public Optional<BtcAddress> getAddress(byte[] address, boolean updateCache) {
         String hexAddr = Hex.toHexString(address);
         Optional<BtcAddress> result = Optional.ofNullable(cacheData.cacheMap.get(hexAddr));

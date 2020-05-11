@@ -37,7 +37,7 @@ public class DbUpdateOutput extends DbUpdate {
     private static int MIN_BATCH_SIZE = 1;
     private static int MAX_BATCH_SIZE = 40000;
     private static int MAX_INSERT_QUEUE_LENGTH = 20000;
-    private static int MAX_UPDATE_QUEUE_LENGTH = 10000;
+    private static int MAX_UPDATE_QUEUE_LENGTH = 100000;
     private static final String TABLE_NAME = "output";
     private static final String SQL_ADD = "INSERT INTO output(transaction_id,pos,address_id,amount,spent)VALUES(?,?,?,?,?)";
     private static final String SQL_DELETE = "DELETE FROM output WHERE transaction_id=? AND pos=?";
@@ -93,11 +93,7 @@ public class DbUpdateOutput extends DbUpdate {
         synchronized (cacheData) {
             cacheData.addQueue.add(txOutput);
             cacheData.queueMap.put(txOutput, txOutput);
-            List<TxOutput> list = cacheData.queueMapTx.get(txOutput.getTransactionId());
-            if (list == null) {
-                cacheData.queueMapTx.put(txOutput.getTransactionId(), list = new ArrayList<>());
-            }
-            list.add(txOutput);
+            cacheData.queueMapTx.computeIfAbsent(txOutput.getTransactionId(), id -> new ArrayList<>(2)).add(txOutput);
         }
     }
 
@@ -117,7 +113,7 @@ public class DbUpdateOutput extends DbUpdate {
         }
     }
 
-    public void updateSpent(int transactionId, short pos, byte status) throws SQLException {
+    public void updateSpent(int transactionId, short pos, byte status) {
         log.trace("updateSpent(transactionId:{},pos:{},status:{})", transactionId, pos, status);
         synchronized (cacheData) {
             InOutKey pk = new InOutKey(transactionId, pos);

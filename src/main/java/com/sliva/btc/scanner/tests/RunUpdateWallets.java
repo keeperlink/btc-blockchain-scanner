@@ -37,6 +37,8 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -238,8 +240,8 @@ public class RunUpdateWallets {
         psQueryWalletdByTransaction = dbCon.prepareStatement(fixTableName(SQL_QUERY_WALLETS_BY_TRANSACTION));
         psQuerySpendTransactionsByAddress = dbCon.prepareStatement(fixTableName(SQL_QUERY_SPEND_TRANSACTIONS_BY_ADDRESS));
 
-        psUpdateAddressWalletPerTable = new ArrayList<>(BtcAddress.getRealTypes().size());
-        BtcAddress.getRealTypes().forEach((at) -> psUpdateAddressWalletPerTable.add(dbCon.prepareStatement(fixTableName(SQL_UPDATE_ADDRESS_WALLET, at))));
+        psUpdateAddressWalletPerTable = new ArrayList<>();
+        Stream.of(SrcAddressType.values()).filter(SrcAddressType::isReal).forEach((at) -> psUpdateAddressWalletPerTable.add(dbCon.prepareStatement(fixTableName(SQL_UPDATE_ADDRESS_WALLET, at))));
     }
 
     private void runProcess() throws SQLException, InterruptedException {
@@ -534,7 +536,7 @@ public class RunUpdateWallets {
     private static Options prepOptions() {
         Options options = new Options();
         options.addOption("h", "help", false, "Print help");
-        options.addOption(null, "address-type", true, "Addresses type to scan and update. Acceptable values: " + BtcAddress.getRealTypes() + ". Default: " + DEFAULT_ADDRESS_TYPE);
+        options.addOption(null, "address-type", true, "Addresses type to scan and update. Acceptable values: " + Stream.of(SrcAddressType.values()).filter(SrcAddressType::isReal).collect(Collectors.toSet()) + ". Default: " + DEFAULT_ADDRESS_TYPE);
         options.addOption(null, "batch-size", true, "Number or addresses to read in a batch. Default: " + DEFAULT_READ_ROWS_BATCH);
         options.addOption(null, "stop-file", true, "File to be watched on each new block to stop process. If file is present the process stops and file renamed by adding '1' to the end. Default: " + DEFAULT_STOP_FILE_NAME);
         options.addOption("t", "threads", true, "Number of threads to run. Default is " + DEFAULT_TXN_THREADS + ". To disable parallel threading set value to 0");

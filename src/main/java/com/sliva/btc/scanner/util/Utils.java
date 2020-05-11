@@ -22,7 +22,10 @@ import java.io.IOException;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.text.DecimalFormat;
+import java.util.NoSuchElementException;
 import java.util.Properties;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
@@ -146,6 +149,22 @@ public final class Utils {
         synchronized (syncObject) {
             return supplier.get();
         }
+    }
+
+    public static long getPercentage(long obtained, long total) {
+        return obtained * 100 / total;
+    }
+
+    public static Supplier<Integer> getNumberSupplier(int firstBlockToProcess, int incrementStep, Function<Integer, Boolean> continueLoopConditions) {
+        AtomicInteger currentNumber = new AtomicInteger(firstBlockToProcess);
+        return () -> {
+            synchronized (currentNumber) {
+                if (!continueLoopConditions.apply(currentNumber.get())) {
+                    throw new NoSuchElementException("No More Elements");
+                }
+                return currentNumber.getAndAdd(incrementStep);
+            }
+        };
     }
 
     public static class NumberFile {

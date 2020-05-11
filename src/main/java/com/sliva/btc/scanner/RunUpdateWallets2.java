@@ -40,6 +40,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -72,7 +73,7 @@ public class RunUpdateWallets2 {
     private final int batchSize;
     private final int txnThreads;
     private final Set<Integer> unusedWallets = new HashSet<>();
-    private final ExecutorService execAddressQueries = Executors.newFixedThreadPool(BtcAddress.getRealTypes().size());
+    private final ExecutorService execAddressQueries = Executors.newFixedThreadPool((int) Stream.of(SrcAddressType.values()).filter(SrcAddressType::isReal).count());
     private final ExecutorService execTransactionThreads;
     private final Utils.NumberFile startFromFile;
 
@@ -94,7 +95,8 @@ public class RunUpdateWallets2 {
         DBConnectionSupplier.applyArguments(cmd);
 
         conn = new DBConnectionSupplier();
-        psUpdateAddressWalletPerTable = BtcAddress.getRealTypes().stream().map(type -> conn.prepareStatement(fixAddressTableName(SQL_UPDATE_ADDRESS_WALLET, type))).collect(Collectors.toList());
+        psUpdateAddressWalletPerTable = Stream.of(SrcAddressType.values()).filter(SrcAddressType::isReal)
+                .map(type -> conn.prepareStatement(fixAddressTableName(SQL_UPDATE_ADDRESS_WALLET, type))).collect(Collectors.toList());
         queryTransaction = new DbQueryTransaction(conn);
         queryInput = new DbQueryInput(conn);
         queryWallet = new DbQueryWallet(conn);

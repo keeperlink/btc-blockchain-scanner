@@ -19,7 +19,6 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.src.SrcAddressType;
-import java.sql.SQLException;
 import java.util.Optional;
 import lombok.NonNull;
 
@@ -64,7 +63,7 @@ public class DbQueryAddress {
     }
 
     @NonNull
-    public Optional<BtcAddress> findByAddressId(int addressId) throws SQLException {
+    public Optional<BtcAddress> findByAddressId(int addressId) {
         checkState(addressType != null, "Method not supported due to instance created with no-arguments constructor");
         return psFindByAddressId.setParameters(ps -> ps.setInt(addressId)).querySingleRow(rs -> BtcAddress.builder()
                 .type(addressType)
@@ -75,7 +74,7 @@ public class DbQueryAddress {
     }
 
     @NonNull
-    public Optional<BtcAddress> findByAddress(byte[] address) throws SQLException {
+    public Optional<BtcAddress> findByAddress(byte[] address) {
         checkState(addressType != null, "Method not supported due to instance created with no-arguments constructor");
         return DBUtils.readInteger(psFindByAddress.setParameters(ps -> ps.setBytes(address)))
                 .map(addressId -> BtcAddress.builder()
@@ -86,12 +85,12 @@ public class DbQueryAddress {
     }
 
     @NonNull
-    public Optional<Integer> getWalletId(int addressId) throws SQLException {
+    public Optional<Integer> getWalletId(int addressId) {
         checkState(addressType != null, "Method not supported due to instance created with no-arguments constructor");
         return DBUtils.readInteger(psQueryWalletId.setParameters(p -> p.setInt(addressId)));
     }
 
-    public int getLastAddressId() throws SQLException {
+    public int getLastAddressId() {
         checkState(addressType != null, "Method not supported due to instance created with no-arguments constructor");
         return DBUtils.readInteger(psQueryLastAddressId).orElseGet(()
                 -> addressType == SrcAddressType.P2PKH ? BtcAddress.ADDR_P2PKH_MIN

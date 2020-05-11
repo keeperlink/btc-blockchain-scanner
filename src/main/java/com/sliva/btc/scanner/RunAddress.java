@@ -21,12 +21,11 @@ import com.sliva.btc.scanner.db.DbQueryAddressCombo;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.src.SrcAddressType;
 import com.sliva.btc.scanner.util.BJBlockHandler;
+import com.sliva.btc.scanner.util.CommandLineUtils;
+import com.sliva.btc.scanner.util.CommandLineUtils.CmdArguments;
+import static com.sliva.btc.scanner.util.CommandLineUtils.buildCmdArguments;
 import java.util.Optional;
-import org.apache.commons.cli.CommandLine;
-import org.apache.commons.cli.CommandLineParser;
-import org.apache.commons.cli.DefaultParser;
-import org.apache.commons.cli.HelpFormatter;
-import org.apache.commons.cli.Options;
+import java.util.stream.Stream;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.lang3.StringUtils;
 import org.bitcoinj.core.Address;
@@ -37,8 +36,8 @@ import org.bitcoinj.core.Address;
  */
 public class RunAddress {
 
-    private final String[] args;
-    private final DBConnectionSupplier conn;
+    private static final CommandLineUtils.CmdOptions CMD_OPTS = new CommandLineUtils.CmdOptions().add(DBConnectionSupplier.class);
+
     private final DbQueryAddress queryAddress;
 
     /**
@@ -46,37 +45,19 @@ public class RunAddress {
      * @throws java.lang.Exception
      */
     public static void main(String[] args) throws Exception {
-        CommandLineParser parser = new DefaultParser();
-        CommandLine cmd = parser.parse(prepOptions(), args);
-        if (cmd.hasOption('h')) {
-            printHelpAndExit();
-        }
-        new RunAddress(cmd, args).runProcess();
+        CmdArguments cmd = buildCmdArguments(args, Main.Command.address.name(), "Convert addresses between string hash and DB ID formats", "address1 [ address2 ...]", CMD_OPTS);
+        new RunAddress().runProcess(args);
     }
 
     @SuppressWarnings("UseSpecificCatch")
-    public RunAddress(CommandLine cmd, String[] args) {
-        this.args = args;
-        DBConnectionSupplier.applyArguments(cmd);
-        DBConnectionSupplier c = null;
-        DbQueryAddress qa = null;
-        try {
-            c = new DBConnectionSupplier();
-            qa = new DbQueryAddressCombo(c);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        conn = c;
-        queryAddress = qa;
+    public RunAddress() {
+        DBConnectionSupplier c = new DBConnectionSupplier();
+        queryAddress = new DbQueryAddressCombo(c);
 
     }
 
-    private void runProcess() {
-        for (String s : args) {
-            if (!s.startsWith("-")) {
-                processAddress(s);
-            }
-        }
+    private void runProcess(String[] args) {
+        Stream.of(args).filter(s -> !s.startsWith("-")).forEach(this::processAddress);
     }
 
     @SuppressWarnings("UseSpecificCatch")
@@ -103,7 +84,7 @@ public class RunAddress {
                     //
                 }
             }
-            BtcAddress.getRealTypes().forEach((type) -> {
+            Stream.of(SrcAddressType.values()).filter(SrcAddressType::isReal).forEach(type -> {
                 if (a.length() == 40 ^ type == SrcAddressType.P2WSH) {
                     try {
                         Address adr = BJBlockHandler.getAddress(type, Hex.decodeHex(a));
@@ -117,20 +98,5 @@ public class RunAddress {
             System.out.println("Address " + a + " hash: " + Hex.encodeHexString(adr.getHash(), true)
                     + " type: " + BtcAddress.getTypeFromAddress(a));
         }
-    }
-
-    private static void printHelpAndExit() {
-        System.out.println("Convert addresses between string hash and DB ID formats");
-        System.out.println("Available options:");
-        HelpFormatter formatter = new HelpFormatter();
-        formatter.printHelp("java <jar> " + Main.Command.update_wallets + " [options] address1 [ address2 ...]", prepOptions());
-        System.exit(1);
-    }
-
-    private static Options prepOptions() {
-        Options options = new Options();
-        options.addOption("h", "help", false, "Print help");
-        DBConnectionSupplier.addOptions(options);
-        return options;
     }
 }
