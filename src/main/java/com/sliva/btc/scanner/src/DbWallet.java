@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,9 +15,6 @@
  */
 package com.sliva.btc.scanner.src;
 
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.stream.Stream;
 
@@ -65,39 +62,19 @@ public class DbWallet implements SrcWallet<DbAddress> {
     @Override
     public Stream<DbAddress> getAddresses() {
         if (addresses == null) {
-            try {
-                blockProvider.psQueryWalletAddresses.get().setInt(1, id);
-                blockProvider.psQueryWalletAddresses.get().setInt(2, id);
-                blockProvider.psQueryWalletAddresses.get().setInt(3, id);
-                blockProvider.psQueryWalletAddresses.get().setInt(4, id);
-                try (ResultSet rs = blockProvider.psQueryWalletAddresses.get().executeQuery()) {
-                    Collection<DbAddress> t = new ArrayList<>();
-                    while (rs.next()) {
-                        t.add(new DbAddress(blockProvider, rs.getInt(1), rs.getBytes(2), id));
-                    }
-                    addresses = t;
-                }
-            } catch (SQLException e) {
-                throw new IllegalStateException(e);
-            }
+            addresses = blockProvider.psQueryWalletAddresses
+                    .setParameters(p -> p.setInt(id).setInt(id).setInt(id).setInt(id))
+                    .executeQueryToList(rs -> new DbAddress(blockProvider, rs.getInt(1), rs.getBytes(2), id));
         }
         return addresses.stream();
     }
 
     private void loadWallet() {
-        try {
-            blockProvider.psQueryWallet.get().setInt(1, id);
-            try (ResultSet rs = blockProvider.psQueryWallet.get().executeQuery()) {
-                if (!rs.next()) {
-                    throw new IllegalStateException("Wallet #" + id + " not found in DB");
-                }
-                name = rs.getString(1);
-                details = rs.getString(2);
-            }
-        } catch (SQLException e) {
-            throw new IllegalStateException(e);
-        } finally {
-            loaded = true;
-        }
+        blockProvider.psQueryWallet.setParameters(p -> p.setInt(id)).querySingleRow(rs -> {
+            name = rs.getString(1);
+            details = rs.getString(2);
+            return true;
+        }).orElseThrow(() -> new IllegalStateException("Wallet #" + id + " not found in DB"));
+        loaded = true;
     }
 }

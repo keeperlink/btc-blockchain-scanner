@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,8 +15,6 @@
  */
 package com.sliva.btc.scanner.src;
 
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import lombok.AllArgsConstructor;
 import org.apache.commons.codec.binary.Hex;
 
@@ -44,17 +42,7 @@ public class DbInput implements SrcInput {
     @Override
     public String getInTxid() {
         if (inTxid == null) {
-            try {
-                blockProvider.psQueryTransactionHash.get().setInt(1, inTransactionId);
-                try (ResultSet rs = blockProvider.psQueryTransactionHash.get().executeQuery()) {
-                    if (!rs.next()) {
-                        throw new IllegalStateException("Transaction #" + inTransactionId + " not found in DB");
-                    }
-                    inTxid = Hex.encodeHexString(rs.getBytes(1), true);
-                }
-            } catch (SQLException e) {
-                throw new IllegalStateException(e);
-            }
+            inTxid = blockProvider.psQueryTransactionHash.setParameters(p -> p.setInt(inTransactionId)).querySingleRow(rs -> Hex.encodeHexString(rs.getBytes(1), true)).orElse(null);
         }
         return inTxid;
     }

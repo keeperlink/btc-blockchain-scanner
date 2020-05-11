@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,14 +15,15 @@
  */
 package com.sliva.btc.scanner.tests;
 
-import com.sliva.btc.scanner.rpc.RpcClient;
-import com.sliva.btc.scanner.db.DbUpdateTransaction;
-import com.sliva.btc.scanner.db.DBConnection;
+import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import com.sliva.btc.scanner.db.DbQueryBlock;
 import com.sliva.btc.scanner.db.DbQueryTransaction;
+import com.sliva.btc.scanner.db.DbUpdateTransaction;
 import com.sliva.btc.scanner.db.model.BtcTransaction;
 import com.sliva.btc.scanner.rpc.ParallelGetBlock;
+import com.sliva.btc.scanner.rpc.RpcClient;
 import java.sql.SQLException;
+import java.util.Optional;
 import lombok.extern.slf4j.Slf4j;
 import wf.bitcoin.javabitcoindrpcclient.BitcoinJSONRPCClient;
 import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient;
@@ -37,7 +38,7 @@ public class UpdateTransactionId {
 
     private static final int RPC_THREADS = 70;
     private static BitcoinJSONRPCClient client;
-    private static DBConnection conn;
+    private static DBConnectionSupplier conn;
     private static DbQueryBlock queryBlock;
     private static DbQueryTransaction queryTransaction;
 
@@ -48,17 +49,17 @@ public class UpdateTransactionId {
     public static void main(String[] args) throws Exception {
         log.debug("START");
         client = new RpcClient().getClient();
-        conn = new DBConnection("btc");
+        conn = new DBConnectionSupplier("btc");
         queryBlock = new DbQueryBlock(conn);
         queryTransaction = new DbQueryTransaction(conn);
         BitcoindRpcClient.BlockChainInfo bci = client.getBlockChainInfo();
         log.info("BlockChainInfo: {}", bci);
-        BtcTransaction lastTx = queryTransaction.getLastTransaction();
+        Optional<BtcTransaction> lastTx = queryTransaction.getLastTransaction();
         log.info("lastTx={}", lastTx);
-        int firstBlock = lastTx == null ? 1 : lastTx.getBlockHeight();//findFirstBlockToUpdate();
-        int numBlocks = queryBlock.findLastHeight() - firstBlock + 1;
+        int firstBlock = lastTx.map(BtcTransaction::getBlockHeight).orElse(1);
+        int numBlocks = queryBlock.findLastHeight().orElse(-1) - firstBlock + 1;
         log.info("firstBlock={}, numBlocks={}", firstBlock, numBlocks);
-        updateDb(RPC_THREADS, firstBlock, numBlocks, lastTx == null ? 0 : lastTx.getTransactionId());
+        updateDb(RPC_THREADS, firstBlock, numBlocks, lastTx.map(BtcTransaction::getTransactionId).orElse(0));
     }
 
 //    private static int findFirstBlockToUpdate() throws SQLException {

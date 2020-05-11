@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,11 +17,11 @@ package com.sliva.btc.scanner.tests;
 
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
 import java.util.Base64;
 import org.apache.commons.httpclient.HttpClient;
 import org.apache.commons.httpclient.methods.PostMethod;
 import org.apache.commons.httpclient.methods.StringRequestEntity;
+import org.bitcoinj.core.Utils;
 
 /**
  *
@@ -59,7 +59,7 @@ public class TestHttpClient {
                 // consume the response entity
             } finally {
                 httppost.releaseConnection();
-                Thread.sleep(5);
+                Utils.sleep(5);
             }
         }
     }

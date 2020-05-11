@@ -18,13 +18,13 @@ package com.sliva.btc.scanner.tests;
 import static com.google.common.base.Preconditions.checkState;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.sliva.btc.scanner.Main;
-import com.sliva.btc.scanner.db.DBConnection;
+import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import com.sliva.btc.scanner.db.DbQueryInput;
 import com.sliva.btc.scanner.db.DbQueryOutput;
 import com.sliva.btc.scanner.db.DbQueryTransaction;
 import com.sliva.btc.scanner.db.model.BtcTransaction;
-import com.sliva.btc.scanner.neo4j.NeoQueries;
 import com.sliva.btc.scanner.neo4j.NeoConnection;
+import com.sliva.btc.scanner.neo4j.NeoQueries;
 import com.sliva.btc.scanner.src.DbAddress;
 import com.sliva.btc.scanner.src.DbBlockProvider;
 import com.sliva.btc.scanner.src.DbWallet;
@@ -47,7 +47,7 @@ import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 
 /**
  *
@@ -64,7 +64,7 @@ public class RunLoadNeo4jDB {
     private static final int DEFAULT_START_TRANSACTION_ID = 1;
     private static final int DEFAULT_BATCH_SIZE = 100_000;
     private static final String DEFAULT_STOP_FILE_NAME = "/tmp/btc-neo4j-stop";
-    private final DBConnection dbCon;
+    private final DBConnectionSupplier dbCon;
 //    private final DbQueryAddress queryAddress;
     private final DbQueryTransaction queryTransaction;
     private final DbQueryInput queryInput;
@@ -96,14 +96,14 @@ public class RunLoadNeo4jDB {
     }
 
     public RunLoadNeo4jDB(CommandLine cmd) {
-        DBConnection.applyArguments(cmd);
+        DBConnectionSupplier.applyArguments(cmd);
         NeoConnection.applyArguments(cmd);
         startFromFile = new Utils.NumberFile(cmd.getOptionValue("start-from", Integer.toString(DEFAULT_START_TRANSACTION_ID)));
         batchSize = Integer.parseInt(cmd.getOptionValue("batch-size", Integer.toString(DEFAULT_BATCH_SIZE)));
         stopFile = new File(cmd.getOptionValue("stop-file", DEFAULT_STOP_FILE_NAME));
         cleanup = false;
         int nTxnThreads = Integer.parseInt(cmd.getOptionValue("threads", Integer.toString(DEFAULT_TXN_THREADS)));
-        dbCon = new DBConnection();
+        dbCon = new DBConnectionSupplier();
 //        queryAddress = new DbQueryAddressCombo(dbCon);
         queryTransaction = new DbQueryTransaction(dbCon);
         blockProvider = new DbBlockProvider(dbCon);
@@ -153,7 +153,7 @@ public class RunLoadNeo4jDB {
         log.debug("Getting Neo DB state...");
         final int lastTransactionId = neoQueries.getLastTransactionId();
         startTransaction = lastTransactionId + 1;//startFromFile.getNumber().intValue();
-        endTransaction = queryTransaction.getLastTransactionId();
+        endTransaction = queryTransaction.getLastTransactionId().orElse(0);
         log.debug("startTransaction: {}, endTransaction: {}", startTransaction, endTransaction);
         new CleanupFiles().start();
     }
@@ -276,7 +276,7 @@ public class RunLoadNeo4jDB {
         options.addOption(null, "start-from", true, "Start process from this transaction ID. Beside a number this parameter can be set to a file name that stores the numeric value updated on every batch");
         options.addOption(null, "stop-file", true, "File to be watched on each new block to stop process. If file is present the process stops and file renamed by adding '1' to the end. Default: " + DEFAULT_STOP_FILE_NAME);
         options.addOption("t", "threads", true, "Number of threads to run. Default is " + DEFAULT_TXN_THREADS + ". To disable parallel threading set value to 0");
-        DBConnection.addOptions(options);
+        DBConnectionSupplier.addOptions(options);
         NeoConnection.addOptions(options);
         return options;
 
@@ -306,7 +306,7 @@ public class RunLoadNeo4jDB {
         private static final long TTL_MSEC = 5 * 60 * 1000L;
         private static final long CHECK_PERIOD_MSEC = 30 * 1000L;
 
-        public CleanupFiles() {
+        private CleanupFiles() {
             super("CleanupFiles");
             setDaemon(true);
         }

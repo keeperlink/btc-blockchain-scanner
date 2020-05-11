@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,14 +15,18 @@
  */
 package com.sliva.btc.scanner.db;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import com.sliva.btc.scanner.db.model.BtcTransaction;
 import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import lombok.Getter;
+import lombok.NonNull;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -37,11 +41,11 @@ public class DbCachedTransaction implements AutoCloseable {
     private final DbQueryTransaction queryTransaction;
     private final CacheData cacheData;
 
-    public DbCachedTransaction(DBConnection conn) throws SQLException {
+    public DbCachedTransaction(DBConnectionSupplier conn) throws SQLException {
         this(conn, new CacheData());
     }
 
-    public DbCachedTransaction(DBConnection conn, CacheData cacheData) throws SQLException {
+    public DbCachedTransaction(DBConnectionSupplier conn, CacheData cacheData) throws SQLException {
         updateTransaction = new DbUpdateTransaction(conn, cacheData.updateCachedData);
         queryTransaction = new DbQueryTransaction(conn);
         this.cacheData = cacheData;
@@ -51,17 +55,20 @@ public class DbCachedTransaction implements AutoCloseable {
         return cacheData;
     }
 
+    @NonNull
     public BtcTransaction add(BtcTransaction btcTransaction) throws SQLException {
+        checkArgument(btcTransaction != null, "Argument 'btcTransaction' is null");
         synchronized (cacheData) {
-            if (btcTransaction.getTransactionId() == 0) {
+            BtcTransaction result = btcTransaction;
+            if (result.getTransactionId() == 0) {
                 if (cacheData.lastTransactionId.get() == 0) {
-                    cacheData.lastTransactionId.set(queryTransaction.getLastTransactionId());
+                    cacheData.lastTransactionId.set(queryTransaction.getLastTransactionId().orElse(0));
                 }
-                btcTransaction = btcTransaction.toBuilder().transactionId(cacheData.lastTransactionId.incrementAndGet()).build();
+                result = result.toBuilder().transactionId(cacheData.lastTransactionId.incrementAndGet()).build();
             }
-            updateTransaction.add(btcTransaction);
-            updateCache(btcTransaction);
-            return btcTransaction;
+            updateTransaction.add(result);
+            updateCache(result);
+            return result;
         }
     }
 
@@ -73,45 +80,41 @@ public class DbCachedTransaction implements AutoCloseable {
         }
     }
 
-    public BtcTransaction getTransaction(int transactionId) throws SQLException {
-        BtcTransaction result = cacheData.cacheMapId.get(transactionId);
-        if (result == null) {
-            result = updateTransaction.getCacheData().getAddMapId().get(transactionId);
+    @NonNull
+    @SneakyThrows(SQLException.class)
+    public Optional<BtcTransaction> getTransaction(int transactionId) {
+        Optional<BtcTransaction> result = Optional.ofNullable(cacheData.cacheMapId.get(transactionId));
+        if (!result.isPresent()) {
+            result = Optional.ofNullable(updateTransaction.getCacheData().getAddMapId().get(transactionId));
         }
-        if (result == null) {
+        if (!result.isPresent()) {
             result = queryTransaction.findTransaction(transactionId);
         }
-        if (result != null) {
-            updateCache(result);
-        }
+        result.ifPresent(r -> updateCache(r));
         return result;
     }
 
-    public BtcTransaction getTransaction(String txid) throws SQLException {
-        BtcTransaction result = cacheData.cacheMap.get(txid);
-        if (result == null) {
-            result = updateTransaction.getCacheData().getAddMap().get(txid);
+    @NonNull
+    public Optional<BtcTransaction> getTransaction(String txid) throws SQLException {
+        Optional<BtcTransaction> result = Optional.ofNullable(cacheData.cacheMap.get(txid));
+        if (!result.isPresent()) {
+            result = Optional.ofNullable(updateTransaction.getCacheData().getAddMap().get(txid));
         }
-        if (result == null) {
+        if (!result.isPresent()) {
             result = queryTransaction.findTransaction(txid);
         }
-        if (result != null) {
-            updateCache(result);
-        }
+        result.ifPresent(r -> updateCache(r));
         return result;
     }
 
+    @NonNull
     public List<BtcTransaction> getTransactionsInBlock(int blockHeight) throws SQLException {
         List<BtcTransaction> result = queryTransaction.getTransactionsInBlock(blockHeight);
-        if (result != null) {
-            for (BtcTransaction t : result) {
-                updateCache(t);
-            }
-        }
+        result.forEach(t -> updateCache(t));
         return result;
     }
 
-    private void updateCache(BtcTransaction btcTransaction) throws SQLException {
+    private void updateCache(BtcTransaction btcTransaction) {
         synchronized (cacheData) {
             cacheData.cacheMap.remove(btcTransaction.getTxid());
             cacheData.cacheMap.put(btcTransaction.getTxid(), btcTransaction);

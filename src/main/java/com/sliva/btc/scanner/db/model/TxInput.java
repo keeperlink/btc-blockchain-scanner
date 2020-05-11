@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,29 +15,19 @@
  */
 package com.sliva.btc.scanner.db.model;
 
-import lombok.Builder;
-import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.ToString;
+import lombok.experimental.SuperBuilder;
 
 /**
  *
  * @author Sliva Co
  */
 @Getter
-@Builder(toBuilder = true)
-@ToString
-@EqualsAndHashCode(of = {"transactionId", "pos"})
-public class TxInput implements Comparable<TxInput> {
+@SuperBuilder(toBuilder = true)
+@ToString(callSuper = true)
+public class TxInput extends InOutKey {
 
-    private final int transactionId;
-    private final short pos;
     private final int inTransactionId;
     private final short inPos;
-
-    @Override
-    public int compareTo(TxInput o) {
-        int c = Integer.compare(transactionId, o.transactionId);
-        return c != 0 ? c : Integer.compare(pos, o.pos);
-    }
 }

@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,8 +23,11 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.NonNull;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -34,21 +37,22 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class DbCachedOutput implements AutoCloseable {
 
-    private static final int MAX_CACHE_SIZE = 50000;
+    private static final int MAX_CACHE_SIZE = 200000;
     private final DbUpdateOutput updateOutput;
     private final DbQueryOutput queryOutput;
     private final CacheData cacheData;
 
-    public DbCachedOutput(DBConnection conn) throws SQLException {
+    public DbCachedOutput(DBConnectionSupplier conn) throws SQLException {
         this(conn, new CacheData());
     }
 
-    public DbCachedOutput(DBConnection conn, CacheData cacheData) throws SQLException {
+    public DbCachedOutput(DBConnectionSupplier conn, CacheData cacheData) throws SQLException {
         updateOutput = new DbUpdateOutput(conn, cacheData.updateCachedData);
         queryOutput = new DbQueryOutput(conn);
         this.cacheData = cacheData;
     }
 
+    @NonNull
     public CacheData getCacheData() {
         return cacheData;
     }
@@ -60,7 +64,8 @@ public class DbCachedOutput implements AutoCloseable {
         }
     }
 
-    public void delete(TxOutput txOutput) throws SQLException {
+    @SneakyThrows(SQLException.class)
+    public void delete(TxOutput txOutput) {
         synchronized (cacheData) {
             updateOutput.delete(txOutput);
             OutputsList ol = cacheData.cacheMap.get(txOutput.getTransactionId());
@@ -73,7 +78,7 @@ public class DbCachedOutput implements AutoCloseable {
         }
     }
 
-    public void updateStatus(int transactionId, short pos, byte status) throws SQLException {
+    public void updateStatus(int transactionId, short pos, byte status) {
         synchronized (cacheData) {
             updateOutput.updateSpent(transactionId, pos, status);
             OutputsList ol = cacheData.cacheMap.get(transactionId);
@@ -86,7 +91,8 @@ public class DbCachedOutput implements AutoCloseable {
         }
     }
 
-    public void updateAddress(int transactionId, short pos, int addressId) throws SQLException {
+    @SneakyThrows(SQLException.class)
+    public void updateAddress(int transactionId, short pos, int addressId) {
         synchronized (cacheData) {
             updateOutput.updateAddress(transactionId, pos, addressId);
             OutputsList ol = cacheData.cacheMap.get(transactionId);
@@ -99,7 +105,8 @@ public class DbCachedOutput implements AutoCloseable {
         }
     }
 
-    public void updateAmount(int transactionId, short pos, long amount) throws SQLException {
+    @SneakyThrows(SQLException.class)
+    public void updateAmount(int transactionId, short pos, long amount) {
         synchronized (cacheData) {
             updateOutput.updateAmount(transactionId, pos, amount);
             OutputsList ol = cacheData.cacheMap.get(transactionId);
@@ -112,6 +119,7 @@ public class DbCachedOutput implements AutoCloseable {
         }
     }
 
+    @NonNull
     public List<TxOutput> getOutputs(int transactionId) throws SQLException {
         OutputsList ol = cacheData.cacheMap.get(transactionId);
         if (ol != null && ol.isComplete()) {
@@ -124,41 +132,35 @@ public class DbCachedOutput implements AutoCloseable {
             ol = cacheData.cacheMap.get(transactionId);
         }
         lt = queryOutput.getOutputs(transactionId);
-        if (lt != null) {
-            if (ol != null) {
-                ol.merge(lt, true);
-                updateCache(transactionId, ol);
-                return ol.getList();
-            } else {
-                updateCache(lt);
-            }
+        if (ol != null) {
+            ol.merge(lt, true);
+            updateCache(transactionId, ol);
+            return ol.getList();
+        } else {
+            updateCache(lt);
         }
         return lt;
     }
 
-    public TxOutput getOutput(int transactionId, short pos) throws SQLException {
-        OutputsList ol = cacheData.cacheMap.get(transactionId);
-        TxOutput result = ol == null ? null : ol.find(pos);
-        if (result != null) {
+    @NonNull
+    public Optional<TxOutput> getOutput(int transactionId, short pos) throws SQLException {
+        Optional<OutputsList> ol = Optional.ofNullable(cacheData.cacheMap.get(transactionId));
+        Optional<TxOutput> result = ol.map(o -> o.find(pos));
+        if (result.isPresent()) {
             updateCache(transactionId);
             return result;
         }
-        result = updateOutput.getCacheData().getQueueMap().get(new InOutKey(transactionId, pos));
-        if (result != null) {
+        result = Optional.ofNullable(updateOutput.getCacheData().getQueueMap().get(new InOutKey(transactionId, pos)));
+        if (result.isPresent()) {
             updateCache(transactionId);
             return result;
         }
-        TxOutput to = queryOutput.getOutput(transactionId, pos);
-        if (to != null) {
-            updateCache(to);
+        result = queryOutput.getOutput(transactionId, pos);
+        if (result.isPresent()) {
+            updateCache(result.get());
         }
-        return to;
+        return result;
     }
-//
-//    private static TxOutput findOutput(int transactionId, int pos, Map<Integer, List<TxOutput>> map) {
-//        List<TxOutput> list = map.get(transactionId);
-//        return list == null ? null : list.stream().filter((t) -> t.getPos() == pos).findAny().orElse(null);
-//    }
 
     private void updateCache(int transactionId) throws SQLException {
         synchronized (cacheData) {
@@ -230,7 +232,7 @@ public class DbCachedOutput implements AutoCloseable {
         private final List<TxOutput> list = new ArrayList<>();
         private boolean complete;
 
-        public OutputsList(Collection<TxOutput> list, boolean complete) {
+        OutputsList(Collection<TxOutput> list, boolean complete) {
             this.list.addAll(list);
             this.complete = complete;
         }

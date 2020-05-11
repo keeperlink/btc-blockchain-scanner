@@ -15,19 +15,19 @@
  */
 package com.sliva.btc.scanner;
 
-import com.sliva.btc.scanner.db.DBConnection;
+import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import com.sliva.btc.scanner.db.DbQueryAddress;
 import com.sliva.btc.scanner.db.DbQueryAddressCombo;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.src.SrcAddressType;
 import com.sliva.btc.scanner.util.BJBlockHandler;
-import org.apache.commons.cli.CommandLine;
-import org.apache.commons.cli.CommandLineParser;
-import org.apache.commons.cli.DefaultParser;
-import org.apache.commons.cli.HelpFormatter;
-import org.apache.commons.cli.Options;
+import com.sliva.btc.scanner.util.CommandLineUtils;
+import com.sliva.btc.scanner.util.CommandLineUtils.CmdArguments;
+import static com.sliva.btc.scanner.util.CommandLineUtils.buildCmdArguments;
+import java.util.Optional;
+import java.util.stream.Stream;
 import org.apache.commons.codec.binary.Hex;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.bitcoinj.core.Address;
 
 /**
@@ -36,8 +36,8 @@ import org.bitcoinj.core.Address;
  */
 public class RunAddress {
 
-    private final String[] args;
-    private final DBConnection conn;
+    private static final CommandLineUtils.CmdOptions CMD_OPTS = new CommandLineUtils.CmdOptions().add(DBConnectionSupplier.class);
+
     private final DbQueryAddress queryAddress;
 
     /**
@@ -45,44 +45,26 @@ public class RunAddress {
      * @throws java.lang.Exception
      */
     public static void main(String[] args) throws Exception {
-        CommandLineParser parser = new DefaultParser();
-        CommandLine cmd = parser.parse(prepOptions(), args);
-        if (cmd.hasOption('h')) {
-            printHelpAndExit();
-        }
-        new RunAddress(cmd, args).runProcess();
+        CmdArguments cmd = buildCmdArguments(args, Main.Command.address.name(), "Convert addresses between string hash and DB ID formats", "address1 [ address2 ...]", CMD_OPTS);
+        new RunAddress().runProcess(args);
     }
 
     @SuppressWarnings("UseSpecificCatch")
-    public RunAddress(CommandLine cmd, String[] args) {
-        this.args = args;
-        DBConnection.applyArguments(cmd);
-        DBConnection c = null;
-        DbQueryAddress qa = null;
-        try {
-            c = new DBConnection();
-            qa = new DbQueryAddressCombo(c);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        conn = c;
-        queryAddress = qa;
+    public RunAddress() {
+        DBConnectionSupplier c = new DBConnectionSupplier();
+        queryAddress = new DbQueryAddressCombo(c);
 
     }
 
-    private void runProcess() {
-        for (String s : args) {
-            if (!s.startsWith("-")) {
-                processAddress(s);
-            }
-        }
+    private void runProcess(String[] args) {
+        Stream.of(args).filter(s -> !s.startsWith("-")).forEach(this::processAddress);
     }
 
     @SuppressWarnings("UseSpecificCatch")
     private void processAddress(String a) {
         if (a.length() <= 10 && StringUtils.isNumeric(a)) {
             try {
-                BtcAddress btcAddress = queryAddress.findByAddressId(Integer.parseInt(a));
+                BtcAddress btcAddress = queryAddress.findByAddressId(Integer.parseInt(a)).orElseThrow(() -> new IllegalArgumentException("Address not found: " + a));
                 System.out.println("Address for DB ID " + a + " is: " + btcAddress.getBjAddress()
                         + ", type: " + btcAddress.getType() + ", hash: " + Hex.encodeHexString(btcAddress.getAddress(), true));
             } catch (Exception e) {
@@ -91,8 +73,9 @@ public class RunAddress {
         } else if (a.matches("[0-9a-fA-F]*") && a.length() == 40 || a.length() == 64) {
             if (queryAddress != null) {
                 try {
-                    BtcAddress btcAddress = queryAddress.findByAddress(Hex.decodeHex(a));
-                    if (btcAddress != null) {
+                    Optional<BtcAddress> btcAddressOpt = queryAddress.findByAddress(Hex.decodeHex(a));
+                    if (btcAddressOpt.isPresent()) {
+                        BtcAddress btcAddress = btcAddressOpt.get();
                         System.out.println("Address for hash " + a + " is: " + btcAddress.getBjAddress()
                                 + ", type: " + btcAddress.getType() + ", DB ID: " + btcAddress.getAddressId());
                         return;
@@ -101,7 +84,7 @@ public class RunAddress {
                     //
                 }
             }
-            BtcAddress.getRealTypes().forEach((type) -> {
+            Stream.of(SrcAddressType.values()).filter(SrcAddressType::isReal).forEach(type -> {
                 if (a.length() == 40 ^ type == SrcAddressType.P2WSH) {
                     try {
                         Address adr = BJBlockHandler.getAddress(type, Hex.decodeHex(a));
@@ -115,20 +98,5 @@ public class RunAddress {
             System.out.println("Address " + a + " hash: " + Hex.encodeHexString(adr.getHash(), true)
                     + " type: " + BtcAddress.getTypeFromAddress(a));
         }
-    }
-
-    private static void printHelpAndExit() {
-        System.out.println("Convert addresses between string hash and DB ID formats");
-        System.out.println("Available options:");
-        HelpFormatter formatter = new HelpFormatter();
-        formatter.printHelp("java <jar> " + Main.Command.update_wallets + " [options] address1 [ address2 ...]", prepOptions());
-        System.exit(1);
-    }
-
-    private static Options prepOptions() {
-        Options options = new Options();
-        options.addOption("h", "help", false, "Print help");
-        DBConnection.addOptions(options);
-        return options;
     }
 }

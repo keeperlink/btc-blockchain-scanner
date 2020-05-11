@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,8 +15,9 @@
  */
 package com.sliva.btc.scanner.src;
 
+import java.util.Collection;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Stream;
+import java.util.stream.Collectors;
 import lombok.ToString;
 import org.bitcoinj.core.Transaction;
 
@@ -39,17 +40,17 @@ public class BJTransaction implements SrcTransaction<BJInput, BJOutput> {
     }
 
     @Override
-    public Stream<BJInput> getInputs() {
+    public Collection<BJInput> getInputs() {
         if (t.isCoinBase()) {
             return null;
         }
         final AtomicInteger pos = new AtomicInteger(0);
-        return t.getInputs().stream().map((i) -> new BJInput(i, (short)pos.getAndIncrement()));
+        return t.getInputs().stream().map((i) -> new BJInput(i, (short) pos.getAndIncrement())).collect(Collectors.toList());
     }
 
     @Override
-    public Stream<BJOutput> getOutputs() {
-        return t.getOutputs().stream().map((o) -> new BJOutput(o));
+    public Collection<BJOutput> getOutputs() {
+        return t.getOutputs().stream().map((o) -> new BJOutput(o)).collect(Collectors.toList());
     }
 
 }

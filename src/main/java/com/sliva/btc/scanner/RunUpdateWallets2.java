@@ -15,7 +15,8 @@
  */
 package com.sliva.btc.scanner;
 
-import com.sliva.btc.scanner.db.DBConnection;
+import com.sliva.btc.scanner.db.DBConnectionSupplier;
+import com.sliva.btc.scanner.db.DBPreparedStatement;
 import com.sliva.btc.scanner.db.DbAddWallet;
 import com.sliva.btc.scanner.db.DbQueries;
 import com.sliva.btc.scanner.db.DbQueryInput;
@@ -26,7 +27,6 @@ import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.src.SrcAddressType;
 import com.sliva.btc.scanner.util.Utils;
 import java.io.File;
-import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -40,6 +40,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -62,17 +63,17 @@ public class RunUpdateWallets2 {
             = "UPDATE address_table_name SET wallet_id=? WHERE wallet_id=?";
 
     private final File stopFile;
-    private final DBConnection conn;
+    private final DBConnectionSupplier conn;
     private final DbQueryTransaction queryTransaction;
     private final DbQueryInput queryInput;
     private final DbQueryWallet queryWallet;
     private final DbQueries dbQueries;
-    private final Collection<ThreadLocal<PreparedStatement>> psUpdateAddressWalletPerTable;
+    private final Collection<DBPreparedStatement> psUpdateAddressWalletPerTable;
     private final int firstTransaction;
     private final int batchSize;
     private final int txnThreads;
     private final Set<Integer> unusedWallets = new HashSet<>();
-    private final ExecutorService execAddressQueries = Executors.newFixedThreadPool(BtcAddress.getRealTypes().size());
+    private final ExecutorService execAddressQueries = Executors.newFixedThreadPool((int) Stream.of(SrcAddressType.values()).filter(SrcAddressType::isReal).count());
     private final ExecutorService execTransactionThreads;
     private final Utils.NumberFile startFromFile;
 
@@ -91,10 +92,11 @@ public class RunUpdateWallets2 {
         firstTransaction = startFromFile.getNumber().intValue();
         batchSize = Integer.parseInt(cmd.getOptionValue("batch-size", Integer.toString(DEFAULT_BATCH_SIZE)));
         txnThreads = Integer.parseInt(cmd.getOptionValue("threads", Integer.toString(DEFAULT_TXN_THREADS)));
-        DBConnection.applyArguments(cmd);
+        DBConnectionSupplier.applyArguments(cmd);
 
-        conn = new DBConnection();
-        psUpdateAddressWalletPerTable = BtcAddress.getRealTypes().stream().map(type -> conn.prepareStatement(fixAddressTableName(SQL_UPDATE_ADDRESS_WALLET, type))).collect(Collectors.toList());
+        conn = new DBConnectionSupplier();
+        psUpdateAddressWalletPerTable = Stream.of(SrcAddressType.values()).filter(SrcAddressType::isReal)
+                .map(type -> conn.prepareStatement(fixAddressTableName(SQL_UPDATE_ADDRESS_WALLET, type))).collect(Collectors.toList());
         queryTransaction = new DbQueryTransaction(conn);
         queryInput = new DbQueryInput(conn);
         queryWallet = new DbQueryWallet(conn);
@@ -108,7 +110,7 @@ public class RunUpdateWallets2 {
             try (DbUpdateAddress updateAddress = new DbUpdateAddress(conn);
                     DbAddWallet addWallet = new DbAddWallet(conn)) {
                 initProcess(addWallet);
-                int endTransaction = queryTransaction.getLastTransactionId();
+                int endTransaction = queryTransaction.getLastTransactionId().orElse(0);
                 int batchFirstTransaction = firstTransaction;
                 for (int loop = 0; batchFirstTransaction <= endTransaction; loop++, batchFirstTransaction += batchSize) {
                     startFromFile.updateNumber(batchFirstTransaction);
@@ -214,14 +216,9 @@ public class RunUpdateWallets2 {
         try {
             final AtomicInteger nUpdated = new AtomicInteger();
             execAddressQueries.invokeAll(psUpdateAddressWalletPerTable.stream().map(ps -> (Callable<Object>) () -> {
-                try {
-                    ps.get().setInt(1, walletToUse);
-                    ps.get().setInt(2, walletToReplace);
-                    nUpdated.addAndGet(ps.get().executeUpdate());
-                    return null;
-                } catch (SQLException e) {
-                    throw new RuntimeException(e);
-                }
+                ps.getParamSetter().setInt(walletToUse).setInt(walletToReplace).checkStateReady();
+                nUpdated.addAndGet(ps.executeUpdate());
+                return null;
             }).collect(Collectors.toList()));
             log.debug("Merging wallets: ({},{})=>{}. Records updated: {}", walletToUse, walletToReplace, walletToUse, nUpdated);
             unusedWallets.add(walletToReplace);
@@ -283,7 +280,7 @@ public class RunUpdateWallets2 {
         options.addOption(null, "batch-size", true, "Number or transactions to read in a batch. Default: " + DEFAULT_BATCH_SIZE);
         options.addOption(null, "stop-file", true, "File to be watched on each new block to stop process. If file is present the process stops and file renamed by adding '1' to the end. Default: " + DEFAULT_STOP_FILE_NAME);
         options.addOption("t", "threads", true, "Number of threads to run. Default is " + DEFAULT_TXN_THREADS);
-        DBConnection.addOptions(options);
+        DBConnectionSupplier.addOptions(options);
         return options;
     }
 }

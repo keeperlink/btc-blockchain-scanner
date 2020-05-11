@@ -4,8 +4,7 @@ CREATE TABLE IF NOT EXISTS `address_p2pkh` (
   `wallet_id` int(10) unsigned NOT NULL DEFAULT '0',
   PRIMARY KEY (`address_id`),
   UNIQUE KEY `ix_address` (`address`),
-  KEY `ix_wallet_id` (`wallet_id`)
-) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=MyISAM;
 
 CREATE TABLE IF NOT EXISTS `address_p2sh` (
   `address_id` int(10) unsigned NOT NULL,
@@ -13,8 +12,7 @@ CREATE TABLE IF NOT EXISTS `address_p2sh` (
   `wallet_id` int(10) unsigned NOT NULL DEFAULT '0',
   PRIMARY KEY (`address_id`),
   UNIQUE KEY `ix_address` (`address`),
-  KEY `ix_wallet_id` (`wallet_id`)
-) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=MyISAM;
 
 CREATE TABLE IF NOT EXISTS `address_p2wpkh` (
   `address_id` int(10) unsigned NOT NULL,
@@ -22,8 +20,7 @@ CREATE TABLE IF NOT EXISTS `address_p2wpkh` (
   `wallet_id` int(10) unsigned NOT NULL DEFAULT '0',
   PRIMARY KEY (`address_id`),
   UNIQUE KEY `ix_address` (`address`),
-  KEY `ix_wallet_id` (`wallet_id`)
-) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=MyISAM;
 
 CREATE TABLE IF NOT EXISTS `address_p2wsh` (
   `address_id` int(10) unsigned NOT NULL,
@@ -31,8 +28,7 @@ CREATE TABLE IF NOT EXISTS `address_p2wsh` (
   `wallet_id` int(10) unsigned NOT NULL DEFAULT '0',
   PRIMARY KEY (`address_id`),
   UNIQUE KEY `ix_address` (`address`),
-  KEY `ix_wallet_id` (`wallet_id`)
-) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=MyISAM;
 
 CREATE TABLE IF NOT EXISTS `block` (
   `height` int(10) unsigned NOT NULL,
@@ -40,7 +36,7 @@ CREATE TABLE IF NOT EXISTS `block` (
   `txn_count` int(10) unsigned NOT NULL,
   PRIMARY KEY (`height`),
   UNIQUE KEY `ix_hash` (`hash`)
-) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=MyISAM;
 
 CREATE TABLE IF NOT EXISTS `input` (
   `transaction_id` int(10) unsigned NOT NULL,
@@ -49,7 +45,16 @@ CREATE TABLE IF NOT EXISTS `input` (
   `in_pos` smallint(5) unsigned NOT NULL,
   PRIMARY KEY (`transaction_id`,`pos`),
   UNIQUE KEY `ix_in_txn_pos` (`in_transaction_id`,`in_pos`)
-) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=MyISAM;
+
+CREATE TABLE IF NOT EXISTS `input_special` (
+  `transaction_id` int(10) unsigned NOT NULL,
+  `pos` smallint(5) unsigned NOT NULL,
+  `sighash_type` bit(8) NOT NULL,
+  `segwit` bit(1) NOT NULL,
+  `multisig` bit(1) NOT NULL,
+  PRIMARY KEY (`transaction_id`,`pos`)
+) ENGINE=MyISAM;
 
 CREATE TABLE IF NOT EXISTS `output` (
   `transaction_id` int(10) unsigned NOT NULL,
@@ -59,7 +64,7 @@ CREATE TABLE IF NOT EXISTS `output` (
   `spent` tinyint(3) unsigned NOT NULL DEFAULT '0',
   PRIMARY KEY (`transaction_id`,`pos`),
   KEY `ix_address` (`address_id`)
-) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=MyISAM;
 
 CREATE TABLE IF NOT EXISTS `transaction` (
   `transaction_id` int(10) unsigned NOT NULL,
@@ -70,11 +75,4 @@ CREATE TABLE IF NOT EXISTS `transaction` (
   PRIMARY KEY (`transaction_id`),
   UNIQUE KEY `ix_txid` (`txid`),
   KEY `ix_block_height` (`block_height`)
-) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
-CREATE TABLE IF NOT EXISTS `wallet` (
-  `wallet_id` int(10) unsigned NOT NULL,
-  `name` varchar(45) DEFAULT NULL,
-  `details` varchar(2000) DEFAULT NULL,
-  PRIMARY KEY (`wallet_id`)
-) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=MyISAM;

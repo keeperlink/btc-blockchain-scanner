@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +15,9 @@
  */
 package com.sliva.btc.scanner;
 
+import com.sliva.btc.scanner.util.CommandLineUtils;
+import com.sliva.btc.scanner.util.CommandLineUtils.CmdArguments;
+import static com.sliva.btc.scanner.util.CommandLineUtils.buildCmdArguments;
 import java.util.Arrays;
 
 /**
@@ -23,14 +26,18 @@ import java.util.Arrays;
  */
 public class Main {
 
+    private static final CommandLineUtils.CmdOptions CMD_OPTS = new CommandLineUtils.CmdOptions();
+
     /**
      * @param args the command line arguments
      * @throws java.lang.Exception
      */
     @SuppressWarnings("UnnecessaryReturnStatement")
     public static void main(String[] args) throws Exception {
+        String[] args1 = Arrays.copyOfRange(args, 0, Math.min(1, args.length));
+        CmdArguments cmdArguments = buildCmdArguments(args1, "<command>", "Operations on blockchain", "\nAvailable commsnds: " + Arrays.toString(Command.values()), CMD_OPTS);
         if (args.length == 0) {
-            printHelpAndExit();
+            cmdArguments.printHelpAndExit();
         }
         try {
             Command cmd = Command.valueOf(args[0]);
@@ -60,14 +67,8 @@ public class Main {
         } catch (IllegalArgumentException e) {
             System.out.println("Unknown command: " + args[0]);
             e.printStackTrace();
-            printHelpAndExit();
+            cmdArguments.printHelpAndExit();
         }
-    }
-
-    private static void printHelpAndExit() {
-        System.out.println("Use: java -jar btc-scanner.jar <command> [options]");
-        System.out.println("Available commands: " + Arrays.toString(Command.values()));
-        System.exit(1);
     }
 
     private static String[] removeCmd(String[] args) {

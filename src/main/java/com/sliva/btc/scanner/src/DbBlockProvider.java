@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,11 +15,12 @@
  */
 package com.sliva.btc.scanner.src;
 
-import com.sliva.btc.scanner.db.DBConnection;
-import com.sliva.btc.scanner.db.model.BtcAddress;
-import java.sql.PreparedStatement;
+import com.sliva.btc.scanner.db.DBConnectionSupplier;
+import com.sliva.btc.scanner.db.DBPreparedStatement;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.stream.Stream;
+import lombok.NonNull;
 
 /**
  *
@@ -43,38 +44,41 @@ public class DbBlockProvider implements BlockProvider<DbBlock> {
             + " UNION SELECT address_id,address FROM address_p2sh WHERE wallet_id=?"
             + " UNION SELECT address_id,address FROM address_p2wpkh WHERE wallet_id=?"
             + " UNION SELECT address_id,CAST(address AS BINARY) FROM address_p2wsh WHERE wallet_id=?";
-    final ThreadLocal<PreparedStatement> psQueryBlockHash;
-    final ThreadLocal<PreparedStatement> psQueryBlockHeight;
-    final ThreadLocal<PreparedStatement> psQueryBlockTransactions;
-    final ThreadLocal<PreparedStatement> psQueryTransactionHash;
-    final ThreadLocal<PreparedStatement> psQueryTransactionInputs;
-    final ThreadLocal<PreparedStatement> psQueryTransactionOutputs;
-    final Map<SrcAddressType, ThreadLocal<PreparedStatement>> psQueryAddress = new HashMap<>();
-    final ThreadLocal<PreparedStatement> psQueryWallet;
-    final ThreadLocal<PreparedStatement> psQueryWalletAddresses;
+    final DBPreparedStatement psQueryBlockHash;
+    final DBPreparedStatement psQueryBlockHeight;
+    final DBPreparedStatement psQueryBlockTransactions;
+    final DBPreparedStatement psQueryTransactionHash;
+    final DBPreparedStatement psQueryTransactionInputs;
+    final DBPreparedStatement psQueryTransactionOutputs;
+    final Map<SrcAddressType, DBPreparedStatement> psQueryAddress = new HashMap<>();
+    final DBPreparedStatement psQueryWallet;
+    final DBPreparedStatement psQueryWalletAddresses;
 
-    public DbBlockProvider(DBConnection conn) {
+    public DbBlockProvider(DBConnectionSupplier conn) {
         this.psQueryBlockHash = conn.prepareStatement(SQL_QUERY_BLOCK_HASH);
         this.psQueryBlockHeight = conn.prepareStatement(SQL_QUERY_BLOCK_HEIGHT);
         this.psQueryBlockTransactions = conn.prepareStatement(SQL_QUERY_BLOCK_TRANSACTIONS);
         this.psQueryTransactionHash = conn.prepareStatement(SQL_QUERY_TRANSACTION_HASH);
         this.psQueryTransactionInputs = conn.prepareStatement(SQL_QUERY_TRANSACTION_INPUTS);
         this.psQueryTransactionOutputs = conn.prepareStatement(SQL_QUERY_TRANSACTION_OUTPUTS);
-        BtcAddress.getRealTypes().forEach((type) -> psQueryAddress.put(type, conn.prepareStatement(fixTableName(SQL_QUERY_ADDRESS, type))));
+        Stream.of(SrcAddressType.values()).filter(SrcAddressType::isReal).forEach((type) -> psQueryAddress.put(type, conn.prepareStatement(fixTableName(SQL_QUERY_ADDRESS, type))));
         this.psQueryWallet = conn.prepareStatement(SQL_QUERY_WALLET);
         this.psQueryWalletAddresses = conn.prepareStatement(SQL_QUERY_WALLET_ADDRESSES);
     }
 
     @Override
+    @NonNull
     public DbBlock getBlock(int height) {
         return new DbBlock(this, height);
     }
 
     @Override
+    @NonNull
     public DbBlock getBlock(String hash) {
         return new DbBlock(this, hash);
     }
 
+    @NonNull
     private String fixTableName(String sql, SrcAddressType type) {
         return sql.replaceAll("address_table_name", "address_" + type.name().toLowerCase());
     }

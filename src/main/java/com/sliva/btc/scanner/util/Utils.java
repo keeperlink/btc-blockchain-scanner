@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,12 +22,19 @@ import java.io.IOException;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.text.DecimalFormat;
+import java.util.NoSuchElementException;
 import java.util.Properties;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
+import java.util.function.Supplier;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.DecoderException;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.bitcoinj.script.Script;
 
 /**
@@ -35,6 +42,7 @@ import org.bitcoinj.script.Script;
  * @author Sliva Co
  */
 @Slf4j
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class Utils {
 
     private static final String DUPE1 = "e3bf3d07d4b0375638d5f1db5255fe07ba2c4cb067cd81b84ee974b6585fb468";
@@ -45,9 +53,9 @@ public final class Utils {
     private static final int DUPE2_BLOCK = 91812;
 
     public static String fixDupeTxid(String txid, int blockHeight) {
-        if (txid.equalsIgnoreCase(DUPE1) && blockHeight == DUPE1_BLOCK) {
+        if (blockHeight == DUPE1_BLOCK && txid.equalsIgnoreCase(DUPE1)) {
             return DUPE1_REPLACE;
-        } else if (txid.equalsIgnoreCase(DUPE2) && blockHeight == DUPE2_BLOCK) {
+        } else if (blockHeight == DUPE2_BLOCK && txid.equalsIgnoreCase(DUPE2)) {
             return DUPE2_REPLACE;
         }
         return txid;
@@ -77,6 +85,15 @@ public final class Utils {
         }
     }
 
+    @SneakyThrows(DecoderException.class)
+    public static byte[] decodeHex(String hexString) {
+        return hexString == null ? null : Hex.decodeHex(hexString);
+    }
+
+    public static String encodeHex(byte[] hexBytes) {
+        return hexBytes == null ? null : Hex.encodeHexString(hexBytes, true);
+    }
+
     public static String id2hex(byte[] data) {
         if (data == null) {
             return null;
@@ -84,7 +101,7 @@ public final class Utils {
         if (data.length != 32) {
             throw new IllegalArgumentException("Txid or blockid has to be 32 bytes long: " + Hex.encodeHexString(data));
         }
-        return Hex.encodeHexString(data);
+        return encodeHex(data);
     }
 
     public static byte[] id2bin(String txid) {
@@ -94,11 +111,7 @@ public final class Utils {
         if (txid.length() != 64) {
             throw new IllegalArgumentException("Txid or blockid has to be 32 bytes long: " + txid);
         }
-        try {
-            return Hex.decodeHex(txid.toCharArray());
-        } catch (DecoderException e) {
-            throw new IllegalArgumentException("invalid txid: " + txid, e);
-        }
+        return decodeHex(txid);
     }
 
     public static SrcAddressType getBtcAddressType(Script.ScriptType scriptType) {
@@ -130,6 +143,28 @@ public final class Utils {
             }
         }
         return prop;
+    }
+
+    public static <T> T synchronize(Object syncObject, Supplier<T> supplier) {
+        synchronized (syncObject) {
+            return supplier.get();
+        }
+    }
+
+    public static long getPercentage(long obtained, long total) {
+        return obtained * 100 / total;
+    }
+
+    public static Supplier<Integer> getNumberSupplier(int firstBlockToProcess, int incrementStep, Function<Integer, Boolean> continueLoopConditions) {
+        AtomicInteger currentNumber = new AtomicInteger(firstBlockToProcess);
+        return () -> {
+            synchronized (currentNumber) {
+                if (!continueLoopConditions.apply(currentNumber.get())) {
+                    throw new NoSuchElementException("No More Elements");
+                }
+                return currentNumber.getAndAdd(incrementStep);
+            }
+        };
     }
 
     public static class NumberFile {

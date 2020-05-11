@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,6 +20,7 @@ import com.sliva.btc.scanner.src.SrcAddressType;
 import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.stream.Stream;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
@@ -32,12 +33,12 @@ public class DbUpdateAddress implements AutoCloseable {
 
     private final Map<SrcAddressType, DbUpdateAddressOne> updaters = new HashMap<>();
 
-    public DbUpdateAddress(DBConnection conn) {
+    public DbUpdateAddress(DBConnectionSupplier conn) {
         this(conn, new CacheData());
     }
 
-    public DbUpdateAddress(DBConnection conn, CacheData cacheData) {
-        BtcAddress.getRealTypes().forEach((t) -> updaters.put(t, new DbUpdateAddressOne(conn, t, cacheData.dataOneMap.get(t))));
+    public DbUpdateAddress(DBConnectionSupplier conn, CacheData cacheData) {
+        Stream.of(SrcAddressType.values()).filter(SrcAddressType::isReal).forEach((t) -> updaters.put(t, new DbUpdateAddressOne(conn, t, cacheData.dataOneMap.get(t))));
     }
 
     public void add(BtcAddress addr) throws SQLException {
@@ -60,7 +61,7 @@ public class DbUpdateAddress implements AutoCloseable {
 
     private DbUpdateAddressOne getUpdater(BtcAddress addr) {
         final SrcAddressType addrType = addr.getType();
-        if (!BtcAddress.getRealTypes().contains(addrType)) {
+        if (!addrType.isReal()) {
             throw new IllegalArgumentException("Bad address type: " + addrType + ", addr=" + addr);
         }
         return updaters.get(addr.getType());
@@ -81,7 +82,7 @@ public class DbUpdateAddress implements AutoCloseable {
         private final Map<SrcAddressType, DbUpdateAddressOne.CacheData> dataOneMap = new HashMap<>();
 
         public CacheData() {
-            BtcAddress.getRealTypes().forEach((t) -> dataOneMap.put(t, new DbUpdateAddressOne.CacheData()));
+            Stream.of(SrcAddressType.values()).filter(SrcAddressType::isReal).forEach((t) -> dataOneMap.put(t, new DbUpdateAddressOne.CacheData()));
         }
     }
 }

@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,17 +15,18 @@
  */
 package com.sliva.btc.scanner.db;
 
+import com.sliva.btc.scanner.db.DBPreparedStatement.ParamSetter;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.db.model.BtcWallet;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.IntStream;
+import lombok.NonNull;
 
 /**
  *
@@ -65,15 +66,15 @@ public class DbQueryWallet {
             + " AND wallet_id NOT IN (SELECT wallet_id FROM address_p2sh WHERE wallet_id BETWEEN ? AND ?)"
             + " AND wallet_id NOT IN (SELECT wallet_id FROM address_p2wpkh WHERE wallet_id BETWEEN ? AND ?)"
             + " AND wallet_id NOT IN (SELECT wallet_id FROM address_p2wsh WHERE wallet_id BETWEEN ? AND ?)";
-    private final ThreadLocal<PreparedStatement> psQueryWallet;
-    private final ThreadLocal<PreparedStatement> psMaxId;
-    private final ThreadLocal<PreparedStatement> psQueryWalletAddresses;
-    private final ThreadLocal<PreparedStatement> psQueryMissingWallets;
-    private final ThreadLocal<PreparedStatement> psQueryMissingWalletsInRange;
-    private final ThreadLocal<PreparedStatement> psQueryUnusedWallets;
-    private final ThreadLocal<PreparedStatement> psQueryUnusedWalletsInRange;
+    private final DBPreparedStatement psQueryWallet;
+    private final DBPreparedStatement psMaxId;
+    private final DBPreparedStatement psQueryWalletAddresses;
+    private final DBPreparedStatement psQueryMissingWallets;
+    private final DBPreparedStatement psQueryMissingWalletsInRange;
+    private final DBPreparedStatement psQueryUnusedWallets;
+    private final DBPreparedStatement psQueryUnusedWalletsInRange;
 
-    public DbQueryWallet(DBConnection conn) {
+    public DbQueryWallet(DBConnectionSupplier conn) {
         this.psQueryWallet = conn.prepareStatement(SQL_QUERY_WALLET);
         this.psMaxId = conn.prepareStatement(SQL_MAX_ID);
         this.psQueryWalletAddresses = conn.prepareStatement(SQL_QUERY_WALLET_ADDRESSES);
@@ -83,56 +84,51 @@ public class DbQueryWallet {
         this.psQueryUnusedWalletsInRange = conn.prepareStatement(SQL_QUERY_UNUSED_WALLETS_IN_RANGE);
     }
 
-    public BtcWallet getWallet(int walletId) throws SQLException {
-        psQueryWallet.get().setInt(1, walletId);
-        try (ResultSet rs = psQueryWallet.get().executeQuery()) {
-            return rs.next() ? BtcWallet.builder()
-                    .walletId(walletId)
-                    .name(rs.getString(1))
-                    .description(rs.getString(2))
-                    .build() : null;
-        }
+    @NonNull
+    public Optional<BtcWallet> getWallet(int walletId) throws SQLException {
+        return psQueryWallet
+                .setParameters(p -> p.setInt(walletId))
+                .querySingleRow(
+                        rs -> BtcWallet.builder()
+                                .walletId(walletId)
+                                .name(rs.getString(1))
+                                .description(rs.getString(2))
+                                .build());
     }
 
-    public int getMaxId() throws SQLException {
-        try (ResultSet rs = psMaxId.get().executeQuery()) {
-            return rs.next() ? rs.getInt(1) : 0;
-        }
+    @NonNull
+    public Optional<Integer> getMaxId() throws SQLException {
+        return DBUtils.readInteger(psMaxId);
     }
 
+    @NonNull
     public Collection<BtcAddress> getWalletAddresses(int walletId) throws SQLException {
-        psQueryWalletAddresses.get().setInt(1, walletId);
-        psQueryWalletAddresses.get().setInt(2, walletId);
-        psQueryWalletAddresses.get().setInt(3, walletId);
-        psQueryWalletAddresses.get().setInt(4, walletId);
-        try (ResultSet rs = psQueryWalletAddresses.get().executeQuery()) {
-            Collection<BtcAddress> result = new ArrayList<>();
-            while (rs.next()) {
-                result.add(BtcAddress.builder()
-                        .addressId(rs.getInt(1))
-                        .address(rs.getBytes(2))
-                        .walletId(walletId)
-                        .build());
-            }
-            return result;
-        }
+        return psQueryWalletAddresses
+                .setParameters(p -> p.setInt(walletId).setInt(walletId).setInt(walletId).setInt(walletId))
+                .executeQueryToList(
+                        rs -> BtcAddress.builder()
+                                .addressId(rs.getInt(1))
+                                .address(rs.getBytes(2))
+                                .walletId(walletId)
+                                .build());
     }
 
+    @NonNull
     public Collection<Integer> getMissingWallets() throws SQLException {
-        return DBUtils.readIntegersToSet(psQueryMissingWallets.get());
+        return DBUtils.readIntegersToSet(psQueryMissingWallets);
     }
 
+    @NonNull
     public Collection<Integer> getMissingWalletsInRange(int minWalletId, int maxWalletId) throws SQLException {
-        for (int i = 1; i <= 8; i++) {
-            psQueryMissingWalletsInRange.get().setInt(i * 2 - 1, minWalletId);
-            psQueryMissingWalletsInRange.get().setInt(i * 2, maxWalletId);
-        }
-        return DBUtils.readIntegersToSet(psQueryMissingWalletsInRange.get());
+        ParamSetter p = psQueryMissingWalletsInRange.getParamSetter();
+        IntStream.range(0, 8).forEach(i -> p.setInt(minWalletId).setInt(maxWalletId));
+        return DBUtils.readIntegersToSet(psQueryMissingWalletsInRange);
     }
 
+    @NonNull
     public Collection<Integer> getMissingWalletsParallel() throws SQLException, InterruptedException {
         final Collection<Integer> result = new HashSet<>();
-        final int maxId = getMaxId();
+        final int maxId = getMaxId().orElse(0);
         final int numThreads = 10;
         ExecutorService exec = Executors.newFixedThreadPool(numThreads);
         final int step = maxId / numThreads + 1;
@@ -154,21 +150,22 @@ public class DbQueryWallet {
         return result;
     }
 
+    @NonNull
     public Collection<Integer> getUnusedWalletRecords() throws SQLException {
-        return DBUtils.readIntegersToSet(psQueryUnusedWallets.get());
+        return DBUtils.readIntegersToSet(psQueryUnusedWallets);
     }
 
+    @NonNull
     public Collection<Integer> getUnusedWalletRecordsInRange(int minWalletId, int maxWalletId) throws SQLException {
-        for (int i = 1; i <= 5; i++) {
-            psQueryUnusedWalletsInRange.get().setInt(i * 2 - 1, minWalletId);
-            psQueryUnusedWalletsInRange.get().setInt(i * 2, maxWalletId);
-        }
-        return DBUtils.readIntegersToSet(psQueryUnusedWalletsInRange.get());
+        ParamSetter p = psQueryMissingWalletsInRange.getParamSetter();
+        IntStream.range(0, 5).forEach(i -> p.setInt(minWalletId).setInt(maxWalletId));
+        return DBUtils.readIntegersToSet(psQueryUnusedWalletsInRange);
     }
 
+    @NonNull
     public Collection<Integer> getUnusedWalletRecordsParallel() throws SQLException, InterruptedException {
         final Collection<Integer> result = new HashSet<>();
-        final int maxId = getMaxId();
+        final int maxId = getMaxId().orElse(0);
         final int numThreads = 10;
         ExecutorService exec = Executors.newFixedThreadPool(numThreads);
         final int step = maxId / numThreads + 1;

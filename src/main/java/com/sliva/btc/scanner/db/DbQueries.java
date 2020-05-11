@@ -30,7 +30,7 @@ public class DbQueries {
     private final DbQueryInput queryInput;
     private final DbQueryTransaction queryTransaction;
 
-    public DbQueries(DBConnection con) {
+    public DbQueries(DBConnectionSupplier con) {
         this.queryInput = new DbQueryInput(con);
         this.queryTransaction = new DbQueryTransaction(con);
     }

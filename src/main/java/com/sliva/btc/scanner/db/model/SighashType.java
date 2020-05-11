@@ -15,11 +15,15 @@
  */
 package com.sliva.btc.scanner.db.model;
 
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
+
 /**
  *
  * @author whost
  */
-public class SighashType {
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
+public final class SighashType {
 
     public static final byte UNDEFINED = 0;
     public static final byte SIGHASH_ALL = 1;

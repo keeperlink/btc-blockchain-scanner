@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,7 +26,7 @@ import wf.bitcoin.javabitcoindrpcclient.GenericRpcException;
  */
 public class BtcClientMemCachedTransaction extends RpcClient {
 
-    public static int MAX_CACHE_SIZE = 20000;
+    private static int MAX_CACHE_SIZE = 20000;
     private final Map<String, RawTransaction> mapCache = new LinkedHashMap<>();
 
     public BtcClientMemCachedTransaction() {

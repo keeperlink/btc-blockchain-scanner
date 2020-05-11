@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +15,7 @@
  */
 package com.sliva.btc.scanner.src;
 
-import java.util.stream.Stream;
+import java.util.Collection;
 
 /**
  *
@@ -23,11 +23,11 @@ import java.util.stream.Stream;
  * @param <I>
  * @param <O>
  */
-public interface SrcTransaction<I extends SrcInput, O extends SrcOutput> {
+public interface SrcTransaction<I extends SrcInput, O extends SrcOutput<? extends SrcAddress>> {
 
     String getTxid();
 
-    Stream<I> getInputs();
+    Collection<I> getInputs();
 
-    Stream<O> getOutputs();
+    Collection<O> getOutputs();
 }

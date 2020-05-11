@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,12 +15,8 @@
  */
 package com.sliva.btc.scanner.src;
 
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.ArrayList;
+import static com.sliva.btc.scanner.util.Utils.id2hex;
 import java.util.Collection;
-import java.util.stream.Stream;
-import org.apache.commons.codec.binary.Hex;
 
 /**
  *
@@ -43,57 +39,32 @@ public class DbTransaction implements SrcTransaction<DbInput, DbOutput> {
     @Override
     public String getTxid() {
         if (txid == null) {
-            try {
-                blockProvider.psQueryTransactionHash.get().setInt(1, transactionId);
-                try (ResultSet rs = blockProvider.psQueryTransactionHash.get().executeQuery()) {
-                    if (!rs.next()) {
-                        throw new IllegalStateException("Transaction #" + transactionId + " not found in DB");
-                    }
-                    txid = Hex.encodeHexString(rs.getBytes(1), true);
-                }
-            } catch (SQLException e) {
-                throw new IllegalStateException(e);
-            }
+            txid = blockProvider.psQueryTransactionHash
+                    .setParameters(p -> p.setInt(transactionId))
+                    .querySingleRow(rs -> id2hex(rs.getBytes(1)))
+                    .orElseThrow(() -> new IllegalStateException("Transaction #" + transactionId + " not found in DB"));
         }
         return txid;
     }
 
     @Override
-    public Stream<DbInput> getInputs() {
+    public Collection<DbInput> getInputs() {
         if (inputs == null) {
-            try {
-                blockProvider.psQueryTransactionInputs.get().setInt(1, transactionId);
-                try (ResultSet rs = blockProvider.psQueryTransactionInputs.get().executeQuery()) {
-                    Collection<DbInput> t = new ArrayList<>();
-                    while (rs.next()) {
-                        t.add(new DbInput(blockProvider, rs.getShort(1), rs.getShort(2), rs.getInt(3), null, rs.getByte(4), rs.getBoolean(5), rs.getBoolean(6)));
-                    }
-                    inputs = t;
-                }
-            } catch (SQLException e) {
-                throw new IllegalStateException(e);
-            }
+            inputs = blockProvider.psQueryTransactionInputs
+                    .setParameters(p -> p.setInt(transactionId))
+                    .executeQueryToList(rs -> new DbInput(blockProvider, rs.getShort(1), rs.getShort(2), rs.getInt(3), null, rs.getByte(4), rs.getBoolean(5), rs.getBoolean(6)));
         }
-        return inputs.stream();
+        return inputs;
     }
 
     @Override
-    public Stream<DbOutput> getOutputs() {
+    public Collection<DbOutput> getOutputs() {
         if (outputs == null) {
-            try {
-                blockProvider.psQueryTransactionOutputs.get().setInt(1, transactionId);
-                try (ResultSet rs = blockProvider.psQueryTransactionOutputs.get().executeQuery()) {
-                    Collection<DbOutput> t = new ArrayList<>();
-                    while (rs.next()) {
-                        t.add(new DbOutput(blockProvider, rs.getShort(1), rs.getInt(2), rs.getLong(3), rs.getByte(4)));
-                    }
-                    outputs = t;
-                }
-            } catch (SQLException e) {
-                throw new IllegalStateException(e);
-            }
+            outputs = blockProvider.psQueryTransactionOutputs
+                    .setParameters(p -> p.setInt(transactionId))
+                    .executeQueryToList(rs -> new DbOutput(blockProvider, rs.getShort(1), rs.getInt(2), rs.getLong(3), rs.getByte(4)));
         }
-        return outputs.stream();
+        return outputs;
     }
 
     public int getTransactionId() {

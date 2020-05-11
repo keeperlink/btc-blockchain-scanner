@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,8 +16,6 @@
 package com.sliva.btc.scanner.tests;
 
 //import com.google.gson.Gson;
-import java.io.FileWriter;
-import java.io.Writer;
 import java.net.Authenticator;
 import java.net.PasswordAuthentication;
 import java.util.Arrays;
@@ -27,7 +25,6 @@ import lombok.extern.slf4j.Slf4j;
 import wf.bitcoin.javabitcoindrpcclient.BitcoinJSONRPCClient;
 import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient.Block;
 import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient.BlockChainInfo;
-import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient.RawTransaction;
 import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient.Unspent;
 
 /**
@@ -79,9 +76,9 @@ public class RpcClient {
     }
 
     private static void printUnspentList(List<Unspent> list) {
-        for (Unspent u : list) {
+        list.forEach((u) -> {
             log.info("\tUnspent: acc:" + u.account() + ", addr:" + u.address() + ", am:" + u.amount());
-        }
+        });
     }
 
     private static void readBlocks(int start, int number) {

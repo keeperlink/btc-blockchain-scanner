@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -92,7 +92,7 @@ public class ParallelGetRawTransaction {
         private final RpcClient client = new BtcClientDiskCachedBlock();
         private final int threadNum;
 
-        public ParallelGetRawTxThread(int threadNum) {
+        private ParallelGetRawTxThread(int threadNum) {
             super("ParallelGetRawTxThread#" + threadNum);
             this.threadNum = threadNum;
         }

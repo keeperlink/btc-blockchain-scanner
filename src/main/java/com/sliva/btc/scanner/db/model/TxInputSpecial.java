@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,33 +15,20 @@
  */
 package com.sliva.btc.scanner.db.model;
 
-import com.google.common.collect.ComparisonChain;
-import lombok.Builder;
-import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.ToString;
+import lombok.experimental.SuperBuilder;
 
 /**
  *
  * @author Sliva Co
  */
 @Getter
-@Builder(toBuilder = true)
-@ToString
-@EqualsAndHashCode(of = {"transactionId", "pos"})
-public class TxInputSpecial implements Comparable<TxInputSpecial> {
+@SuperBuilder(toBuilder = true)
+@ToString(callSuper = true)
+public class TxInputSpecial extends InOutKey {
 
-    private final int transactionId;
-    private final short pos;
     private final byte sighashType;
     private final boolean segwit;
     private final boolean multisig;
-
-    @Override
-    public int compareTo(TxInputSpecial o) {
-        return ComparisonChain.start()
-                .compare(transactionId, o.transactionId)
-                .compare(pos, o.pos)
-                .result();
-    }
 }

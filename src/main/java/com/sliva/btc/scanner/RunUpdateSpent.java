@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,19 +15,36 @@
  */
 package com.sliva.btc.scanner;
 
-import com.sliva.btc.scanner.db.DBConnection;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.sliva.btc.scanner.db.DBConnectionSupplier;
+import com.sliva.btc.scanner.db.DBPreparedStatement;
+import com.sliva.btc.scanner.db.DbQueryTransaction;
+import com.sliva.btc.scanner.db.DbUpdate;
 import com.sliva.btc.scanner.db.DbUpdateOutput;
 import com.sliva.btc.scanner.db.model.OutputStatus;
+import com.sliva.btc.scanner.util.BufferingAheadSupplier;
+import com.sliva.btc.scanner.util.CommandLineUtils;
+import com.sliva.btc.scanner.util.CommandLineUtils.CmdArguments;
+import com.sliva.btc.scanner.util.CommandLineUtils.CmdOption;
+import com.sliva.btc.scanner.util.CommandLineUtils.CmdOptions;
+import static com.sliva.btc.scanner.util.CommandLineUtils.buildOption;
+import com.sliva.btc.scanner.util.ShutdownHook;
 import com.sliva.btc.scanner.util.Utils;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
+import com.sliva.btc.scanner.util.Utils.NumberFile;
+import static com.sliva.btc.scanner.util.Utils.getNumberSupplier;
 import java.sql.SQLException;
+import java.text.NumberFormat;
+import java.util.Collection;
+import java.util.NoSuchElementException;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
+import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.cli.CommandLine;
-import org.apache.commons.cli.CommandLineParser;
-import org.apache.commons.cli.DefaultParser;
-import org.apache.commons.cli.HelpFormatter;
-import org.apache.commons.cli.Options;
+import org.apache.commons.lang3.time.StopWatch;
 
 /**
  *
@@ -38,94 +55,111 @@ public class RunUpdateSpent {
 
     private static final int DEFAULT_START_TRANSACTION_ID = 0;
     private static final int DEFAULT_BATCH_SIZE = 200_000;
+    private static final int DEFAULT_THREADS = 3;
+
+    private static final CmdOptions CMD_OPTS = new CmdOptions().add(DBConnectionSupplier.class);
+    private static final CmdOption batchSizeOpt = buildOption(CMD_OPTS, null, "batch-size", true, "Number or transactions to process in a batch. Default: " + DEFAULT_BATCH_SIZE);
+    private static final CmdOption startFromOpt = buildOption(CMD_OPTS, null, "start-from", true, "Start process from this transaction ID. Beside a number this parameter can be set to a file name that stores the numeric value updated on every batch");
+    private static final CmdOption threadsOpt = buildOption(CMD_OPTS, null, "threads", true, "Number of threads. Default: " + DEFAULT_THREADS);
+
     private static final String SQL_QUERY_OUTPUTS
             = "SELECT O.transaction_id,O.pos,O.address_id,O.spent,I.in_transaction_id FROM output O"
             + " LEFT JOIN input I ON I.in_transaction_id=O.transaction_id AND I.in_pos=O.pos"
-            + " WHERE O.transaction_id BETWEEN ? AND ?";
+            + " WHERE (O.address_id <> 0 OR O.spent <> " + OutputStatus.UNSPENDABLE + ") AND O.transaction_id BETWEEN ? AND ?";
 
-    private final DBConnection dbCon;
-    private final ThreadLocal<PreparedStatement> psQueryOutputs;
+    private static final ShutdownHook shutdownHook = new ShutdownHook();
+    private static final NumberFormat nf = NumberFormat.getInstance();
+
+    private final DBConnectionSupplier dbCon;
+    private final DBPreparedStatement psQueryOutputs;
+    private final DbQueryTransaction dbQueryTransaction;
     private final int startTransactionId;
     private final int batchSize;
-    private final Utils.NumberFile startFromFile;
+    private final NumberFile startFromFile;
+    private final int threads;
 
     /**
      * @param args the command line arguments
      * @throws java.sql.SQLException
      */
     public static void main(String[] args) throws Exception {
-        DbUpdateOutput.MAX_UPDATE_QUEUE_LENGTH = 50000;
-        CommandLineParser parser = new DefaultParser();
-        CommandLine cmd = parser.parse(prepOptions(), args);
-        if (cmd.hasOption('h')) {
-            printHelpAndExit();
-        }
+        CmdArguments cmd = CommandLineUtils.buildCmdArguments(args, Main.Command.update_spent.name(), "Update \"spent\" column for existing transactions in in DB", null, CMD_OPTS);
         log.info("START");
         try {
             new RunUpdateSpent(cmd).runProcess();
         } finally {
             log.info("FINISH");
+            DbUpdate.printStats();
+            shutdownHook.finished();
         }
     }
 
-    public RunUpdateSpent(CommandLine cmd) {
-        startFromFile = new Utils.NumberFile(cmd.getOptionValue("start-from", Integer.toString(DEFAULT_START_TRANSACTION_ID)));
+    public RunUpdateSpent(CmdArguments cmd) {
+        startFromFile = new Utils.NumberFile(cmd.getOption(startFromOpt).orElse(Integer.toString(DEFAULT_START_TRANSACTION_ID)));
         startTransactionId = startFromFile.getNumber().intValue();
-        batchSize = Integer.parseInt(cmd.getOptionValue("batch-size", Integer.toString(DEFAULT_BATCH_SIZE)));
-        DBConnection.applyArguments(cmd);
-
-        dbCon = new DBConnection();
+        batchSize = cmd.getOption(batchSizeOpt).map(Integer::parseInt).orElse(DEFAULT_BATCH_SIZE);
+        threads = cmd.getOption(threadsOpt).map(Integer::parseInt).orElse(DEFAULT_THREADS);
+        dbCon = new DBConnectionSupplier();
         psQueryOutputs = dbCon.prepareStatement(SQL_QUERY_OUTPUTS);
+        dbQueryTransaction = new DbQueryTransaction(dbCon);
     }
 
     private void runProcess() throws SQLException {
-        for (int i = startTransactionId;; i += batchSize) {
-            log.info("Processing batch of outputs for transaction IDs between {} and {}", i, i + batchSize);
-            startFromFile.updateNumber(i);
-            psQueryOutputs.get().setInt(1, i);
-            psQueryOutputs.get().setInt(2, i + batchSize);
-            int txnCount = 0;
-            try (ResultSet rs = psQueryOutputs.get().executeQuery();
-                    DbUpdateOutput updateOutput = new DbUpdateOutput(dbCon)) {
-                while (rs.next()) {
-                    txnCount++;
-                    int transactionId = rs.getInt(1);
-                    short pos = rs.getShort(2);
-                    int addressId = rs.getInt(3);
-                    int spent = rs.getInt(4);
-                    Object input = rs.getObject(5);
-                    if (input == null) {
-                        if (addressId != 0 && spent != OutputStatus.UNSPENT) {
-                            updateOutput.updateSpent(transactionId, pos, OutputStatus.UNSPENT);
-                        } else if (addressId == 0 && spent < OutputStatus.UNSPENDABLE) {
-                            updateOutput.updateSpent(transactionId, pos, OutputStatus.UNSPENDABLE);
+        int lastTxnId = dbQueryTransaction.getLastTransactionId().orElse(0);
+        log.info("Run transactions from {} to {}", startTransactionId, lastTxnId);
+        Supplier<Integer> batchNumberSupplier = getNumberSupplier(startTransactionId, batchSize, n -> n <= lastTxnId && !shutdownHook.isInterrupted());
+        ExecutorService loadThreadpool = Executors.newFixedThreadPool(threads, new ThreadFactoryBuilder().setDaemon(true).setNameFormat("loadThread-%02d").build());
+        StopWatch startTime = StopWatch.createStarted();
+        try (DbUpdateOutput updateOutput = new DbUpdateOutput(dbCon)) {
+            Supplier<CompletableFuture<DataSet>> preProcFeatureSupplier
+                    = () -> CompletableFuture
+                            .completedFuture(batchNumberSupplier.get())
+                            .thenApplyAsync(n -> new DataSet(n,
+                            psQueryOutputs
+                                    .setParameters(p -> p.setInt(n).setInt(n + batchSize)).setFetchSize(batchSize * 5)
+                                    .executeQueryToList(rs -> new Data(rs.getInt(1), rs.getShort(2), rs.getInt(3), rs.getByte(4), rs.getObject(5) != null))), loadThreadpool);
+            BufferingAheadSupplier<CompletableFuture<DataSet>> bufferingSupplier = new BufferingAheadSupplier<>(preProcFeatureSupplier, threads * 2);
+            while (!shutdownHook.isInterrupted()) {
+                try {
+                    DataSet dataSet = bufferingSupplier.get().get();
+                    int numTxProcessed = dataSet.startTransactionId - startTransactionId;
+                    log.info("Processing batch of outputs for transaction IDs between {} and {}. Size: {}, Speed: {} tx/sec",
+                            nf.format(dataSet.startTransactionId), nf.format(dataSet.startTransactionId + batchSize), nf.format(dataSet.data.size()),
+                            nf.format(numTxProcessed / Math.max(1, TimeUnit.NANOSECONDS.toSeconds(startTime.getNanoTime()))));
+                    startFromFile.updateNumber(dataSet.startTransactionId);
+                    dataSet.data.forEach(d -> {
+                        if (!d.hasSpendingTransaction) {
+                            if (d.addressId != 0 && d.spent != OutputStatus.UNSPENT) {
+                                updateOutput.updateSpent(d.transactionId, d.pos, OutputStatus.UNSPENT);
+                            } else if (d.addressId == 0 && d.spent < OutputStatus.UNSPENDABLE) {
+                                updateOutput.updateSpent(d.transactionId, d.pos, OutputStatus.UNSPENDABLE);
+                            }
+                        } else if (d.spent != OutputStatus.SPENT) {
+                            updateOutput.updateSpent(d.transactionId, d.pos, OutputStatus.SPENT);
                         }
-                    } else if (spent != OutputStatus.SPENT) {
-                        updateOutput.updateSpent(transactionId, pos, OutputStatus.SPENT);
-                    }
+                    });
+                } catch (InterruptedException | ExecutionException | NoSuchElementException ex) {
+                    log.info("MAIN: No More Elements - Exiting the loop. ({}:{})", ex.getClass().getSimpleName(), ex.getMessage());
+                    break;
                 }
-            }
-            if (txnCount == 0) {
-                log.info("Reached end of transactions table");
-                break;
             }
         }
     }
 
-    private static void printHelpAndExit() {
-        System.out.println("Available options:");
-        HelpFormatter formatter = new HelpFormatter();
-        formatter.printHelp("java <jar> " + Main.Command.update_wallets + " [options]", prepOptions());
-        System.exit(1);
+    @AllArgsConstructor
+    private static class DataSet {
+
+        private final int startTransactionId;
+        private final Collection<Data> data;
     }
 
-    private static Options prepOptions() {
-        Options options = new Options();
-        options.addOption("h", "help", false, "Print help");
-        options.addOption(null, "batch-size", true, "Number or transactions to process in a batch. Default: " + DEFAULT_BATCH_SIZE);
-        options.addOption(null, "start-from", true, "Start process from this transaction ID. Beside a number this parameter can be set to a file name that stores the numeric value updated on every batch");
-        DBConnection.addOptions(options);
-        return options;
-    }
+    @AllArgsConstructor
+    private static class Data {
 
+        private final int transactionId;
+        private final short pos;
+        private final int addressId;
+        private final byte spent;
+        private final boolean hasSpendingTransaction;
+    }
 }

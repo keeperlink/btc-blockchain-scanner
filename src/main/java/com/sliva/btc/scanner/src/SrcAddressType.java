@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,16 +15,23 @@
  */
 package com.sliva.btc.scanner.src;
 
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+
 /**
  *
  * @author Sliva Co
  */
+@RequiredArgsConstructor(access = AccessLevel.PRIVATE)
 public enum SrcAddressType {
-    UNKNOWN,
-    ADDR_OP_RETURN,
-    P2PKH,
-    P2SH,
-    P2WPKH,
-    P2WSH,
-    OTHER
+    UNKNOWN(false),
+    P2PKH(true),
+    P2SH(true),
+    P2WPKH(true),
+    P2WSH(true),
+    OTHER(false);
+
+    @Getter
+    private final boolean real;
 }

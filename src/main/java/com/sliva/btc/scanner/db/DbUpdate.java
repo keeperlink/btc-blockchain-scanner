@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,24 +15,38 @@
  */
 package com.sliva.btc.scanner.db;
 
+import static com.google.common.base.Preconditions.checkArgument;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.sliva.btc.scanner.db.DBPreparedStatement.ParamSetter;
+import com.sliva.btc.scanner.util.BatchUtils;
 import com.sliva.btc.scanner.util.Utils;
+import static com.sliva.btc.scanner.util.Utils.getPercentage;
+import static com.sliva.btc.scanner.util.Utils.synchronize;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import lombok.AllArgsConstructor;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.time.StopWatch;
 
 /**
  *
@@ -41,60 +55,51 @@ import org.apache.commons.lang.StringUtils;
 @Slf4j
 public abstract class DbUpdate implements AutoCloseable {
 
+    private static final Duration PRINT_STATS_PERIOD = Duration.ofSeconds(30);
     private static final int MYSQL_BULK_INSERT_BUFFER_SIZE = 256 * 1024 * 1024;
-    private static final int UPDATER_THREADS = 2;
-    private static final ExecuteDbUpdate thread = new ExecuteDbUpdate();
+    private static final int UPDATER_THREADS = 3;
+    private static volatile ExecuteDbUpdate executeDbUpdateThread;
     private static final Collection<DbUpdate> dbUpdateInstances = new ArrayList<>();
     private static final Set<DbUpdate> executingInstances = new HashSet<>();
     private static final ExecutorService executor = new ThreadPoolExecutor(UPDATER_THREADS, UPDATER_THREADS,
             0L, TimeUnit.MILLISECONDS,
-            new LinkedBlockingQueue<Runnable>(1));
+            new LinkedBlockingQueue<Runnable>(1),
+            new ThreadFactoryBuilder().setDaemon(true).setNameFormat("DbUpdate-%d").build());
     private static final Map<String, ExecStats> execStats = new HashMap<>();
-    private static long startTimeMsec;
-    private final DBConnection conn;
-    private boolean isClosed = false;
+    private static final StopWatch lastPrintedTime = StopWatch.createStarted();
+    @Getter
+    private boolean isActive = true;
     protected final Object execSync = new Object();
 
-    static {
-        thread.start();
-    }
-
-    @SuppressWarnings("LeakingThisInConstructor")
-    public DbUpdate(DBConnection conn) {
-        this.conn = conn;
+    @SuppressWarnings({"LeakingThisInConstructor", "CallToThreadStartDuringObjectConstruction"})
+    public DbUpdate(DBConnectionSupplier conn) {
         try {
-            conn.getConnection().createStatement().execute("SET bulk_insert_buffer_size=" + MYSQL_BULK_INSERT_BUFFER_SIZE);
+            conn.get().createStatement().execute("SET bulk_insert_buffer_size=" + MYSQL_BULK_INSERT_BUFFER_SIZE);
         } catch (SQLException e) {
             log.error(e.getMessage(), e);
         }
         synchronized (dbUpdateInstances) {
             dbUpdateInstances.add(this);
         }
-    }
-
-    protected DBConnection getConn() {
-        return conn;
-    }
-
-    public boolean isIsClosed() {
-        return isClosed;
-    }
-
-    public void setIsClosed(boolean isClosed) {
-        this.isClosed = isClosed;
+        synchronized (ExecuteDbUpdate.class) {
+            if (executeDbUpdateThread == null) {
+                ExecuteDbUpdate t = new ExecuteDbUpdate();
+                t.start();
+                executeDbUpdateThread = t;
+            }
+        }
     }
 
     public void flushCache() {
         log.trace("flushCache() Called");
-        DBUpdateCall c = new DBUpdateCall(this);
-        while (c.call() != 0) {
+        while (executeSync() != 0) {
         }
     }
 
     @Override
     public void close() {
         log.debug("{}.close()", this.getTableName());
-        setIsClosed(true);
+        isActive = false;
         flushCache();
         log.trace("{}.close() FINISHED", this.getTableName());
     }
@@ -103,101 +108,152 @@ public abstract class DbUpdate implements AutoCloseable {
 
     public abstract int getCacheFillPercent();
 
-    public abstract boolean needExecuteInserts();
+    public abstract boolean isExecuteNeeded();
 
     public abstract int executeInserts();
 
-    protected static void waitFullQueue(Collection queue, int maxQueueLength) {
+    public abstract int executeUpdates();
+
+    protected static void waitFullQueue(Collection<?> queue, int maxQueueLength) {
         while (queue.size() >= maxQueueLength) {
             Utils.sleep(10);
         }
     }
 
-    private static void updateRuntimeMap(String tableName, long records, long runtime) {
-        synchronized (execStats) {
-            ExecStats s = execStats.get(tableName);
-            if (s == null) {
-                execStats.put(tableName, s = new ExecStats());
+    /**
+     * Execute batch of statements.
+     *
+     * @param <T> Element type
+     * @param syncObject Object to synchronize on when pulling data from source
+     * Collection
+     * @param source Source Collection
+     * @param ps DB Statement to execute in batch
+     * @param batchMaxSize Batch maximum size
+     * @param fillCallback callback to fill each DB statement in batch
+     * @param postExecutor post-execution process, can be null
+     * @return number of records executed
+     */
+    public <T> int executeBatch(Object syncObject, Collection<T> source, DBPreparedStatement ps, int batchMaxSize, BiConsumer<T, ParamSetter> fillCallback, Consumer<Collection<T>> postExecutor) {
+        checkArgument(syncObject != null, "Argument 'syncObject' is null");
+        checkArgument(source != null, "Argument 'source' is null");
+        checkArgument(batchMaxSize > 0, "Argument 'batchMaxSize' (%s) must be a positive number", batchMaxSize);
+        checkArgument(ps != null, "Argument 'ps' is null");
+        checkArgument(fillCallback != null, "Argument 'fillCallback' is null");
+        Collection<T> batchToRun = synchronize(syncObject, () -> BatchUtils.pullData(source, batchMaxSize));
+        if (batchToRun != null) {
+            synchronized (execSync) {
+                BatchExecutor.executeBatch(batchToRun, ps, fillCallback);
+                if (postExecutor != null) {
+                    postExecutor.accept(batchToRun);
+                }
             }
-            s.addExecution(records, runtime);
+        }
+        return batchToRun == null ? 0 : batchToRun.size();
+    }
+
+    private int executeSync() {
+        int nRecs = 0;
+        try {
+            log.trace("{}.executeSync(): STARTED", getTableName());
+            long s = System.nanoTime();
+            try {
+                nRecs = executeInserts();
+                nRecs += executeUpdates();
+            } catch (Exception e) {
+                log.error(e.getMessage(), e);
+            } finally {
+                long runtimeNanos = System.nanoTime() - s;
+                if (nRecs > 0) {
+                    updateRuntimeMap(getTableName(), nRecs, runtimeNanos);
+                    if (log.isDebugEnabled()) {
+                        log.debug("{}.executeSync(): insert/update queries executed: {}. Runtime {} ms.",
+                                getTableName(), nRecs, BigDecimal.valueOf(runtimeNanos).movePointLeft(6).setScale(3, RoundingMode.HALF_DOWN));
+                    }
+                }
+            }
+        } finally {
+            synchronized (executingInstances) {
+                executingInstances.remove(this);
+            }
+        }
+        return nRecs;
+    }
+
+    private void executeAsync() {
+        for (;;) {
+            try {
+                log.trace("{}.executeAsync(): Submitting ", getTableName());
+                synchronized (executingInstances) {
+                    executor.submit(this::executeSync);
+                    executingInstances.add(this);
+                }
+                log.trace("{}.executeAsync(): Submitted ", getTableName());
+                break;
+            } catch (RejectedExecutionException e) {
+                log.trace("Err: {}: {}", e.getClass(), e.getMessage());
+                Utils.sleep(100);
+            }
         }
     }
 
-    private static void printStats() {
-        if (System.currentTimeMillis() - lastPrintedTime > 30 * 1000) {
-            lastPrintedTime = System.currentTimeMillis();
-            long runtimeInSec = Math.max(TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis() - startTimeMsec), 1);
+    private static void updateRuntimeMap(String tableName, long records, long runtimeNanos) {
+        synchronized (execStats) {
+            execStats.computeIfAbsent(tableName, ExecStats::new)
+                    .addExecution(records, runtimeNanos);
+        }
+    }
+
+    public static void printStats() {
+        if (log.isDebugEnabled() && executeDbUpdateThread != null) {
+            long runtimeInSec = Math.max(TimeUnit.NANOSECONDS.toSeconds(executeDbUpdateThread.startTime.getNanoTime()), 1);
             synchronized (execStats) {
                 execStats.entrySet().forEach((e) -> {
                     ExecStats s = e.getValue();
-                    log.debug("{}\t Executions: {},\t Records: {},\t speed: {} rec/sec,\t runtime: {} sec.\t ({}%)",
+                    log.debug("{}\t Executions: {},\t Records: {},\t speed: {} rec/sec,\t runtime: {}\t ({}%)",
                             StringUtils.rightPad(e.getKey(), 16),
                             s.getExecutions(),
                             s.getTotalRecords(),
                             s.getTotalRecords() / runtimeInSec,
-                            TimeUnit.NANOSECONDS.toSeconds(s.getTotalRuntime()),
-                            TimeUnit.NANOSECONDS.toSeconds(s.getTotalRuntime() * 100 / (runtimeInSec * UPDATER_THREADS))
+                            Duration.ofMillis(TimeUnit.NANOSECONDS.toMillis(s.getTotalRuntimeNanos())),
+                            getPercentage(TimeUnit.NANOSECONDS.toSeconds(s.getTotalRuntimeNanos()), runtimeInSec * UPDATER_THREADS)
                     );
                 });
             }
         }
     }
-    private static long lastPrintedTime = System.currentTimeMillis();
 
     private static final class ExecuteDbUpdate extends Thread {
 
-        public ExecuteDbUpdate() {
+        private final StopWatch startTime = StopWatch.createStarted();
+
+        private ExecuteDbUpdate() {
             super("ExecuteDbUpdate");
         }
 
         @Override
-        @SuppressWarnings({"SleepWhileInLoop"})
         public void run() {
-            Utils.sleep(1000);
+            Utils.sleep(500);
             log.info(getName() + ": STARTED");
-            startTimeMsec = System.currentTimeMillis();
             try {
                 for (;;) {
                     boolean executed = false;
                     try {
-                        boolean allClosed = true;
-                        int maxFillPercent = 0;
-                        DbUpdate dbUpdateMaxFilled = null;
+                        AtomicInteger liveUpdatersCount = new AtomicInteger();
+                        Optional<DbUpdate> dbUpdateMaxFilled;
                         synchronized (dbUpdateInstances) {
-                            for (DbUpdate dbUpdate : dbUpdateInstances) {
-                                if (!dbUpdate.isClosed) {
-                                    allClosed = false;
-                                    if (!executingInstances.contains(dbUpdate) && dbUpdate.needExecuteInserts()) {
-                                        int fillPercent = dbUpdate.getCacheFillPercent();
-                                        if (fillPercent > maxFillPercent) {
-                                            maxFillPercent = fillPercent;
-                                            dbUpdateMaxFilled = dbUpdate;
-                                        }
-                                    }
-                                }
-                            }
+                            dbUpdateMaxFilled = dbUpdateInstances.stream()
+                                    .filter(DbUpdate::isActive)
+                                    .peek(d -> liveUpdatersCount.incrementAndGet())
+                                    .filter(d -> !executingInstances.contains(d) && d.isExecuteNeeded())
+                                    .max(Comparator.comparingInt(DbUpdate::getCacheFillPercent));
                         }
-                        if (allClosed && dbUpdateMaxFilled == null && executingInstances.isEmpty()) {
+                        if (liveUpdatersCount.get() == 0 && !dbUpdateMaxFilled.isPresent() && executingInstances.isEmpty()) {
                             log.info("ExecuteDbUpdate: All updaters are closed - exiting this thread");
                             break;
                         }
-                        if (dbUpdateMaxFilled != null) {
-                            for (;;) {
-                                try {
-                                    synchronized (executingInstances) {
-                                        log.trace("{}.Submitting ", dbUpdateMaxFilled.getClass().getSimpleName());
-                                        executor.submit(new DBUpdateCall(dbUpdateMaxFilled));
-                                        log.trace("{}.Submitted ", dbUpdateMaxFilled.getClass().getSimpleName());
-                                        executingInstances.add(dbUpdateMaxFilled);
-                                    }
-                                    break;
-                                } catch (RejectedExecutionException e) {
-                                    Utils.sleep(500);
-                                }
-                            }
-                            executed = true;
-                        }
-                        printStats();
+                        dbUpdateMaxFilled.ifPresent(DbUpdate::executeAsync);
+                        executed = dbUpdateMaxFilled.isPresent();
+                        printStatsCheckPeriod();
                     } catch (Exception e) {
                         log.error(e.getMessage(), e);
                     } finally {
@@ -209,54 +265,32 @@ public abstract class DbUpdate implements AutoCloseable {
             } finally {
                 executor.shutdown();
                 log.info(getName() + ": FINISHED");
+                executeDbUpdateThread = null;
+            }
+        }
+
+        private static void printStatsCheckPeriod() {
+            if (lastPrintedTime.getNanoTime() > PRINT_STATS_PERIOD.toNanos()) {
+                lastPrintedTime.reset();
+                lastPrintedTime.start();
+                printStats();
             }
         }
     }
 
-    @AllArgsConstructor
-    @Slf4j
-    private static class DBUpdateCall implements Callable<Integer> {
-
-        private final DbUpdate dbUpdate;
-
-        @Override
-        @SuppressWarnings("UseSpecificCatch")
-        public Integer call() {
-            int nRecs = 0;
-            try {
-                log.trace("{}.executeInserts(): STARTED", dbUpdate.getTableName());
-                long s = System.nanoTime();
-                try {
-                    nRecs = dbUpdate.executeInserts();
-                } catch (Exception e) {
-                    log.error(e.getMessage(), e);
-                } finally {
-                    long runtime = System.nanoTime() - s;
-                    updateRuntimeMap(dbUpdate.getTableName(), nRecs, runtime);
-                    if (nRecs > 0) {
-                        log.debug("{}.executeInserts(): Records inserted: {} runtime {} ms.", dbUpdate.getTableName(), nRecs, TimeUnit.NANOSECONDS.toMillis(runtime));
-                    }
-                }
-            } finally {
-                synchronized (executingInstances) {
-                    executingInstances.remove(dbUpdate);
-                }
-            }
-            return nRecs;
-        }
-    }
-
+    @RequiredArgsConstructor
     @Getter
     private static class ExecStats {
 
+        private final String tableName;
         private long executions;
         private long totalRecords;
-        private long totalRuntime;
+        private long totalRuntimeNanos;
 
-        void addExecution(long records, long runtime) {
+        void addExecution(long records, long runtimeNanos) {
             executions++;
             totalRecords += records;
-            totalRuntime += runtime;
+            totalRuntimeNanos += runtimeNanos;
         }
     }
 }

@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +15,7 @@
  */
 package com.sliva.btc.scanner.db;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.src.SrcAddress;
 import com.sliva.btc.scanner.src.SrcAddressType;
@@ -22,7 +23,11 @@ import com.sliva.btc.scanner.util.Utils;
 import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Stream;
 import lombok.Getter;
+import lombok.NonNull;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.bitcoinj.core.Address;
 
@@ -36,35 +41,42 @@ public class DbCachedAddress implements AutoCloseable {
     private final Map<SrcAddressType, DbCachedAddressOne> updaters = new HashMap<>();
     private final CacheData cacheData;
 
-    public DbCachedAddress(DBConnection conn) throws SQLException {
+    public DbCachedAddress(DBConnectionSupplier conn) throws SQLException {
         this(conn, new CacheData());
     }
 
-    public DbCachedAddress(DBConnection conn, CacheData cacheData) {
+    public DbCachedAddress(DBConnectionSupplier conn, CacheData cacheData) {
         this.cacheData = cacheData;
-        BtcAddress.getRealTypes().forEach((t) -> updaters.put(t, new DbCachedAddressOne(conn, t, cacheData.dataOneMap.get(t))));
+        Stream.of(SrcAddressType.values()).filter(SrcAddressType::isReal)
+                .forEach((t) -> updaters.put(t, new DbCachedAddressOne(conn, t, cacheData.dataOneMap.get(t))));
     }
 
+    @NonNull
     public CacheData getCacheData() {
         return cacheData;
     }
 
     @SuppressWarnings("DoubleCheckedLocking")
-    public int getOrAdd(SrcAddress address, boolean updateCache) throws SQLException {
+    @SneakyThrows(SQLException.class)
+    public int getOrAdd(SrcAddress address, boolean updateCache) {
+        checkArgument(address != null, "Argument 'address' is null");
         return getOne(BtcAddress.builder()
                 .type(address.getType()).build())
                 .getOrAdd(address.getHash(), updateCache);
     }
 
-    public BtcAddress add(BtcAddress btcAddress, boolean updateCache) throws SQLException {
+    @NonNull
+    public BtcAddress add(BtcAddress btcAddress, boolean updateCache) {
         return getOne(btcAddress).add(btcAddress, updateCache);
     }
 
-    public BtcAddress getAddress(int addressId, boolean updateCache) throws SQLException {
+    @NonNull
+    public Optional<BtcAddress> getAddress(int addressId, boolean updateCache) {
         return getOne(BtcAddress.builder().addressId(addressId).build()).getAddress(addressId, updateCache);
     }
 
-    public BtcAddress getAddress(Address address, boolean updateCache) throws SQLException {
+    @NonNull
+    public Optional<BtcAddress> getAddress(Address address, boolean updateCache) {
         return getOne(BtcAddress.builder()
                 .type(Utils.getBtcAddressType(address.getOutputScriptType()))
                 .build()).getAddress(address.getHash(), updateCache);
@@ -72,7 +84,7 @@ public class DbCachedAddress implements AutoCloseable {
 
     private DbCachedAddressOne getOne(BtcAddress addr) {
         final SrcAddressType addrType = addr.getType();
-        if (!BtcAddress.getRealTypes().contains(addrType)) {
+        if (!addrType.isReal()) {
             throw new IllegalArgumentException("Bad address type: " + addrType + ", addr=" + addr);
         }
         return updaters.get(addr.getType());
@@ -89,7 +101,7 @@ public class DbCachedAddress implements AutoCloseable {
         private final Map<SrcAddressType, DbCachedAddressOne.CacheData> dataOneMap = new HashMap<>();
 
         public CacheData() {
-            BtcAddress.getRealTypes().forEach((t) -> dataOneMap.put(t, new DbCachedAddressOne.CacheData()));
+            Stream.of(SrcAddressType.values()).filter(SrcAddressType::isReal).forEach((t) -> dataOneMap.put(t, new DbCachedAddressOne.CacheData()));
         }
     }
 }

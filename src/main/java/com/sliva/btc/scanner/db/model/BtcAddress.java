@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,10 +18,6 @@ package com.sliva.btc.scanner.db.model;
 import com.sliva.btc.scanner.src.SrcAddressType;
 import com.sliva.btc.scanner.util.BJBlockHandler;
 import com.sliva.btc.scanner.util.Utils;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -38,8 +34,7 @@ import org.bitcoinj.core.Address;
 @EqualsAndHashCode(of = {"addressId"})
 public class BtcAddress {
 
-    public static final int ADDR_UNKNOWN = 0;
-    public static final int ADDR_OP_RETURN = 0x01;
+    public static final int ADDR_NONE = 0;
     public static final int ADDR_P2PKH_MIN = 0x100;
     public static final int ADDR_P2PKH_MAX = 0x30000000;
     public static final int ADDR_P2SH_MIN = 0x30000001;
@@ -53,17 +48,11 @@ public class BtcAddress {
     public static final int ADDR_OTHER_MIN = 0x70000001;
     public static final int ADDR_OTHER_MAX = 0x7FFFFFFF;
 
-    private static final Set<SrcAddressType> realTypes = Collections.unmodifiableSet(new HashSet(Arrays.asList(
-            SrcAddressType.P2PKH, SrcAddressType.P2SH, SrcAddressType.P2WPKH, SrcAddressType.P2WSH)));
     private final int addressId;
     private final byte[] address;
     private final int walletId;
     private SrcAddressType type;
     private Address bjAddress;
-
-    public static Set<SrcAddressType> getRealTypes() {
-        return realTypes;
-    }
 
     public SrcAddressType getType() {
         if (type == null) {
@@ -85,14 +74,13 @@ public class BtcAddress {
     }
 
     public static SrcAddressType getTypeFromId(int addressId) {
-        return addressId == ADDR_UNKNOWN ? SrcAddressType.UNKNOWN
-                : addressId == ADDR_OP_RETURN ? SrcAddressType.ADDR_OP_RETURN
-                        : addressId >= ADDR_P2PKH_MIN && addressId <= ADDR_P2PKH_MAX ? SrcAddressType.P2PKH
-                                : addressId >= ADDR_P2SH_MIN && addressId <= ADDR_P2SH_MAX ? SrcAddressType.P2SH
-                                        : addressId >= ADDR_P2WPKH_MIN && addressId <= ADDR_P2WPKH_MAX ? SrcAddressType.P2WPKH
-                                                : addressId >= ADDR_P2WSH_MIN && addressId <= ADDR_P2WSH_MAX ? SrcAddressType.P2WSH
-                                                        : addressId >= ADDR_OTHER_MIN && addressId <= ADDR_OTHER_MAX ? SrcAddressType.OTHER
-                                                                : null;
+        return addressId == ADDR_NONE ? SrcAddressType.UNKNOWN
+                : addressId >= ADDR_P2PKH_MIN && addressId <= ADDR_P2PKH_MAX ? SrcAddressType.P2PKH
+                        : addressId >= ADDR_P2SH_MIN && addressId <= ADDR_P2SH_MAX ? SrcAddressType.P2SH
+                                : addressId >= ADDR_P2WPKH_MIN && addressId <= ADDR_P2WPKH_MAX ? SrcAddressType.P2WPKH
+                                        : addressId >= ADDR_P2WSH_MIN && addressId <= ADDR_P2WSH_MAX ? SrcAddressType.P2WSH
+                                                : addressId >= ADDR_OTHER_MIN && addressId <= ADDR_OTHER_MAX ? SrcAddressType.OTHER
+                                                        : null;
     }
 
     public static SrcAddressType getTypeFromAddress(String address) {
