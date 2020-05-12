@@ -21,8 +21,6 @@ import static com.sliva.btc.scanner.util.Utils.id2hex;
 import java.util.Collection;
 import javax.annotation.Nullable;
 import lombok.NonNull;
-import lombok.SneakyThrows;
-import org.apache.commons.lang3.concurrent.ConcurrentException;
 
 /**
  *
@@ -52,21 +50,18 @@ public class DbTransaction implements SrcTransaction<DbInput, DbOutput> {
 
     @NonNull
     @Override
-    @SneakyThrows(ConcurrentException.class)
     public String getTxid() {
         return txid.get();
     }
 
     @NonNull
     @Override
-    @SneakyThrows(ConcurrentException.class)
     public Collection<DbInput> getInputs() {
         return inputs.get();
     }
 
     @NonNull
     @Override
-    @SneakyThrows(ConcurrentException.class)
     public Collection<DbOutput> getOutputs() {
         return outputs.get();
     }

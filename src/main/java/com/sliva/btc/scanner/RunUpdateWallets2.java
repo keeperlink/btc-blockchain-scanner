@@ -259,7 +259,7 @@ public class RunUpdateWallets2 {
                 return w;
             }
         }
-        return addWallet.add(null).getWalletId();
+        return addWallet.add().getWalletId();
     }
 
     private String fixAddressTableName(String sql, SrcAddressType addressType) {

@@ -15,8 +15,8 @@
  */
 package com.sliva.btc.scanner.src;
 
-import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import lombok.NonNull;
@@ -33,8 +33,6 @@ import org.bitcoinj.core.Transaction;
 public class BJTransaction<I extends BJInput, O extends BJOutput<BJAddress>>
         implements SrcTransaction<BJInput, BJOutput<BJAddress>> {
 
-    private static final Collection<BJInput> EMPTY_LIST = new ArrayList<>(0);
-
     private final Transaction t;
 
     public BJTransaction(Transaction transaction) {
@@ -50,7 +48,7 @@ public class BJTransaction<I extends BJInput, O extends BJOutput<BJAddress>>
     @Override
     public Collection<BJInput> getInputs() {
         if (t.isCoinBase()) {
-            return EMPTY_LIST;
+            return Collections.emptyList();
         }
         final AtomicInteger pos = new AtomicInteger(0);
         return t.getInputs().stream().map(ti -> new BJInput(ti, (short) pos.getAndIncrement())).collect(Collectors.toList());

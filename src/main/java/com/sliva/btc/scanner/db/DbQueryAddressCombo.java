@@ -69,5 +69,4 @@ public class DbQueryAddressCombo extends DbQueryAddress {
     public String getTableName() {
         return "";
     }
-
 }

@@ -196,36 +196,32 @@ public class RunLoadNeo4jDB {
                 inWriter.println("transactionId,pos,inTransactionId,inPos");
                 wWriter.println("transactionId,pos,walletId,walletName");
                 List<BtcTransaction> txList = queryTransaction.getTxnsRangle(startTransactionId, endTrasnactionId);
-                execProcessTransactions.invokeAll(txList.stream().map((t) -> {
+                execProcessTransactions.invokeAll(txList.stream().map(t -> {
                     return (Callable<Void>) () -> {
-                        try {
-                            synchronized (txnWriter) {
-                                txnWriter.println(t.getTransactionId() + "," + t.getTxid() + "," + t.getBlockHeight() + "," + t.getNInputs() + "," + t.getNOutputs());
-                            }
-                            queryInput.getInputs(t.getTransactionId()).forEach(i -> {
-                                synchronized (inWriter) {
-                                    inWriter.println(i.getTransactionId() + "," + i.getPos() + "," + i.getInTransactionId() + "," + i.getInPos());
-                                }
-                            });
-                            queryOutput.getOutputs(t.getTransactionId()).forEach(o -> {
-                                DbAddress adr = o.getAddressId() == 0 ? null : new DbAddress(blockProvider, o.getAddressId(), null, -1);
-                                String address = adr == null ? "Undefined" : adr.getName();
-                                synchronized (outWriter) {
-                                    BigDecimal amount = new BigDecimal(o.getAmount()).movePointLeft(8);
-                                    outWriter.println(o.getTransactionId() + "," + o.getPos() + ",\"" + address + "\"," + amount);
-                                }
-                                int walletId = adr == null ? 0 : adr.getWalletId();
-                                if (walletId > 0) {
-                                    DbWallet wallet = new DbWallet(blockProvider, walletId, null, null);
-                                    String walletName = StringUtils.defaultString(wallet.getName(), Integer.toString(walletId)).replaceAll("\"", "\"\"");
-                                    synchronized (wWriter) {
-                                        wWriter.println(o.getTransactionId() + "," + o.getPos() + "," + walletId + ",\"" + walletName + "\"");
-                                    }
-                                }
-                            });
-                        } catch (SQLException e) {
-                            throw new RuntimeException(e);
+                        synchronized (txnWriter) {
+                            txnWriter.println(t.getTransactionId() + "," + t.getTxid() + "," + t.getBlockHeight() + "," + t.getNInputs() + "," + t.getNOutputs());
                         }
+                        queryInput.getInputs(t.getTransactionId()).forEach(i -> {
+                            synchronized (inWriter) {
+                                inWriter.println(i.getTransactionId() + "," + i.getPos() + "," + i.getInTransactionId() + "," + i.getInPos());
+                            }
+                        });
+                        queryOutput.getOutputs(t.getTransactionId()).forEach(o -> {
+                            DbAddress adr = o.getAddressId() == 0 ? null : new DbAddress(blockProvider, o.getAddressId(), null, -1);
+                            String address = adr == null ? "Undefined" : adr.getName();
+                            synchronized (outWriter) {
+                                BigDecimal amount = new BigDecimal(o.getAmount()).movePointLeft(8);
+                                outWriter.println(o.getTransactionId() + "," + o.getPos() + ",\"" + address + "\"," + amount);
+                            }
+                            int walletId = adr == null ? 0 : adr.getWalletId();
+                            if (walletId > 0) {
+                                DbWallet wallet = new DbWallet(blockProvider, walletId, null, null);
+                                String walletName = StringUtils.defaultString(wallet.getName(), Integer.toString(walletId)).replaceAll("\"", "\"\"");
+                                synchronized (wWriter) {
+                                    wWriter.println(o.getTransactionId() + "," + o.getPos() + "," + walletId + ",\"" + walletName + "\"");
+                                }
+                            }
+                        });
                         return null;
                     };
                 }).collect(Collectors.toList()));

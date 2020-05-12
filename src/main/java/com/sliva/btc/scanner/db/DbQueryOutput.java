@@ -19,7 +19,6 @@ import com.sliva.btc.scanner.db.model.InOutKey;
 import com.sliva.btc.scanner.db.model.TxInput;
 import com.sliva.btc.scanner.db.model.TxOutput;
 import com.sliva.btc.scanner.src.SrcAddressType;
-import java.sql.SQLException;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -39,13 +38,14 @@ import lombok.experimental.SuperBuilder;
  */
 public class DbQueryOutput {
 
-    private static final String SQL_QUERY_OUTPUTS = "SELECT pos,address_id,amount,spent FROM output WHERE transaction_id=?";
-    private static final String SQL_QUERY_OUTPUT = "SELECT address_id,amount,spent FROM output WHERE transaction_id=? AND pos=?";
+    private static final int MAX_OUTS_IN_TXN = 999999;
+    private static final String SQL_QUERY_OUTPUTS = "SELECT pos,address_id,amount,spent FROM output WHERE transaction_id=? LIMIT " + MAX_OUTS_IN_TXN;
+    private static final String SQL_QUERY_OUTPUT = "SELECT address_id,amount,spent FROM output WHERE transaction_id=? AND pos=? LIMIT 1";
     private static final String SQL_QUERY_OUTPUTS_WITH_INPUT = "SELECT O.pos,O.address_id,O.amount,O.spent"
             + ",I.transaction_id,I.pos"
             + " FROM output O"
             + " LEFT JOIN input I ON I.in_transaction_id=O.transaction_id AND I.in_pos=O.pos"
-            + " WHERE O.transaction_id=?";
+            + " WHERE O.transaction_id=? LIMIT " + MAX_OUTS_IN_TXN;
     private static final String SQL_QUERY_OUTPUTS_IN_TXN_RANGE = "SELECT O.transaction_id,O.pos,O.address_id,O.amount,O.spent,A.wallet_id,W.name"
             + " FROM output O"
             + " INNER JOIN address_table_name A ON A.address_id=O.address_id"
@@ -64,7 +64,7 @@ public class DbQueryOutput {
     }
 
     @NonNull
-    public List<TxOutput> getOutputs(int transactionId) throws SQLException {
+    public List<TxOutput> getOutputs(int transactionId) {
         return psQueryOutputs.setParameters(ps -> ps.setInt(transactionId)).executeQueryToList(rs
                 -> TxOutput.builder()
                         .transactionId(transactionId)
@@ -76,7 +76,7 @@ public class DbQueryOutput {
     }
 
     @NonNull
-    public Optional<TxOutput> getOutput(int transactionId, short pos) throws SQLException {
+    public Optional<TxOutput> getOutput(int transactionId, short pos) {
         return psQueryOutput.setParameters(ps -> ps.setInt(transactionId).setShort(pos)).querySingleRow(rs -> TxOutput.builder()
                 .transactionId(transactionId)
                 .pos(pos)
@@ -86,7 +86,8 @@ public class DbQueryOutput {
                 .build());
     }
 
-    public List<TxOutputInput> getOutputsWithInput(int transactionId) throws SQLException {
+    @NonNull
+    public List<TxOutputInput> getOutputsWithInput(int transactionId) {
         return psQueryOutputsWithInput.setParameters(ps -> ps.setInt(transactionId)).executeQueryToList(rs -> {
             TxOutputInput.TxOutputInputBuilder builder = TxOutputInput.builder();
             builder.output(TxOutput.builder()
@@ -108,7 +109,8 @@ public class DbQueryOutput {
         });
     }
 
-    public Collection<OutputAddressWallet> queryOutputsInTxnRange(int startTxId, int endTxId, SrcAddressType addressType) throws SQLException {
+    @NonNull
+    public Collection<OutputAddressWallet> queryOutputsInTxnRange(int startTxId, int endTxId, SrcAddressType addressType) {
         if (!addressType.isReal()) {
             throw new IllegalArgumentException("addressType=" + addressType + ", allowed only real types: " + Stream.of(SrcAddressType.values()).filter(SrcAddressType::isReal).collect(Collectors.toSet()));
         }

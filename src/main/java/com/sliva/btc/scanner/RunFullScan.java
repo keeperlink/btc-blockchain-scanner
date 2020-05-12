@@ -44,7 +44,6 @@ import com.sliva.btc.scanner.src.BJBlockProvider;
 import com.sliva.btc.scanner.src.BlockProvider;
 import com.sliva.btc.scanner.src.BlockProviderWithBackup;
 import com.sliva.btc.scanner.src.RpcBlockProvider;
-import com.sliva.btc.scanner.src.SrcAddress;
 import com.sliva.btc.scanner.src.SrcBlock;
 import com.sliva.btc.scanner.src.SrcTransaction;
 import com.sliva.btc.scanner.util.BufferingAheadSupplier;
@@ -64,7 +63,6 @@ import java.util.Collection;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
-import static java.util.Optional.ofNullable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -251,9 +249,7 @@ public class RunFullScan {
         block.getTransactions().forEach(t -> processTransaction(t, blockHeight, listTxn, db));
         if (listTxn != null && !listTxn.isEmpty()) {
             log.debug("Found wrong transactions in block: " + listTxn);
-            for (BtcTransaction t : listTxn) {
-                db.cachedTxn.delete(t);
-            }
+            listTxn.forEach(db.cachedTxn::delete);
         }
         log.trace("processBlock({}): FINISHED", blockHeight);
     }
@@ -303,8 +299,7 @@ public class RunFullScan {
             final short inPos = ti.getInPos();
             log.trace("In.Outpoint: {}:{}", inTxid, inPos);
             try {
-                final BtcTransaction inTxn = db.cachedTxn.getTransaction(inTxid).orElseThrow(() -> new IllegalStateException("Transaction not found in DB: " + inTxid + " referenced from input#" + ti.getPos() + " in tx " + tx.toString()));
-                TxOutput txOutput = db.cachedOutput.getOutput(inTxn.getTransactionId(), inPos).orElseThrow(() -> new IllegalStateException("Output#" + ti.getPos() + " not found: " + inTxid + ":" + inPos + ". Src txn: " + tx.getTxid() + ". Ref tx: " + inTxn));
+                final BtcTransaction inTxn = db.cachedTxn.getTransactionSimple(inTxid).orElseThrow(() -> new IllegalStateException("Transaction not found in DB: " + inTxid + " referenced from input#" + ti.getPos() + " in tx " + tx.toString()));
                 TxInput inputToAdd = TxInput.builder()
                         .transactionId(tx.getTransactionId())
                         .pos(ti.getPos())
@@ -374,8 +369,11 @@ public class RunFullScan {
                         db.updateInputSpecial.add(newInputSpecial);
                     }
                 }
-                if (updateSpent && txOutput.getStatus() != OutputStatus.SPENT) {
-                    db.cachedOutput.updateStatus(txOutput.getTransactionId(), txOutput.getPos(), OutputStatus.SPENT);
+                if (updateSpent) {
+                    TxOutput txOutput = db.cachedOutput.getOutput(inTxn.getTransactionId(), inPos).orElseThrow(() -> new IllegalStateException("Output#" + ti.getPos() + " not found: " + inTxid + ":" + inPos + ". Src txn: " + tx.getTxid() + ". Ref tx: " + inTxn));
+                    if (txOutput.getStatus() != OutputStatus.SPENT) {
+                        db.cachedOutput.updateStatus(txOutput.getTransactionId(), txOutput.getPos(), OutputStatus.SPENT);
+                    }
                 }
             } catch (SQLException e) {
                 log.error(e.getMessage(), e);
@@ -408,8 +406,7 @@ public class RunFullScan {
             txOutputs = null;
         }
         t.getOutputs().forEach(to -> {
-            SrcAddress addr = to.getAddress();
-            int addressId = addr == null ? 0 : db.cachedAddress.getOrAdd(addr, false);
+            int addressId = to.getAddress().map(addr -> db.cachedAddress.getOrAdd(addr, false)).orElse(0);
             TxOutput txOutputToAdd = TxOutput.builder()
                     .transactionId(tx.getTransactionId())
                     .pos(to.getPos())
@@ -422,7 +419,7 @@ public class RunFullScan {
                 db.cachedOutput.add(txOutputToAdd);
             } else {
                 if (txOutput.getAddressId() != txOutputToAdd.getAddressId()) {
-                    log.debug("Address is different: {} <> {}({}) for output: {}. tx: {}", txOutput.getAddressId(), txOutputToAdd.getAddressId(), addr, txOutputToAdd, tx);
+                    log.debug("Address is different: {} <> {}({}) for output: {}. tx: {}", txOutput.getAddressId(), txOutputToAdd.getAddressId(), to.getAddress(), txOutputToAdd, tx);
                     db.cachedOutput.updateAddress(txOutputToAdd.getTransactionId(), txOutputToAdd.getPos(), txOutputToAdd.getAddressId());
                 }
                 if (txOutput.getAmount() != txOutputToAdd.getAmount()) {
@@ -466,16 +463,17 @@ public class RunFullScan {
         try {
             if (safeRun) {
                 String txid = Utils.fixDupeTxid(t.getTxid(), blockHeight);
-                db.cachedTxn.getTransaction(txid).ifPresent(tx -> {
+                db.cachedTxn.getTransactionSimple(txid).ifPresent(tx -> {
                     db.cachedOutput.getOutputs(tx.getTransactionId());
                     inputsCache.getUnchecked(tx.getTransactionId());
                 });
             }
             List<CompletableFuture<Void>> inFutures = t.getInputs().stream()
-                    .map(ti -> CompletableFuture.runAsync(() -> db.cachedTxn.getTransaction(ti.getInTxid()).map(ti3 -> db.cachedOutput.getOutput(ti3.getTransactionId(), ti.getInPos())), execInsOuts))
+                    .map(ti -> CompletableFuture.runAsync(() -> db.cachedTxn.getTransactionSimple(ti.getInTxid())
+                    .map(tr -> updateSpent ? db.cachedOutput.getOutput(tr.getTransactionId(), ti.getInPos()) : Optional.empty()), execInsOuts))
                     .collect(Collectors.toList());
             List<CompletableFuture<Void>> outFutures = t.getOutputs().stream()
-                    .map(to -> CompletableFuture.runAsync(() -> ofNullable(to.getAddress()).map(to3 -> db.cachedAddress.getOrAdd(to3, true)), execInsOuts))
+                    .map(to -> CompletableFuture.runAsync(() -> to.getAddress().map(to3 -> db.cachedAddress.getOrAdd(to3, true)), execInsOuts))
                     .collect(Collectors.toList());
             inFutures.forEach(CompletableFuture::join);
             outFutures.forEach(CompletableFuture::join);

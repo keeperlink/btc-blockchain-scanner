@@ -29,10 +29,10 @@ import lombok.NonNull;
 public class DbQueryAddress {
 
     private static final String ADDRESS_TABLE_NAME = "address_table_name";
-    private static final String SQL_FIND_BY_ADDRESS_ID = "SELECT address,wallet_id FROM address_table_name WHERE address_id=?";
-    private static final String SQL_FIND_BY_ADDRESS = "SELECT address_id FROM address_table_name WHERE address=? LIMIT 1";
-    private static final String SQL_QUERY_WALLET_ID = "SELECT wallet_id FROM address_table_name WHERE address_id=?";
-    private static final String SQL_QUERY_LAST_ADDRESS_ID = "SELECT address_id FROM address_table_name ORDER BY address_id DESC LIMIT 1";
+    private static final String SQL_FIND_BY_ADDRESS_ID = "SELECT `address`,wallet_id FROM `address_table_name` WHERE address_id=? LIMIT 1";
+    private static final String SQL_FIND_BY_ADDRESS = "SELECT address_id FROM `address_table_name` WHERE `address`=? LIMIT 1";
+    private static final String SQL_QUERY_WALLET_ID = "SELECT wallet_id FROM `address_table_name` WHERE address_id=? LIMIT 1";
+    private static final String SQL_QUERY_LAST_ADDRESS_ID = "SELECT address_id FROM `address_table_name` ORDER BY address_id DESC LIMIT 1";
     private final SrcAddressType addressType;
     private final DBPreparedStatement psFindByAddressId;
     private final DBPreparedStatement psFindByAddress;
@@ -59,12 +59,12 @@ public class DbQueryAddress {
 
     @NonNull
     public String getTableName() {
-        return getTableName(addressType);
+        return _getTableName(addressType);
     }
 
     @NonNull
     public Optional<BtcAddress> findByAddressId(int addressId) {
-        checkState(addressType != null, "Method not supported due to instance created with no-arguments constructor");
+        checkState(psFindByAddressId != null, "Method not supported due to instance created with no-arguments constructor");
         return psFindByAddressId.setParameters(ps -> ps.setInt(addressId)).querySingleRow(rs -> BtcAddress.builder()
                 .type(addressType)
                 .addressId(addressId)
@@ -106,12 +106,12 @@ public class DbQueryAddress {
     }
 
     @NonNull
-    public static String getTableName(SrcAddressType addressType) {
+    private static String _getTableName(SrcAddressType addressType) {
         return "address_" + addressType.name().toLowerCase();
     }
 
     @NonNull
     public static String updateQueryTableName(String query, SrcAddressType addressType) {
-        return query.replaceAll(ADDRESS_TABLE_NAME, getTableName(addressType));
+        return query.replaceAll(ADDRESS_TABLE_NAME, _getTableName(addressType));
     }
 }

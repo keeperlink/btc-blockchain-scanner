@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,55 +15,40 @@
  */
 package com.sliva.btc.scanner.src;
 
+import static com.sliva.btc.scanner.db.model.BtcAddress.ADDR_NONE;
+import com.sliva.btc.scanner.util.LazyInitializer;
+import java.util.Optional;
+import lombok.Getter;
+
 /**
  *
  * @author Sliva Co
  */
 public class DbOutput implements SrcOutput<DbAddress> {
 
+    @Getter
     private final DbBlockProvider blockProvider;
+    @Getter
     private final short pos;
+    @Getter
     private final int addressId;
-    private final long amount;
+    @Getter
+    private final long value;
+    @Getter
     private final byte spent;
-    private DbAddress address;
+    private final LazyInitializer<Optional<DbAddress>> address;
 
-    public DbOutput(DbBlockProvider blockProvider, short pos, int addressId, long amount, byte spent) {
+    public DbOutput(DbBlockProvider blockProvider, short pos, int addressId, long value, byte spent) {
         this.blockProvider = blockProvider;
         this.pos = pos;
         this.addressId = addressId;
-        this.amount = amount;
+        this.value = value;
         this.spent = spent;
-    }
-
-    public DbBlockProvider getBlockProvider() {
-        return blockProvider;
+        this.address = new LazyInitializer<>(() -> addressId == ADDR_NONE ? Optional.empty() : Optional.of(new DbAddress(blockProvider, addressId, null, -1)));
     }
 
     @Override
-    public short getPos() {
-        return pos;
+    public Optional<DbAddress> getAddress() {
+        return address.get();
     }
-
-    @Override
-    public DbAddress getAddress() {
-        if (address == null) {
-            address = new DbAddress(blockProvider, addressId, null, -1);
-        }
-        return address;
-    }
-
-    @Override
-    public long getValue() {
-        return amount;
-    }
-
-    public int getAddressId() {
-        return addressId;
-    }
-
-    public byte getSpent() {
-        return spent;
-    }
-
 }

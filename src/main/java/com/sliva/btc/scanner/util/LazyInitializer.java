@@ -17,11 +17,13 @@ package com.sliva.btc.scanner.util;
 
 import java.util.function.Supplier;
 import lombok.RequiredArgsConstructor;
+import lombok.SneakyThrows;
 import org.apache.commons.lang3.concurrent.ConcurrentException;
 
 /**
  *
  * @author Sliva Co
+ * @param <T>
  */
 @RequiredArgsConstructor
 public class LazyInitializer<T> extends org.apache.commons.lang3.concurrent.LazyInitializer<T> {
@@ -29,8 +31,13 @@ public class LazyInitializer<T> extends org.apache.commons.lang3.concurrent.Lazy
     private final Supplier<T> supplier;
 
     @Override
-    protected T initialize() throws ConcurrentException {
+    protected T initialize() {
         return supplier.get();
     }
 
+    @Override
+    @SneakyThrows(ConcurrentException.class)
+    public T get() {
+        return super.get();
+    }
 }

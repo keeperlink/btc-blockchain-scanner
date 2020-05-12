@@ -34,14 +34,15 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class DbQueryInput {
 
-    private static final String SQL_QUERY_INPUTS = "SELECT pos,in_transaction_id,in_pos FROM input WHERE transaction_id=? ORDER BY pos";
+    private static final int MAX_INS_IN_TXN = 99999;
+    private static final String SQL_QUERY_INPUTS = "SELECT pos,in_transaction_id,in_pos FROM input WHERE transaction_id=? ORDER BY pos LIMIT " + MAX_INS_IN_TXN;
     private static final String SQL_FIND_INPUT_BY_OUT_TX = "SELECT transaction_id,pos FROM input WHERE in_transaction_id=? AND in_pos=? LIMIT 1";
     private static final String SQL_QUERY_INPUTS_WITH_OUTPUT = "SELECT"
             + " I.pos,I.in_transaction_id,I.in_pos"
             + ",O.address_id,O.amount,O.spent"
             + " FROM input I"
             + " INNER JOIN output O ON O.transaction_id=I.in_transaction_id AND O.pos = I.in_pos"
-            + " WHERE I.transaction_id=? ORDER BY I.pos";
+            + " WHERE I.transaction_id=? ORDER BY I.pos LIMIT " + MAX_INS_IN_TXN;
     private static final String SQL_QUERY_INPUT_ADDRESSES
             = "SELECT O.address_id,IFNULL(P2PKH.wallet_id, IFNULL(P2SH.wallet_id, IFNULL(P2WPKH.wallet_id, P2WSH.wallet_id)))"
             + " FROM input I"
@@ -50,7 +51,7 @@ public class DbQueryInput {
             + " LEFT JOIN address_p2sh P2SH ON P2SH.address_id=O.address_id"
             + " LEFT JOIN address_p2wpkh P2WPKH ON P2WPKH.address_id=O.address_id"
             + " LEFT JOIN address_p2wsh P2WSH ON P2WSH.address_id=O.address_id"
-            + " WHERE O.address_id>0 AND I.transaction_id=?";
+            + " WHERE O.address_id>0 AND I.transaction_id=? LIMIT " + MAX_INS_IN_TXN;
     private final DBPreparedStatement psQueryInputs;
     private final DBPreparedStatement psFindInputByOutTx;
     private final DBPreparedStatement psQueryInputsWithOutput;

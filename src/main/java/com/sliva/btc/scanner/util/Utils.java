@@ -15,6 +15,8 @@
  */
 package com.sliva.btc.scanner.util;
 
+import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkNotNull;
 import com.sliva.btc.scanner.src.SrcAddressType;
 import java.io.File;
 import java.io.FileReader;
@@ -23,12 +25,15 @@ import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.text.DecimalFormat;
 import java.util.NoSuchElementException;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import javax.annotation.Nullable;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
+import lombok.NonNull;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.DecoderException;
@@ -52,6 +57,7 @@ public final class Utils {
     private static final String DUPE2_REPLACE = "d5d27987d2a3dfc724e359870c6644b40e497bdc0589a033220fe15429d88598";
     private static final int DUPE2_BLOCK = 91812;
 
+    @Nullable
     public static String fixDupeTxid(String txid, int blockHeight) {
         if (blockHeight == DUPE1_BLOCK && txid.equalsIgnoreCase(DUPE1)) {
             return DUPE1_REPLACE;
@@ -61,6 +67,7 @@ public final class Utils {
         return txid;
     }
 
+    @Nullable
     public static String unfixDupeTxid(String txid) {
         return DUPE1_REPLACE.equalsIgnoreCase(txid)
                 ? DUPE1
@@ -85,15 +92,18 @@ public final class Utils {
         }
     }
 
+    @Nullable
     @SneakyThrows(DecoderException.class)
     public static byte[] decodeHex(String hexString) {
         return hexString == null ? null : Hex.decodeHex(hexString);
     }
 
+    @Nullable
     public static String encodeHex(byte[] hexBytes) {
         return hexBytes == null ? null : Hex.encodeHexString(hexBytes, true);
     }
 
+    @Nullable
     public static String id2hex(byte[] data) {
         if (data == null) {
             return null;
@@ -104,6 +114,7 @@ public final class Utils {
         return encodeHex(data);
     }
 
+    @Nullable
     public static byte[] id2bin(String txid) {
         if (txid == null) {
             return null;
@@ -114,6 +125,7 @@ public final class Utils {
         return decodeHex(txid);
     }
 
+    @Nullable
     public static SrcAddressType getBtcAddressType(Script.ScriptType scriptType) {
         switch (scriptType) {
             case P2PKH:
@@ -134,6 +146,7 @@ public final class Utils {
         log.debug("{}. Runtime: {} msec.", name, System.currentTimeMillis() - s);
     }
 
+    @NonNull
     public static Properties loadProperties(String file) {
         Properties prop = new Properties();
         if (file != null) {
@@ -146,16 +159,21 @@ public final class Utils {
     }
 
     public static <T> T synchronize(Object syncObject, Supplier<T> supplier) {
+        checkArgument(syncObject != null, "Argument 'syncObject' is null");
+        checkArgument(supplier != null, "Argument 'supplier' is null");
         synchronized (syncObject) {
             return supplier.get();
         }
     }
 
     public static long getPercentage(long obtained, long total) {
+        checkArgument(total > 0, "Argument 'total' has to be a positive number: %s", total);
         return obtained * 100 / total;
     }
 
+    @NonNull
     public static Supplier<Integer> getNumberSupplier(int firstBlockToProcess, int incrementStep, Function<Integer, Boolean> continueLoopConditions) {
+        checkArgument(continueLoopConditions != null, "Argument 'continueLoopConditions' is null");
         AtomicInteger currentNumber = new AtomicInteger(firstBlockToProcess);
         return () -> {
             synchronized (currentNumber) {
@@ -165,6 +183,24 @@ public final class Utils {
                 return currentNumber.getAndAdd(incrementStep);
             }
         };
+    }
+
+    /**
+     * Return Optional value of first non-null and non-empty elements from
+     * arguments.
+     *
+     * @param <T> Element data type
+     * @param value1 first value to evaluate
+     * @param value2supplier second value supplier to evaluate
+     * @param value3supplier third value supplier to evaluate
+     * @return Optional of element or empty if none found
+     */
+    @NonNull
+    public static <T> Optional<T> optionalBuilder(T value1, Supplier<T> value2supplier, Supplier<Optional<T>> value3supplier) {
+        checkArgument(value2supplier != null, "Argument 'value2supplier' is null");
+        checkArgument(value3supplier != null, "Argument 'value3supplier' is null");
+        T result = value1 != null ? value1 : value2supplier.get();
+        return result != null ? Optional.of(result) : checkNotNull(value3supplier.get());
     }
 
     public static class NumberFile {

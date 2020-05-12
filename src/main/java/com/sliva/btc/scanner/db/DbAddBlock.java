@@ -15,11 +15,13 @@
  */
 package com.sliva.btc.scanner.db;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import com.sliva.btc.scanner.db.model.BtcBlock;
 import com.sliva.btc.scanner.util.Utils;
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -33,8 +35,10 @@ public class DbAddBlock extends DbUpdate {
     private static int MAX_BATCH_SIZE = 10000;
     private static int MAX_INSERT_QUEUE_LENGTH = 30000;
     private static final String TABLE_NAME = "block";
-    private static final String SQL_ADD = "INSERT INTO block(height,hash,txn_count)VALUES(?,?,?)";
+    private static final String SQL_ADD = "INSERT INTO `block`(`height`,`hash`,txn_count)VALUES(?,?,?)";
     private final DBPreparedStatement psAdd;
+    @Getter
+    @NonNull
     private final CacheData cacheData;
 
     public DbAddBlock(DBConnectionSupplier conn) {
@@ -42,28 +46,20 @@ public class DbAddBlock extends DbUpdate {
     }
 
     public DbAddBlock(DBConnectionSupplier conn, CacheData cacheData) {
-        super(conn);
+        super(TABLE_NAME, conn);
+        checkArgument(cacheData != null, "Argument 'cacheData' is null");
         this.psAdd = conn.prepareStatement(SQL_ADD);
         this.cacheData = cacheData;
     }
 
-    public CacheData getCacheData() {
-        return cacheData;
-    }
-
-    @Override
-    public String getTableName() {
-        return TABLE_NAME;
-    }
-
     @Override
     public int getCacheFillPercent() {
-        return cacheData == null ? 0 : cacheData.addQueue.size() * 100 / MAX_INSERT_QUEUE_LENGTH;
+        return cacheData.addQueue.size() * 100 / MAX_INSERT_QUEUE_LENGTH;
     }
 
     @Override
     public boolean isExecuteNeeded() {
-        return cacheData != null && cacheData.addQueue.size() >= MIN_BATCH_SIZE;
+        return cacheData.addQueue.size() >= MIN_BATCH_SIZE;
     }
 
     public void add(BtcBlock btcBlock) {

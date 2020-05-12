@@ -15,10 +15,10 @@
  */
 package com.sliva.btc.scanner.db;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.sliva.btc.scanner.db.DbUpdate.waitFullQueue;
 import com.sliva.btc.scanner.db.model.InOutKey;
 import com.sliva.btc.scanner.db.model.TxInputSpecial;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -26,6 +26,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -46,6 +47,8 @@ public class DbUpdateInputSpecial extends DbUpdate {
     private final DBPreparedStatement psAdd;
     private final DBPreparedStatement psDelete;
     private final DBPreparedStatement psUpdate;
+    @Getter
+    @NonNull
     private final CacheData cacheData;
 
     public DbUpdateInputSpecial(DBConnectionSupplier conn) {
@@ -53,33 +56,25 @@ public class DbUpdateInputSpecial extends DbUpdate {
     }
 
     public DbUpdateInputSpecial(DBConnectionSupplier conn, CacheData cacheData) {
-        super(conn);
+        super(TABLE_NAME, conn);
+        checkArgument(cacheData != null, "Argument 'cacheData' is null");
         this.psAdd = conn.prepareStatement(SQL_ADD);
         this.psDelete = conn.prepareStatement(SQL_DELETE);
         this.psUpdate = conn.prepareStatement(SQL_UPDATE);
         this.cacheData = cacheData;
     }
 
-    public CacheData getCacheData() {
-        return cacheData;
-    }
-
-    @Override
-    public String getTableName() {
-        return TABLE_NAME;
-    }
-
     @Override
     public int getCacheFillPercent() {
-        return cacheData == null ? 0 : Math.max(cacheData.addQueue.size() * 100 / MAX_INSERT_QUEUE_LENGTH, cacheData.queueUpdate.size() * 100 / MAX_UPDATE_QUEUE_LENGTH);
+        return Math.max(cacheData.addQueue.size() * 100 / MAX_INSERT_QUEUE_LENGTH, cacheData.queueUpdate.size() * 100 / MAX_UPDATE_QUEUE_LENGTH);
     }
 
     @Override
     public boolean isExecuteNeeded() {
-        return cacheData != null && (cacheData.addQueue.size() >= MIN_BATCH_SIZE || cacheData.queueUpdate.size() >= MIN_BATCH_SIZE);
+        return cacheData.addQueue.size() >= MIN_BATCH_SIZE || cacheData.queueUpdate.size() >= MIN_BATCH_SIZE;
     }
 
-    public void add(TxInputSpecial txInput) throws SQLException {
+    public void add(TxInputSpecial txInput) {
         log.trace("add(txInput:{})", txInput);
         waitFullQueue(cacheData.addQueue, MAX_INSERT_QUEUE_LENGTH);
         synchronized (cacheData) {
@@ -93,7 +88,7 @@ public class DbUpdateInputSpecial extends DbUpdate {
         }
     }
 
-    public void delete(TxInputSpecial txInput) throws SQLException {
+    public void delete(TxInputSpecial txInput) {
         log.trace("delete(txInput:{})", txInput);
         synchronized (cacheData) {
             psDelete.setParameters(p -> p.setInt(txInput.getTransactionId()).setInt(txInput.getPos())).execute();
@@ -109,7 +104,7 @@ public class DbUpdateInputSpecial extends DbUpdate {
         }
     }
 
-    public void update(TxInputSpecial txInput) throws SQLException {
+    public void update(TxInputSpecial txInput) {
         log.trace("update(txInput:{})", txInput);
         synchronized (cacheData) {
             TxInputSpecial txInput2 = cacheData.queueMap.get(txInput);

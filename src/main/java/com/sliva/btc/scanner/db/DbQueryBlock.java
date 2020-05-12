@@ -27,9 +27,9 @@ import org.apache.commons.codec.binary.Hex;
  */
 public class DbQueryBlock {
 
-    private static final String SQL_QUERY_BLOCK_HASH = "SELECT hash,txn_count FROM block WHERE height=?";
-    private static final String SQL_FIND_BLOCK_BY_HASH = "SELECT height,txn_count FROM block WHERE hash=?";
-    private static final String SQL_FIND_LAST_HEIGHT = "SELECT height FROM block ORDER BY height DESC LIMIT 1";
+    private static final String SQL_QUERY_BLOCK_HASH = "SELECT `hash`,txn_count FROM `block` WHERE `height`=? LIMIT 1";
+    private static final String SQL_FIND_BLOCK_BY_HASH = "SELECT `height`,txn_count FROM `block` WHERE `hash`=? LIMIT 1";
+    private static final String SQL_FIND_LAST_HEIGHT = "SELECT `height` FROM `block` ORDER BY `height` DESC LIMIT 1";
     private final DBPreparedStatement psQueryBlockHash;
     private final DBPreparedStatement psFindBlockByHash;
     private final DBPreparedStatement psFindLastHeight;

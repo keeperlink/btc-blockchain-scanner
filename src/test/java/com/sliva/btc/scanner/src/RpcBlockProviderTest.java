@@ -15,12 +15,12 @@
  */
 package com.sliva.btc.scanner.src;
 
+import com.sliva.btc.scanner.Main;
 import com.sliva.btc.scanner.rpc.RpcClientDirect;
+import com.sliva.btc.scanner.util.CommandLineUtils.CmdOptions;
+import static com.sliva.btc.scanner.util.CommandLineUtils.buildCmdArguments;
 import java.util.Collection;
-import org.apache.commons.cli.CommandLine;
-import org.apache.commons.cli.DefaultParser;
-import org.apache.commons.cli.Options;
-import org.apache.commons.cli.ParseException;
+import java.util.Optional;
 import org.junit.After;
 import org.junit.AfterClass;
 import static org.junit.Assert.*;
@@ -35,14 +35,15 @@ import org.junit.Test;
 public class RpcBlockProviderTest {
 
     private static final String CONF_FILE = "/etc/rpc.conf";
+    private static final CmdOptions CMD_OPTS = new CmdOptions().add(RpcClientDirect.class);
     private final RpcBlockProvider instance = new RpcBlockProvider();
 
     public RpcBlockProviderTest() {
     }
 
     @BeforeClass
-    public static void setUpClass() {
-        init();
+    public static void setUpClass() throws Exception {
+        buildCmdArguments(new String[]{"--rpc-config=" + CONF_FILE}, Main.Command.update_spent.name(), null, null, CMD_OPTS);
     }
 
     @AfterClass
@@ -55,15 +56,6 @@ public class RpcBlockProviderTest {
 
     @After
     public void tearDown() {
-    }
-
-    public static void init() {
-        try {
-            CommandLine cmd = new DefaultParser().parse(RpcClientDirect.addOptions(new Options()), new String[]{"--rpc-config=" + CONF_FILE});
-            RpcClientDirect.applyArguments(cmd);
-        } catch (ParseException e) {
-            throw new RuntimeException(e);
-        }
     }
 
     /**
@@ -102,11 +94,23 @@ public class RpcBlockProviderTest {
         assertNotNull(tlist);
         assertEquals(1, tlist.size());
         RpcTransaction<?, ?> t = tlist.iterator().next();
-        assertNull(t.getInputs());
+        assertNotNull(t.getInputs());
+        assertTrue(t.getInputs().isEmpty());
         assertNotNull(t.getOutputs());
         assertEquals(1, t.getOutputs().size());
         RpcOutput<?> out = t.getOutputs().iterator().next();
-        assertEquals("12c6DSiU4Rq3P4ZxziKxzrL5LmMBrzjrJX", out.getAddress().getName());
+        assertEquals("12c6DSiU4Rq3P4ZxziKxzrL5LmMBrzjrJX", out.getAddress().map(RpcAddress::getName).orElse(null));
+    }
+
+    /**
+     * Test of getBlock method, of class RpcBlockProvider.
+     */
+    @Test
+    public void testGetAddress_OP_DUP() {
+        System.out.println("testGetBlock_String");
+        RpcBlock<?> block = instance.getBlock(150951);
+        RpcTransaction<?, ?> tran = block.getTransactions().stream().filter(t -> t.getTxid().equalsIgnoreCase("07d33c8c74e945c50e45d3eaf4add7553534154503a478cf6d48e1c617b3f9f3")).findFirst().orElseThrow(() -> new IllegalStateException());
+        assertEquals(Optional.empty(), tran.getOutputs().iterator().next().getAddress());
     }
 
     /**

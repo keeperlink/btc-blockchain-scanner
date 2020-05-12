@@ -28,15 +28,17 @@ import lombok.NonNull;
  */
 public class DbQueryTransaction {
 
-    private static final String SQL_QUERY_TXNS_NO_OUTPUTS = "SELECT transaction_id,txid,block_height,nInputs,nOutputs FROM transaction WHERE transaction_id NOT IN (SELECT transaction_id FROM output) ORDER BY transaction_id";
-    private static final String SQL_QUERY_TXNS_RANGE = "SELECT transaction_id,txid,block_height,nInputs,nOutputs FROM transaction WHERE transaction_id BETWEEN ? AND ?";
-    private static final String SQL_QUERY_TXNS_IN_BLOCK = "SELECT txid FROM transaction WHERE block_height=?";
-    private static final String SQL_COUNT_TXNS_IN_BLOCK = "SELECT count(*) FROM transaction WHERE block_height=?";
-    private static final String SQL_FIND_TRANSACTION_BY_TXID = "SELECT transaction_id,block_height,nInputs,nOutputs FROM transaction WHERE txid=?";
-    private static final String SQL_FIND_TRANSACTION_ID_BY_TXID = "SELECT transaction_id FROM transaction WHERE txid=?";
-    private static final String SQL_FIND_TRANSACTION_BY_ID = "SELECT txid,block_height,nInputs,nOutputs FROM transaction WHERE transaction_id=?";
-    private static final String SQL_QUERY_TRANSACTIONS_IN_BLOCK = "SELECT transaction_id,txid,nInputs,nOutputs FROM transaction WHERE block_height=?";
-    private static final String SQL_FIND_LAST_TRANSACTION = "SELECT transaction_id,txid,block_height,nInputs,nOutputs FROM transaction ORDER BY transaction_id DESC LIMIT 1";
+    private static final String SQL_QUERY_TXNS_NO_OUTPUTS = "SELECT transaction_id,txid,block_height,nInputs,nOutputs"
+            + " FROM `transaction` WHERE transaction_id NOT IN (SELECT transaction_id FROM `output`) ORDER BY transaction_id";
+    private static final String SQL_QUERY_TXNS_RANGE = "SELECT transaction_id,txid,block_height,nInputs,nOutputs"
+            + " FROM `transaction` WHERE transaction_id BETWEEN ? AND ?";
+    private static final String SQL_QUERY_TXNS_IN_BLOCK = "SELECT txid FROM `transaction` WHERE block_height=?";
+    private static final String SQL_COUNT_TXNS_IN_BLOCK = "SELECT count(*) FROM `transaction` WHERE block_height=?";
+    private static final String SQL_FIND_TRANSACTION_BY_TXID = "SELECT transaction_id,block_height,nInputs,nOutputs FROM `transaction` WHERE txid=? LIMIT 1";
+    private static final String SQL_FIND_TRANSACTION_ID_BY_TXID = "SELECT transaction_id FROM `transaction` WHERE txid=? LIMIT 1";
+    private static final String SQL_FIND_TRANSACTION_BY_ID = "SELECT txid,block_height,nInputs,nOutputs FROM `transaction` WHERE transaction_id=? LIMIT 1";
+    private static final String SQL_QUERY_TRANSACTIONS_IN_BLOCK = "SELECT transaction_id,txid,nInputs,nOutputs FROM `transaction` WHERE block_height=?";
+    private static final String SQL_FIND_LAST_TRANSACTION = "SELECT transaction_id,txid,block_height,nInputs,nOutputs FROM `transaction` ORDER BY transaction_id DESC LIMIT 1";
     private static final String SQL_QUERY_SPENDING_TRANSACTIONS_BY_ADDRESS
             = "SELECT I.transaction_id FROM input I"
             + " INNER JOIN output O ON O.transaction_id=I.in_transaction_id AND O.pos=I.in_pos"

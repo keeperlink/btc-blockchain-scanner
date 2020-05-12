@@ -16,6 +16,13 @@
 package com.sliva.btc.scanner.src;
 
 import com.sliva.btc.scanner.util.BJBlockHandler;
+import com.sliva.btc.scanner.util.LazyInitializer;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Optional;
+import java.util.Set;
+import lombok.Getter;
+import lombok.NonNull;
 import lombok.ToString;
 import org.bitcoinj.core.Address;
 import org.bitcoinj.core.ECKey;
@@ -31,39 +38,42 @@ import org.bitcoinj.script.ScriptOpCodes;
 @ToString
 public class BJOutput<A extends BJAddress> implements SrcOutput<BJAddress> {
 
-    private final TransactionOutput to;
+    @Getter
+    private final short pos;
+    @Getter
+    private final long value;
+    private final LazyInitializer<Optional<BJAddress>> bjAddress;
 
     public BJOutput(TransactionOutput to) {
-        this.to = to;
+        this.pos = (short) to.getIndex();
+        this.value = to.getValue().longValue();
+        bjAddress = new LazyInitializer<>(() -> _getAddress(to));
     }
 
+    @NonNull
     @Override
-    public short getPos() {
-        return (short) to.getIndex();
+    public Optional<BJAddress> getAddress() {
+        return bjAddress.get();
     }
 
-    @Override
+    @NonNull
     @SuppressWarnings("UseSpecificCatch")
-    public BJAddress getAddress() {
+    private Optional<BJAddress> _getAddress(TransactionOutput to) {
         Address adr;
         try {
             adr = to.getScriptPubKey().getToAddress(BJBlockHandler.getNetworkParams(), true);
         } catch (Exception e) {
             try {
-                if (to.getScriptPubKey().getChunks().get(0).opcode == ScriptOpCodes.OP_RETURN) {
-                    adr = null;
+                if (noAddressScriptOpCodes.contains(to.getScriptPubKey().getChunks().get(0).opcode)) {
+                    return Optional.empty();
                 } else {
                     adr = LegacyAddress.fromKey(BJBlockHandler.getNetworkParams(), ECKey.fromPublicOnly(to.getScriptPubKey().getChunks().get(1).data));
                 }
             } catch (Exception e2) {
-                adr = null;
+                return Optional.empty();
             }
         }
-        return adr == null ? null : new BJAddress(adr);
+        return Optional.of(new BJAddress(adr));
     }
-
-    @Override
-    public long getValue() {
-        return to.getValue().longValue();
-    }
+    private static final Set<Integer> noAddressScriptOpCodes = new HashSet<>(Arrays.asList(ScriptOpCodes.OP_RETURN, ScriptOpCodes.OP_DUP));
 }

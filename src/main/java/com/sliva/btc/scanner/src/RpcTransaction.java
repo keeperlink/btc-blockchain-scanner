@@ -20,16 +20,13 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.sliva.btc.scanner.rpc.RpcClient;
 import com.sliva.btc.scanner.util.LazyInitializer;
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import lombok.NonNull;
-import lombok.SneakyThrows;
 import lombok.ToString;
-import org.apache.commons.lang3.concurrent.ConcurrentException;
 import org.bitcoinj.core.Transaction;
 import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient;
 import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient.RawTransaction;
@@ -45,7 +42,6 @@ import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient.RawTransaction.In;
 public class RpcTransaction<I extends RpcInput, O extends RpcOutput<RpcAddress>> implements SrcTransaction<RpcInput, RpcOutput<RpcAddress>> {
 
     public static final String TRANSACTION_ZERO_ID = "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b";
-    private static final Collection<RpcInput> EMPTY_LIST = new ArrayList<>(0);
 
     private final String txid;
     private Transaction tran;
@@ -76,16 +72,16 @@ public class RpcTransaction<I extends RpcInput, O extends RpcOutput<RpcAddress>>
     public Collection<RpcInput> getInputs() {
         if (TRANSACTION_ZERO_ID.equalsIgnoreCase(txid)) {
             //Bitcoin Core RPC does not return first transaction - generate it here
-            return EMPTY_LIST;
+            return Collections.emptyList();
         }
         if (tran != null) {
             if (tran.isCoinBase()) {
-                return EMPTY_LIST;
+                return Collections.emptyList();
             }
         } else {
             List<In> ins = getRawTransaction().vIn();
             if (ins == null || ins.isEmpty() || ins.get(0).txid() == null) {
-                return EMPTY_LIST;
+                return Collections.emptyList();
             }
         }
         final AtomicInteger pos = new AtomicInteger(0);
@@ -111,7 +107,6 @@ public class RpcTransaction<I extends RpcInput, O extends RpcOutput<RpcAddress>>
     }
 
     @NonNull
-    @SneakyThrows(ConcurrentException.class)
     private RawTransaction getRawTransaction() {
         return rawTransaction.get();
     }

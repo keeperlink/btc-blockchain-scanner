@@ -15,11 +15,13 @@
  */
 package com.sliva.btc.scanner.util;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import com.sliva.btc.scanner.src.SrcAddressType;
 import java.io.File;
 import java.io.IOException;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
+import lombok.NonNull;
 import org.apache.commons.io.FileUtils;
 import org.bitcoinj.core.Address;
 import org.bitcoinj.core.BitcoinSerializer;
@@ -46,10 +48,12 @@ public final class BJBlockHandler {
     });
     private static final ThreadLocal<BitcoinSerializer> bitcoinSerializer = ThreadLocal.withInitial(() -> new BitcoinSerializer(np.get(), false));
 
+    @NonNull
     public static NetworkParameters getNetworkParams() {
         return np.get();
     }
 
+    @NonNull
     public static Block getBlock(String blockHash) throws IOException {
         File f = new File(FULL_BLOCKS_PATH, blockHash + ".block");
         if (!f.exists()) {
@@ -62,18 +66,21 @@ public final class BJBlockHandler {
         }
     }
 
+    @NonNull
     public static Block parseBlcok(byte[] rawBlockData) {
         return bitcoinSerializer.get().makeBlock(rawBlockData);
     }
 
+    @NonNull
     public static Address getAddress(String address) {
         return Address.fromString(np.get(), address);
     }
 
+    @NonNull
     public static Address getAddress(SrcAddressType addressType, byte[] hash) {
-        if (addressType == null || hash == null) {
-            return null;
-        }
+        checkArgument(addressType != null, "Argument 'addressType' is null");
+        checkArgument(hash != null, "Argument 'hash' is null");
+        checkArgument(addressType.isReal(), "Argument 'addressType' is not a real address type: %s", addressType);
         switch (addressType) {
             case P2PKH:
                 return LegacyAddress.fromPubKeyHash(np.get(), hash);
@@ -82,7 +89,8 @@ public final class BJBlockHandler {
             case P2WPKH:
             case P2WSH:
                 return SegwitAddress.fromHash(np.get(), hash);
+            default:
+                throw new IllegalArgumentException("Unknown address type: " + addressType);
         }
-        return null;
     }
 }

@@ -15,15 +15,17 @@
  */
 package com.sliva.btc.scanner.db;
 
+import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkNotNull;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.src.SrcAddressType;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.spongycastle.util.encoders.Hex;
 
@@ -45,40 +47,35 @@ public class DbUpdateAddressOne extends DbUpdate {
     private final SrcAddressType addressType;
     private final DBPreparedStatement psAdd;
     private final DBPreparedStatement psUpdateWallet;
+    @Getter
+    @NonNull
     private final CacheData cacheData;
 
-    public DbUpdateAddressOne(DBConnectionSupplier conn, SrcAddressType addressType) throws SQLException {
+    public DbUpdateAddressOne(DBConnectionSupplier conn, SrcAddressType addressType) {
         this(conn, addressType, new CacheData());
     }
 
     public DbUpdateAddressOne(DBConnectionSupplier conn, SrcAddressType addressType, CacheData cacheData) {
-        super(conn);
+        super("address_" + checkNotNull(addressType, "Argument 'addressType' is null").name().toLowerCase(), conn);
+        checkArgument(addressType.isReal(), "Argument 'addressType' is not a real type: %s", addressType);
+        checkArgument(cacheData != null, "Argument 'cacheData' is null");
         this.addressType = addressType;
         this.psAdd = conn.prepareStatement(fixTableName(SQL_ADD));
         this.psUpdateWallet = conn.prepareStatement(fixTableName(SQL_UPDATE_WALLET));
         this.cacheData = cacheData;
     }
 
-    public CacheData getCacheData() {
-        return cacheData;
-    }
-
-    @Override
-    public String getTableName() {
-        return "address_" + addressType.name().toLowerCase();
-    }
-
     @Override
     public int getCacheFillPercent() {
-        return cacheData == null ? 0 : Math.max(cacheData.addQueue.size() * 100 / MAX_INSERT_QUEUE_LENGTH, cacheData.updateWalletQueue.size() * 100 / MAX_UPDATE_QUEUE_LENGTH);
+        return Math.max(cacheData.addQueue.size() * 100 / MAX_INSERT_QUEUE_LENGTH, cacheData.updateWalletQueue.size() * 100 / MAX_UPDATE_QUEUE_LENGTH);
     }
 
     @Override
     public boolean isExecuteNeeded() {
-        return cacheData != null && (cacheData.addQueue.size() >= MIN_BATCH_SIZE || cacheData.updateWalletQueue.size() >= MIN_BATCH_SIZE);
+        return cacheData.addQueue.size() >= MIN_BATCH_SIZE || cacheData.updateWalletQueue.size() >= MIN_BATCH_SIZE;
     }
 
-    public void add(BtcAddress addr) throws SQLException {
+    public void add(BtcAddress addr) {
         log.trace("add(): addr={}", addr);
         waitFullQueue(cacheData.addQueue, MAX_INSERT_QUEUE_LENGTH);
         synchronized (cacheData) {
@@ -94,7 +91,7 @@ public class DbUpdateAddressOne extends DbUpdate {
         }
     }
 
-    public void updateWallet(BtcAddress btcAddress) throws SQLException {
+    public void updateWallet(BtcAddress btcAddress) {
         synchronized (cacheData) {
             BtcAddress a = cacheData.addMapId.get(btcAddress.getAddressId());
             boolean updatedInQueue = false;
@@ -141,6 +138,7 @@ public class DbUpdateAddressOne extends DbUpdate {
                 (t, p) -> p.setInt(t.getWalletId()).setInt(t.getAddressId()), null);
     }
 
+    @NonNull
     private String fixTableName(String sql) {
         return sql.replaceAll(TABLE_NAME_TO_FILL, getTableName());
     }

@@ -43,7 +43,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.time.StopWatch;
@@ -57,7 +59,7 @@ public abstract class DbUpdate implements AutoCloseable {
 
     private static final Duration PRINT_STATS_PERIOD = Duration.ofSeconds(30);
     private static final int MYSQL_BULK_INSERT_BUFFER_SIZE = 256 * 1024 * 1024;
-    private static final int UPDATER_THREADS = 3;
+    private static final int UPDATER_THREADS = 4;
     private static volatile ExecuteDbUpdate executeDbUpdateThread;
     private static final Collection<DbUpdate> dbUpdateInstances = new ArrayList<>();
     private static final Set<DbUpdate> executingInstances = new HashSet<>();
@@ -68,11 +70,17 @@ public abstract class DbUpdate implements AutoCloseable {
     private static final Map<String, ExecStats> execStats = new HashMap<>();
     private static final StopWatch lastPrintedTime = StopWatch.createStarted();
     @Getter
+    @NonNull
+    private final String tableName;
+    @Getter
     private boolean isActive = true;
     protected final Object execSync = new Object();
 
     @SuppressWarnings({"LeakingThisInConstructor", "CallToThreadStartDuringObjectConstruction"})
-    public DbUpdate(DBConnectionSupplier conn) {
+    public DbUpdate(String tableName, DBConnectionSupplier conn) {
+        checkArgument(tableName != null, "Argument 'tableName' is null");
+        checkArgument(conn != null, "Argument 'conn' is null");
+        this.tableName = tableName;
         try {
             conn.get().createStatement().execute("SET bulk_insert_buffer_size=" + MYSQL_BULK_INSERT_BUFFER_SIZE);
         } catch (SQLException e) {
@@ -98,13 +106,11 @@ public abstract class DbUpdate implements AutoCloseable {
 
     @Override
     public void close() {
-        log.debug("{}.close()", this.getTableName());
+        log.debug("{}.close()", tableName);
         isActive = false;
         flushCache();
-        log.trace("{}.close() FINISHED", this.getTableName());
+        log.trace("{}.close() FINISHED", tableName);
     }
-
-    public abstract String getTableName();
 
     public abstract int getCacheFillPercent();
 
@@ -114,9 +120,12 @@ public abstract class DbUpdate implements AutoCloseable {
 
     public abstract int executeUpdates();
 
+    @SneakyThrows(InterruptedException.class)
     protected static void waitFullQueue(Collection<?> queue, int maxQueueLength) {
         while (queue.size() >= maxQueueLength) {
-            Utils.sleep(10);
+            synchronized (queue) {
+                queue.wait(100);
+            }
         }
     }
 
@@ -154,7 +163,7 @@ public abstract class DbUpdate implements AutoCloseable {
     private int executeSync() {
         int nRecs = 0;
         try {
-            log.trace("{}.executeSync(): STARTED", getTableName());
+            log.trace("{}.executeSync(): STARTED", tableName);
             long s = System.nanoTime();
             try {
                 nRecs = executeInserts();
@@ -164,10 +173,10 @@ public abstract class DbUpdate implements AutoCloseable {
             } finally {
                 long runtimeNanos = System.nanoTime() - s;
                 if (nRecs > 0) {
-                    updateRuntimeMap(getTableName(), nRecs, runtimeNanos);
+                    updateRuntimeMap(tableName, nRecs, runtimeNanos);
                     if (log.isDebugEnabled()) {
                         log.debug("{}.executeSync(): insert/update queries executed: {}. Runtime {} ms.",
-                                getTableName(), nRecs, BigDecimal.valueOf(runtimeNanos).movePointLeft(6).setScale(3, RoundingMode.HALF_DOWN));
+                                tableName, nRecs, BigDecimal.valueOf(runtimeNanos).movePointLeft(6).setScale(3, RoundingMode.HALF_DOWN));
                     }
                 }
             }
@@ -182,12 +191,12 @@ public abstract class DbUpdate implements AutoCloseable {
     private void executeAsync() {
         for (;;) {
             try {
-                log.trace("{}.executeAsync(): Submitting ", getTableName());
+                log.trace("{}.executeAsync(): Submitting ", tableName);
                 synchronized (executingInstances) {
                     executor.submit(this::executeSync);
                     executingInstances.add(this);
                 }
-                log.trace("{}.executeAsync(): Submitted ", getTableName());
+                log.trace("{}.executeAsync(): Submitted ", tableName);
                 break;
             } catch (RejectedExecutionException e) {
                 log.trace("Err: {}: {}", e.getClass(), e.getMessage());

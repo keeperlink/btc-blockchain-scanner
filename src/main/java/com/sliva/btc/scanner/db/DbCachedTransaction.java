@@ -17,6 +17,7 @@ package com.sliva.btc.scanner.db;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import com.sliva.btc.scanner.db.model.BtcTransaction;
+import static com.sliva.btc.scanner.util.Utils.optionalBuilder;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -37,6 +38,8 @@ public class DbCachedTransaction implements AutoCloseable {
     private static final int MAX_CACHE_SIZE = 50000;
     private final DbUpdateTransaction updateTransaction;
     private final DbQueryTransaction queryTransaction;
+    @Getter
+    @NonNull
     private final CacheData cacheData;
 
     public DbCachedTransaction(DBConnectionSupplier conn) {
@@ -49,11 +52,6 @@ public class DbCachedTransaction implements AutoCloseable {
         updateTransaction = new DbUpdateTransaction(conn, cacheData.updateCachedData);
         queryTransaction = new DbQueryTransaction(conn);
         this.cacheData = cacheData;
-    }
-
-    @NonNull
-    public CacheData getCacheData() {
-        return cacheData;
     }
 
     @NonNull
@@ -95,16 +93,38 @@ public class DbCachedTransaction implements AutoCloseable {
         return result;
     }
 
+    /**
+     * Retrieve BtcTransaction object from cache or DB by txid value.
+     *
+     * @param txid TXID value
+     * @return Optional of BtcTransaction object
+     */
     @NonNull
     public Optional<BtcTransaction> getTransaction(String txid) {
         checkArgument(txid != null, "Argument 'txid' is null");
-        Optional<BtcTransaction> result = Optional.ofNullable(cacheData.cacheMap.get(txid));
-        if (!result.isPresent()) {
-            result = Optional.ofNullable(updateTransaction.getCacheData().getAddMap().get(txid));
-        }
-        if (!result.isPresent()) {
-            result = queryTransaction.findTransaction(txid);
-        }
+        Optional<BtcTransaction> result = optionalBuilder(
+                cacheData.cacheMap.get(txid),
+                () -> updateTransaction.getCacheData().getAddMap().get(txid),
+                () -> queryTransaction.findTransaction(txid));
+        result.ifPresent(this::updateCache);
+        return result;
+    }
+
+    /**
+     * Retrieve BtcTransaction object from cache or DB by txid value. The
+     * difference from getTransaction(txid) is that this method returns
+     * BtcTransaction with only transaction_id and txid set.
+     *
+     * @param txid TXID value
+     * @return Optional of BtcTransaction object
+     */
+    @NonNull
+    public Optional<BtcTransaction> getTransactionSimple(String txid) {
+        checkArgument(txid != null, "Argument 'txid' is null");
+        Optional<BtcTransaction> result = optionalBuilder(
+                cacheData.cacheMap.get(txid),
+                () -> updateTransaction.getCacheData().getAddMap().get(txid),
+                () -> queryTransaction.findTransactionId(txid).map(id -> BtcTransaction.builder().transactionId(id).txid(txid).build()));
         result.ifPresent(this::updateCache);
         return result;
     }

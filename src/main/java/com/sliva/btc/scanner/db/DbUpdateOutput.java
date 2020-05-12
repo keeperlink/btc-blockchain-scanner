@@ -15,9 +15,9 @@
  */
 package com.sliva.btc.scanner.db;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import com.sliva.btc.scanner.db.model.InOutKey;
 import com.sliva.btc.scanner.db.model.TxOutput;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -25,6 +25,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -35,8 +36,8 @@ import lombok.extern.slf4j.Slf4j;
 public class DbUpdateOutput extends DbUpdate {
 
     private static int MIN_BATCH_SIZE = 1;
-    private static int MAX_BATCH_SIZE = 40000;
-    private static int MAX_INSERT_QUEUE_LENGTH = 20000;
+    private static int MAX_BATCH_SIZE = 20000;
+    private static int MAX_INSERT_QUEUE_LENGTH = 50000;
     private static int MAX_UPDATE_QUEUE_LENGTH = 100000;
     private static final String TABLE_NAME = "output";
     private static final String SQL_ADD = "INSERT INTO output(transaction_id,pos,address_id,amount,spent)VALUES(?,?,?,?,?)";
@@ -49,6 +50,8 @@ public class DbUpdateOutput extends DbUpdate {
     private final DBPreparedStatement psUpdateSpent;
     private final DBPreparedStatement psUpdateAddress;
     private final DBPreparedStatement psUpdateAmount;
+    @Getter
+    @NonNull
     private final CacheData cacheData;
 
     public DbUpdateOutput(DBConnectionSupplier conn) {
@@ -56,7 +59,8 @@ public class DbUpdateOutput extends DbUpdate {
     }
 
     public DbUpdateOutput(DBConnectionSupplier conn, CacheData cacheData) {
-        super(conn);
+        super(TABLE_NAME, conn);
+        checkArgument(cacheData != null, "Argument 'cacheData' is null");
         this.psAdd = conn.prepareStatement(SQL_ADD);
         this.psDelete = conn.prepareStatement(SQL_DELETE);
         this.psUpdateSpent = conn.prepareStatement(SQL_UPDATE_SPENT);
@@ -65,18 +69,9 @@ public class DbUpdateOutput extends DbUpdate {
         this.cacheData = cacheData;
     }
 
-    public CacheData getCacheData() {
-        return cacheData;
-    }
-
-    @Override
-    public String getTableName() {
-        return TABLE_NAME;
-    }
-
     @Override
     public int getCacheFillPercent() {
-        return cacheData == null ? 0 : Math.max(cacheData.addQueue.size() * 100 / MAX_INSERT_QUEUE_LENGTH,
+        return Math.max(cacheData.addQueue.size() * 100 / MAX_INSERT_QUEUE_LENGTH,
                 Math.max(cacheData.queueUpdateAddress.size() * 100 / MAX_UPDATE_QUEUE_LENGTH,
                         Math.max(cacheData.queueUpdateAmount.size() * 100 / MAX_UPDATE_QUEUE_LENGTH,
                                 cacheData.queueUpdateSpent.size() * 100 / MAX_UPDATE_QUEUE_LENGTH)));
@@ -84,7 +79,8 @@ public class DbUpdateOutput extends DbUpdate {
 
     @Override
     public boolean isExecuteNeeded() {
-        return cacheData != null && (cacheData.addQueue.size() >= MIN_BATCH_SIZE || cacheData.queueUpdateAddress.size() >= MIN_BATCH_SIZE || cacheData.queueUpdateAmount.size() >= MIN_BATCH_SIZE || cacheData.queueUpdateSpent.size() >= MIN_BATCH_SIZE);
+        return cacheData.addQueue.size() >= MIN_BATCH_SIZE || cacheData.queueUpdateAddress.size() >= MIN_BATCH_SIZE
+                || cacheData.queueUpdateAmount.size() >= MIN_BATCH_SIZE || cacheData.queueUpdateSpent.size() >= MIN_BATCH_SIZE;
     }
 
     public void add(TxOutput txOutput) {
@@ -97,7 +93,7 @@ public class DbUpdateOutput extends DbUpdate {
         }
     }
 
-    public void delete(TxOutput txOutput) throws SQLException {
+    public void delete(TxOutput txOutput) {
         log.trace("delete(txOutput:{})", txOutput);
         synchronized (cacheData) {
             psDelete.setParameters(p -> p.setInt(txOutput.getTransactionId()).setInt(txOutput.getPos())).execute();
@@ -141,7 +137,7 @@ public class DbUpdateOutput extends DbUpdate {
         }
     }
 
-    public void updateAddress(int transactionId, short pos, int addressId) throws SQLException {
+    public void updateAddress(int transactionId, short pos, int addressId) {
         log.trace("updateAddress(transactionId:{},pos:{},addressId:{})", transactionId, pos, addressId);
         synchronized (cacheData) {
             InOutKey pk = new InOutKey(transactionId, pos);
@@ -169,7 +165,7 @@ public class DbUpdateOutput extends DbUpdate {
         }
     }
 
-    public void updateAmount(int transactionId, short pos, long amount) throws SQLException {
+    public void updateAmount(int transactionId, short pos, long amount) {
         log.trace("updateAmount(transactionId:{},pos:{},amount:{})", transactionId, pos, amount);
         synchronized (cacheData) {
             InOutKey pk = new InOutKey(transactionId, pos);

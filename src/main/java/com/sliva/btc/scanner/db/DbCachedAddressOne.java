@@ -15,6 +15,7 @@
  */
 package com.sliva.btc.scanner.db;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.src.SrcAddressType;
 import java.sql.SQLException;
@@ -40,6 +41,8 @@ public class DbCachedAddressOne implements AutoCloseable {
     private final SrcAddressType addressType;
     private final DbUpdateAddressOne updateAddress;
     private final DbQueryAddress queryAddress;
+    @Getter
+    @NonNull
     private final CacheData cacheData;
 
     public DbCachedAddressOne(DBConnectionSupplier conn, SrcAddressType addressType) {
@@ -47,15 +50,13 @@ public class DbCachedAddressOne implements AutoCloseable {
     }
 
     public DbCachedAddressOne(DBConnectionSupplier conn, SrcAddressType addressType, CacheData cacheData) {
+        checkArgument(addressType != null, "Argument 'addressType' is null");
+        checkArgument(addressType.isReal(), "Argument 'addressType' is not a real type: %s", addressType);
+        checkArgument(cacheData != null, "Argument 'cacheData' is null");
         this.addressType = addressType;
         updateAddress = new DbUpdateAddressOne(conn, addressType, cacheData.updateCachedData);
         queryAddress = new DbQueryAddress(conn, addressType);
         this.cacheData = cacheData;
-    }
-
-    @NonNull
-    public CacheData getCacheData() {
-        return cacheData;
     }
 
     public int getOrAdd(byte[] address, boolean updateCache) throws SQLException {

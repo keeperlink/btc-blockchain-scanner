@@ -466,56 +466,15 @@ public class RunUpdateWallets {
                 return w;
             }
         }
-        return addWallet.add(null).getWalletId();
+        return addWallet.add().getWalletId();
     }
 
     private boolean isWalletUsed(int walletId) throws SQLException {
         return psQueryAllAddressesByWallet.setParameters(p -> p.setInt(walletId).setInt(walletId).setInt(walletId).setInt(walletId)).setMaxRows(1).querySingleRow(rs -> true).orElse(false);
     }
-//
-//    private void printMergeDetails(int walletId1, int walletId2) {
-//        if (log.isDebugEnabled()) {
-//            try {
-//                printWalletAddresses(walletId1);
-//                printWalletAddresses(walletId2);
-//                psQueryMergeTransaction.get().setInt(1, walletId1);
-//                psQueryMergeTransaction.get().setInt(2, walletId2);
-//                try (ResultSet rs = psQueryMergeTransaction.get().executeQuery()) {
-//                    while (rs.next()) {
-//                        BtcAddress adr1 = BtcAddress.builder().addressId(rs.getInt(1)).address(rs.getBytes(2)).walletId(walletId1).build();
-//                        BtcAddress adr2 = BtcAddress.builder().addressId(rs.getInt(3)).address(rs.getBytes(4)).walletId(walletId2).build();
-//                        String txid = Hex.encodeHexString(rs.getBytes(5));
-//                        log.debug("[{},{}]: Addresses {} and {} merged in transaction {}", walletId1, walletId2, adr1.getBjAddress(), adr2.getBjAddress(), txid);
-//                    }
-//                }
-//            } catch (SQLException e) {
-//                log.error("walletId1=" + walletId1 + ", walletId2=" + walletId2, e);
-//            }
-//        }
-//    }
-//
-//    private void printWalletAddresses(int walletId) throws SQLException {
-//        if (log.isTraceEnabled()) {
-//            log.trace("Wallet#{} addresses: ", walletId);
-//            psQueryAddressesByWallet.get().setInt(1, walletId);
-//            psQueryAddressesByWallet.get().setInt(2, walletId);
-//            psQueryAddressesByWallet.get().setInt(3, walletId);
-//            psQueryAddressesByWallet.get().setInt(4, walletId);
-//            try (ResultSet rs = psQueryAddressesByWallet.get().executeQuery()) {
-//                while (rs.next()) {
-//                    BtcAddress adr = BtcAddress.builder().addressId(rs.getInt(1)).address(rs.getBytes(2)).walletId(walletId).build();
-//                    log.trace("{}, id={}", adr.getBjAddress(), adr.getAddressId());
-//                }
-//            }
-//        }
-//    }
 
     private String getTableName(SrcAddressType addressType) {
         return "address_" + addressType.name().toLowerCase();
-    }
-
-    private String getTableName() {
-        return getTableName(addressType);
     }
 
     private String fixTableName(String sql, SrcAddressType addressType) {

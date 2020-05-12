@@ -20,8 +20,8 @@ import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import com.sliva.btc.scanner.db.DbQueryOutput;
 import com.sliva.btc.scanner.db.DbQueryOutput.OutputAddressWallet;
 import com.sliva.btc.scanner.db.model.InOutKey;
-import com.sliva.btc.scanner.neo4j.NeoQueries;
 import com.sliva.btc.scanner.neo4j.NeoConnection;
+import com.sliva.btc.scanner.neo4j.NeoQueries;
 import com.sliva.btc.scanner.neo4j.NeoQueries.OutputWithWallet;
 import com.sliva.btc.scanner.src.SrcAddressType;
 import com.sliva.btc.scanner.util.Utils;
@@ -180,13 +180,8 @@ public class RunNeoUpdateWallets {
             final int from = i, to = i + batchSize;
             Future<Collection<OutputAddressWallet>> sqlProc = exec.submit(() -> {
                 final Collection<OutputAddressWallet> fromSQL = new ArrayList<>();
-                Stream.of(SrcAddressType.values()).filter(SrcAddressType::isReal).forEach(t -> {
-                    try {
-                        fromSQL.addAll(queryOutput.queryOutputsInTxnRange(from, to - 1, t));
-                    } catch (SQLException e) {
-                        throw new RuntimeException(e);
-                    }
-                });
+                Stream.of(SrcAddressType.values()).filter(SrcAddressType::isReal)
+                        .forEach(t -> fromSQL.addAll(queryOutput.queryOutputsInTxnRange(from, to - 1, t)));
                 return fromSQL;
             });
             Future<Collection<OutputWithWallet>> neoProc = exec.submit(() -> {

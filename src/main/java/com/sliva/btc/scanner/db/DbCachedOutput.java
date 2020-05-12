@@ -15,9 +15,9 @@
  */
 package com.sliva.btc.scanner.db;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import com.sliva.btc.scanner.db.model.InOutKey;
 import com.sliva.btc.scanner.db.model.TxOutput;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -27,7 +27,6 @@ import java.util.Optional;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.NonNull;
-import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -40,6 +39,8 @@ public class DbCachedOutput implements AutoCloseable {
     private static final int MAX_CACHE_SIZE = 200000;
     private final DbUpdateOutput updateOutput;
     private final DbQueryOutput queryOutput;
+    @Getter
+    @NonNull
     private final CacheData cacheData;
 
     public DbCachedOutput(DBConnectionSupplier conn) {
@@ -47,25 +48,22 @@ public class DbCachedOutput implements AutoCloseable {
     }
 
     public DbCachedOutput(DBConnectionSupplier conn, CacheData cacheData) {
+        checkArgument(cacheData != null, "Argument 'cacheData' is null");
         updateOutput = new DbUpdateOutput(conn, cacheData.updateCachedData);
         queryOutput = new DbQueryOutput(conn);
         this.cacheData = cacheData;
     }
 
-    @NonNull
-    public CacheData getCacheData() {
-        return cacheData;
-    }
-
     public void add(TxOutput txOutput) {
+        checkArgument(txOutput != null, "Argument 'txOutput' is null");
         synchronized (cacheData) {
             updateOutput.add(txOutput);
             updateCache(txOutput);
         }
     }
 
-    @SneakyThrows(SQLException.class)
     public void delete(TxOutput txOutput) {
+        checkArgument(txOutput != null, "Argument 'txOutput' is null");
         synchronized (cacheData) {
             updateOutput.delete(txOutput);
             OutputsList ol = cacheData.cacheMap.get(txOutput.getTransactionId());
@@ -91,7 +89,6 @@ public class DbCachedOutput implements AutoCloseable {
         }
     }
 
-    @SneakyThrows(SQLException.class)
     public void updateAddress(int transactionId, short pos, int addressId) {
         synchronized (cacheData) {
             updateOutput.updateAddress(transactionId, pos, addressId);
@@ -105,7 +102,6 @@ public class DbCachedOutput implements AutoCloseable {
         }
     }
 
-    @SneakyThrows(SQLException.class)
     public void updateAmount(int transactionId, short pos, long amount) {
         synchronized (cacheData) {
             updateOutput.updateAmount(transactionId, pos, amount);
@@ -120,7 +116,6 @@ public class DbCachedOutput implements AutoCloseable {
     }
 
     @NonNull
-    @SneakyThrows(SQLException.class)
     public List<TxOutput> getOutputs(int transactionId) {
         OutputsList ol = cacheData.cacheMap.get(transactionId);
         if (ol != null && ol.isComplete()) {
@@ -144,7 +139,6 @@ public class DbCachedOutput implements AutoCloseable {
     }
 
     @NonNull
-    @SneakyThrows(SQLException.class)
     public Optional<TxOutput> getOutput(int transactionId, short pos) {
         Optional<OutputsList> ol = Optional.ofNullable(cacheData.cacheMap.get(transactionId));
         Optional<TxOutput> result = ol.map(o -> o.find(pos));
@@ -181,6 +175,7 @@ public class DbCachedOutput implements AutoCloseable {
     }
 
     private void updateCache(TxOutput txOutput) {
+        checkArgument(txOutput != null, "Argument 'txOutput' is null");
         synchronized (cacheData) {
             int transactionId = txOutput.getTransactionId();
             OutputsList outList = cacheData.cacheMap.get(transactionId);
@@ -198,6 +193,7 @@ public class DbCachedOutput implements AutoCloseable {
     }
 
     private void updateCache(List<TxOutput> lt) {
+        checkArgument(lt != null, "Argument 'lt' is null");
         synchronized (cacheData) {
             if (!lt.isEmpty()) {
                 int transactionId = lt.get(0).getTransactionId();

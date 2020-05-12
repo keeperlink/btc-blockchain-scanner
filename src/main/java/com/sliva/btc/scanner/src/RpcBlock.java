@@ -76,6 +76,6 @@ public class RpcBlock<T extends RpcTransaction<RpcInput, RpcOutput<RpcAddress>>>
 
     @Override
     public Collection<RpcTransaction<RpcInput, RpcOutput<RpcAddress>>> getTransactions() {
-        return Optional.ofNullable(block.getTransactions()).map(tx -> tx.stream().map(t -> new RpcTransaction<>(t)).collect(Collectors.toList())).orElse(Collections.EMPTY_LIST);
+        return Optional.ofNullable(block.getTransactions()).map(tx -> tx.stream().map(t -> new RpcTransaction<>(t)).collect(Collectors.toList())).orElse(Collections.emptyList());
     }
 }

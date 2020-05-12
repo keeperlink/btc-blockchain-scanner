@@ -15,6 +15,7 @@
  */
 package com.sliva.btc.scanner.db;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.sliva.btc.scanner.db.DbUpdate.waitFullQueue;
 import com.sliva.btc.scanner.db.model.InOutKey;
 import com.sliva.btc.scanner.db.model.TxInput;
@@ -26,6 +27,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -36,9 +38,9 @@ import lombok.extern.slf4j.Slf4j;
 public class DbUpdateInput extends DbUpdate {
 
     private static int MIN_BATCH_SIZE = 1;
-    private static int MAX_BATCH_SIZE = 40000;
-    private static int MAX_INSERT_QUEUE_LENGTH = 10000;
-    private static int MAX_UPDATE_QUEUE_LENGTH = 5000;
+    private static int MAX_BATCH_SIZE = 20000;
+    private static int MAX_INSERT_QUEUE_LENGTH = 50000;
+    private static int MAX_UPDATE_QUEUE_LENGTH = 10000;
     private static final String TABLE_NAME = "input";
     private static final String SQL_ADD = "INSERT INTO input(transaction_id,pos,in_transaction_id,in_pos)VALUES(?,?,?,?)";
     private static final String SQL_DELETE = "DELETE FROM input WHERE transaction_id=? AND pos=?";
@@ -46,6 +48,8 @@ public class DbUpdateInput extends DbUpdate {
     private final DBPreparedStatement psAdd;
     private final DBPreparedStatement psDelete;
     private final DBPreparedStatement psUpdate;
+    @Getter
+    @NonNull
     private final CacheData cacheData;
 
     public DbUpdateInput(DBConnectionSupplier conn) {
@@ -53,30 +57,22 @@ public class DbUpdateInput extends DbUpdate {
     }
 
     public DbUpdateInput(DBConnectionSupplier conn, CacheData cacheData) {
-        super(conn);
+        super(TABLE_NAME, conn);
+        checkArgument(cacheData != null, "Argument 'cacheData' is null");
         this.psAdd = conn.prepareStatement(SQL_ADD);
         this.psDelete = conn.prepareStatement(SQL_DELETE);
         this.psUpdate = conn.prepareStatement(SQL_UPDATE);
         this.cacheData = cacheData;
     }
 
-    public CacheData getCacheData() {
-        return cacheData;
-    }
-
-    @Override
-    public String getTableName() {
-        return TABLE_NAME;
-    }
-
     @Override
     public int getCacheFillPercent() {
-        return cacheData == null ? 0 : Math.max(cacheData.addQueue.size() * 100 / MAX_INSERT_QUEUE_LENGTH, cacheData.queueUpdate.size() * 100 / MAX_UPDATE_QUEUE_LENGTH);
+        return Math.max(cacheData.addQueue.size() * 100 / MAX_INSERT_QUEUE_LENGTH, cacheData.queueUpdate.size() * 100 / MAX_UPDATE_QUEUE_LENGTH);
     }
 
     @Override
     public boolean isExecuteNeeded() {
-        return cacheData != null && (cacheData.addQueue.size() >= MIN_BATCH_SIZE || cacheData.queueUpdate.size() >= MIN_BATCH_SIZE);
+        return cacheData.addQueue.size() >= MIN_BATCH_SIZE || cacheData.queueUpdate.size() >= MIN_BATCH_SIZE;
     }
 
     public void add(TxInput txInput) throws SQLException {
