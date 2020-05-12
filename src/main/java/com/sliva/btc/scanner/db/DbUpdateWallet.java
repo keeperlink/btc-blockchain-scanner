@@ -30,27 +30,27 @@ import lombok.extern.slf4j.Slf4j;
  * @author Sliva Co
  */
 @Slf4j
-public class DbAddWallet extends DbUpdate {
+public class DbUpdateWallet extends DbUpdate {
 
     private static int MIN_BATCH_SIZE = 1;
     private static int MAX_BATCH_SIZE = 5000;
     private static int MAX_INSERT_QUEUE_LENGTH = 2000;
     private static final String TABLE_NAME = "wallet";
-    private static final String SQL = "INSERT INTO wallet(wallet_id,name,details)VALUES(?,?,?)";
+    private static final String SQL_ADD = "INSERT INTO wallet(wallet_id,name,details)VALUES(?,?,?)";
     private final DBPreparedStatement psAdd;
     @Getter
     @NonNull
     private final CacheData cacheData;
     private final DbQueryWallet dbQueryWallet;
 
-    public DbAddWallet(DBConnectionSupplier conn) {
+    public DbUpdateWallet(DBConnectionSupplier conn) {
         this(conn, new CacheData());
     }
 
-    public DbAddWallet(DBConnectionSupplier conn, CacheData cacheData) {
+    public DbUpdateWallet(DBConnectionSupplier conn, CacheData cacheData) {
         super(TABLE_NAME, conn);
         checkArgument(cacheData != null, "Argument 'cacheData' is null");
-        this.psAdd = conn.prepareStatement(SQL);
+        this.psAdd = conn.prepareStatement(SQL_ADD);
         this.cacheData = cacheData;
         this.dbQueryWallet = new DbQueryWallet(conn);
     }

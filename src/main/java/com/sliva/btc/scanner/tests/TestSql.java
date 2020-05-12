@@ -17,7 +17,7 @@ package com.sliva.btc.scanner.tests;
 
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import com.sliva.btc.scanner.db.DBPreparedStatement;
-import com.sliva.btc.scanner.db.DbAddBlock;
+import com.sliva.btc.scanner.db.DbUpdateBlock;
 import com.sliva.btc.scanner.db.model.BtcBlock;
 import com.sliva.btc.scanner.util.Utils;
 import java.sql.Connection;
@@ -41,7 +41,7 @@ public class TestSql {
     public static void main(String[] args) throws Exception {
         makeJDBCConnection();
         long s = System.currentTimeMillis();
-        try (DbAddBlock addBlock = new DbAddBlock(conn)) {
+        try (DbUpdateBlock addBlock = new DbUpdateBlock(conn)) {
             for (int i = 0; i < 10000; i++) {
                 addBlock.add(BtcBlock.builder().height(i).hash("000000000000000000119bbdfa591d9a3e932c2e0a8168eecc9fc1e0c8e11d1d").txnCount(1).build());
             }

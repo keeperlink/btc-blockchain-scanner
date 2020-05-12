@@ -29,7 +29,7 @@ import lombok.extern.slf4j.Slf4j;
  * @author Sliva Co
  */
 @Slf4j
-public class DbAddBlock extends DbUpdate {
+public class DbUpdateBlock extends DbUpdate {
 
     private static int MIN_BATCH_SIZE = 1;
     private static int MAX_BATCH_SIZE = 10000;
@@ -41,11 +41,11 @@ public class DbAddBlock extends DbUpdate {
     @NonNull
     private final CacheData cacheData;
 
-    public DbAddBlock(DBConnectionSupplier conn) {
+    public DbUpdateBlock(DBConnectionSupplier conn) {
         this(conn, new CacheData());
     }
 
-    public DbAddBlock(DBConnectionSupplier conn, CacheData cacheData) {
+    public DbUpdateBlock(DBConnectionSupplier conn, CacheData cacheData) {
         super(TABLE_NAME, conn);
         checkArgument(cacheData != null, "Argument 'cacheData' is null");
         this.psAdd = conn.prepareStatement(SQL_ADD);

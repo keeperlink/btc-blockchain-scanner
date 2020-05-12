@@ -19,7 +19,7 @@ import com.sliva.btc.scanner.Main;
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import com.sliva.btc.scanner.db.DBPreparedStatement;
 import com.sliva.btc.scanner.db.DBUtils;
-import com.sliva.btc.scanner.db.DbAddWallet;
+import com.sliva.btc.scanner.db.DbUpdateWallet;
 import com.sliva.btc.scanner.db.DbUpdateAddress;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.db.model.BtcWallet;
@@ -249,7 +249,7 @@ public class RunUpdateWallets {
 
         fixWalletsByTransactions(0_000_000, 8_000_000);
 
-        try (DbAddWallet addWallet = new DbAddWallet(dbCon);
+        try (DbUpdateWallet addWallet = new DbUpdateWallet(dbCon);
                 DbUpdateAddress updateAddress = new DbUpdateAddress(dbCon)) {
 
             psQueryMissingWalletRecords.executeQuery(rs
@@ -291,7 +291,7 @@ public class RunUpdateWallets {
         }
     }
 
-    private void processAddress(int addressId, DbAddWallet addWallet, DbUpdateAddress updateAddress) throws SQLException, InterruptedException {
+    private void processAddress(int addressId, DbUpdateWallet addWallet, DbUpdateAddress updateAddress) throws SQLException, InterruptedException {
         Set<Integer> relatedWallets = new HashSet<>();
         IntCollection zeroWalletAddresses = new IntCollection(10000);
         AtomicInteger counter = new AtomicInteger();
@@ -458,7 +458,7 @@ public class RunUpdateWallets {
         return processWallet(minWalletId, wList);
     }
 
-    private int getNextWalletId(DbAddWallet addWallet) throws SQLException {
+    private int getNextWalletId(DbUpdateWallet addWallet) throws SQLException {
         synchronized (unusedWallets) {
             if (!unusedWallets.isEmpty()) {
                 Integer w = unusedWallets.iterator().next();

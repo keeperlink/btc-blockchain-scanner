@@ -20,7 +20,7 @@ import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
-import com.sliva.btc.scanner.db.DbAddBlock;
+import com.sliva.btc.scanner.db.DbUpdateBlock;
 import com.sliva.btc.scanner.db.DbCachedAddress;
 import com.sliva.btc.scanner.db.DbCachedOutput;
 import com.sliva.btc.scanner.db.DbCachedTransaction;
@@ -195,7 +195,7 @@ public class RunFullScan {
 
     public void runProcess() throws Exception {
         log.info("Execution STARTED");
-        try (DbAddBlock addBlock = new DbAddBlock(dbCon);
+        try (DbUpdateBlock addBlock = new DbUpdateBlock(dbCon);
                 DbUpdateInput updateInput = new DbUpdateInput(dbCon);
                 DbUpdateInputSpecial updateInputSpecial = new DbUpdateInputSpecial(dbCon);
                 DbCachedTransaction cachedTxn = new DbCachedTransaction(dbCon);
@@ -524,7 +524,7 @@ public class RunFullScan {
     @AllArgsConstructor
     private static class DbAccess {
 
-        private final DbAddBlock addBlock;
+        private final DbUpdateBlock addBlock;
         private final DbUpdateInput updateInput;
         private final DbUpdateInputSpecial updateInputSpecial;
         private final DbCachedTransaction cachedTxn;

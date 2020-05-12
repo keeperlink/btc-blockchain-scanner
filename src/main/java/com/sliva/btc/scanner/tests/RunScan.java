@@ -16,7 +16,7 @@
 package com.sliva.btc.scanner.tests;
 
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
-import com.sliva.btc.scanner.db.DbAddBlock;
+import com.sliva.btc.scanner.db.DbUpdateBlock;
 import com.sliva.btc.scanner.db.DbQueryBlock;
 import com.sliva.btc.scanner.db.DbQueryTransaction;
 import com.sliva.btc.scanner.db.DbUpdateTransaction;
@@ -75,7 +75,7 @@ public class RunScan {
     @SuppressWarnings("CallToPrintStackTrace")
     private static void updateDb(int nThreads, int firstBlock, int numBlocks) throws SQLException {
         ParallelGetBlock parallelGetBlock = new ParallelGetBlock(nThreads, firstBlock, numBlocks);
-        try (DbAddBlock addBlock = new DbAddBlock(conn);
+        try (DbUpdateBlock addBlock = new DbUpdateBlock(conn);
                 DbUpdateTransaction addTxn = new DbUpdateTransaction(conn)) {
             for (int i = 0; i < Math.abs(numBlocks); i++) {
                 long s = System.currentTimeMillis();
@@ -95,7 +95,7 @@ public class RunScan {
         }
     }
 
-    private static void saveBlock(Block block, DbAddBlock addBlock, DbUpdateTransaction addTxn) throws SQLException {
+    private static void saveBlock(Block block, DbUpdateBlock addBlock, DbUpdateTransaction addTxn) throws SQLException {
 //        log.info("block.hash=" + block.hash());
 //        log.info("block.nTXNs=" + block.tx().size());
         List<String> txnsInDb = null;
