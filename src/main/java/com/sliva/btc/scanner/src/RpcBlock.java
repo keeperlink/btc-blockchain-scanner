@@ -17,6 +17,7 @@ package com.sliva.btc.scanner.src;
 
 import com.sliva.btc.scanner.rpc.RpcClientDirect;
 import com.sliva.btc.scanner.util.BJBlockHandler;
+import com.sliva.btc.scanner.util.LazyInitializer;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.Collections;
@@ -29,17 +30,20 @@ import org.spongycastle.util.encoders.Hex;
 /**
  *
  * @author Sliva Co
+ * @param <T>
  */
 @ToString
 public class RpcBlock<T extends RpcTransaction<RpcInput, RpcOutput<RpcAddress>>> implements SrcBlock<RpcTransaction<RpcInput, RpcOutput<RpcAddress>>> {
 
     private final Block block;
     private Integer blockHeight;
+    private final LazyInitializer<Collection<RpcTransaction<RpcInput, RpcOutput<RpcAddress>>>> transactions;
 
     public RpcBlock(int blockHeight) {
         try {
             this.block = getBlock(RpcClientDirect.getInstance().getBlockHash(blockHeight));
             this.blockHeight = blockHeight;
+            this.transactions = new LazyInitializer<>(this::_getTransactions);
         } catch (IOException e) {
             throw new RuntimeException("blockHeight=" + blockHeight, e);
         }
@@ -47,6 +51,7 @@ public class RpcBlock<T extends RpcTransaction<RpcInput, RpcOutput<RpcAddress>>>
 
     public RpcBlock(String hash) {
         this.block = getBlock(hash);
+        this.transactions = new LazyInitializer<>(this::_getTransactions);
     }
 
     private Block getBlock(String hash) {
@@ -76,6 +81,10 @@ public class RpcBlock<T extends RpcTransaction<RpcInput, RpcOutput<RpcAddress>>>
 
     @Override
     public Collection<RpcTransaction<RpcInput, RpcOutput<RpcAddress>>> getTransactions() {
+        return transactions.get();
+    }
+
+    public Collection<RpcTransaction<RpcInput, RpcOutput<RpcAddress>>> _getTransactions() {
         return Optional.ofNullable(block.getTransactions()).map(tx -> tx.stream().map(t -> new RpcTransaction<>(t)).collect(Collectors.toList())).orElse(Collections.emptyList());
     }
 }

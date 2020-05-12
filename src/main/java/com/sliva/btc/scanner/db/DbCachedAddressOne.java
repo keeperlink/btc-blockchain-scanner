@@ -37,7 +37,7 @@ import org.spongycastle.util.encoders.Hex;
 @Slf4j
 public class DbCachedAddressOne implements AutoCloseable {
 
-    private static final int MAX_CACHE_SIZE = 100000;
+    private static final int MAX_CACHE_SIZE = 300000;
     private final SrcAddressType addressType;
     private final DbUpdateAddressOne updateAddress;
     private final DbQueryAddress queryAddress;

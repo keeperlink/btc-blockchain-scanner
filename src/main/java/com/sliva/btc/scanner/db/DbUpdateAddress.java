@@ -15,6 +15,7 @@
  */
 package com.sliva.btc.scanner.db;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.src.SrcAddressType;
 import java.sql.SQLException;
@@ -42,16 +43,13 @@ public class DbUpdateAddress implements AutoCloseable {
     }
 
     public void add(BtcAddress addr) throws SQLException {
+        checkArgument(addr != null, "Argument 'addr' is null");
         log.trace("add(): addr={}, type={}", addr, addr.getType());
         getUpdater(addr).add(addr);
     }
 
-    public void updateWallet(BtcAddress addr) throws SQLException {
-        log.trace("updateWallet(): addr={}, type={}", addr, addr.getType());
-        getUpdater(addr).updateWallet(addr);
-    }
-
     public void updateWallet(int addressId, int walletId) {
+        checkArgument(addressId > 0, "Argument 'addressId' must be a positive number: %s", addressId);
         try {
             updateWallet(BtcAddress.builder().addressId(addressId).walletId(walletId).build());
         } catch (SQLException e) {
@@ -59,21 +57,28 @@ public class DbUpdateAddress implements AutoCloseable {
         }
     }
 
+    public void updateWallet(BtcAddress addr) throws SQLException {
+        checkArgument(addr != null, "Argument 'addr' is null");
+        SrcAddressType addrType = addr.getType();
+        checkArgument(addrType.isReal(), "Bad address type: %s, addr=%s", addrType, addr);
+        log.trace("updateWallet(): addr={}, type={}", addr, addrType);
+        getUpdater(addr).updateWallet(addr);
+    }
+
     private DbUpdateAddressOne getUpdater(BtcAddress addr) {
-        final SrcAddressType addrType = addr.getType();
-        if (!addrType.isReal()) {
-            throw new IllegalArgumentException("Bad address type: " + addrType + ", addr=" + addr);
-        }
+        checkArgument(addr != null, "Argument 'addr' is null");
+        SrcAddressType addrType = addr.getType();
+        checkArgument(addrType.isReal(), "Bad address type: %s, addr=%s", addrType, addr);
         return updaters.get(addr.getType());
     }
 
     public void flushCache() {
-        updaters.values().forEach((updater) -> updater.flushCache());
+        updaters.values().forEach(DbUpdateAddressOne::flushCache);
     }
 
     @Override
     public void close() {
-        updaters.values().forEach((updater) -> updater.close());
+        updaters.values().forEach(DbUpdateAddressOne::close);
     }
 
     @Getter

@@ -17,6 +17,7 @@ package com.sliva.btc.scanner.util;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import com.google.common.cache.CacheLoader;
 import com.sliva.btc.scanner.src.SrcAddressType;
 import java.io.File;
 import java.io.FileReader;
@@ -201,6 +202,16 @@ public final class Utils {
         checkArgument(value3supplier != null, "Argument 'value3supplier' is null");
         T result = value1 != null ? value1 : value2supplier.get();
         return result != null ? Optional.of(result) : checkNotNull(value3supplier.get());
+    }
+
+    public static <I, O> CacheLoader<I, O> getCacheLoader(Function<I, O> loaderFunction) {
+        checkArgument(loaderFunction != null, "Argument 'loaderFunction' is null");
+        return new CacheLoader<I, O>() {
+            @Override
+            public O load(I key) {
+                return loaderFunction.apply(key);
+            }
+        };
     }
 
     public static class NumberFile {

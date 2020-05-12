@@ -16,6 +16,7 @@
 package com.sliva.btc.scanner.db;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkState;
 import static com.sliva.btc.scanner.db.DbUpdate.waitFullQueue;
 import com.sliva.btc.scanner.db.model.InOutKey;
 import com.sliva.btc.scanner.db.model.TxInputSpecial;
@@ -76,6 +77,7 @@ public class DbUpdateInputSpecial extends DbUpdate {
 
     public void add(TxInputSpecial txInput) {
         log.trace("add(txInput:{})", txInput);
+        checkState(isActive(), "Instance has been closed");
         waitFullQueue(cacheData.addQueue, MAX_INSERT_QUEUE_LENGTH);
         synchronized (cacheData) {
             cacheData.addQueue.add(txInput);
@@ -90,6 +92,7 @@ public class DbUpdateInputSpecial extends DbUpdate {
 
     public void delete(TxInputSpecial txInput) {
         log.trace("delete(txInput:{})", txInput);
+        checkState(isActive(), "Instance has been closed");
         synchronized (cacheData) {
             psDelete.setParameters(p -> p.setInt(txInput.getTransactionId()).setInt(txInput.getPos())).execute();
             cacheData.addQueue.remove(txInput);
@@ -106,6 +109,7 @@ public class DbUpdateInputSpecial extends DbUpdate {
 
     public void update(TxInputSpecial txInput) {
         log.trace("update(txInput:{})", txInput);
+        checkState(isActive(), "Instance has been closed");
         synchronized (cacheData) {
             TxInputSpecial txInput2 = cacheData.queueMap.get(txInput);
             boolean updatedInQueue = false;

@@ -16,6 +16,7 @@
 package com.sliva.btc.scanner.db;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkState;
 import static com.sliva.btc.scanner.db.DbUpdate.waitFullQueue;
 import com.sliva.btc.scanner.db.model.InOutKey;
 import com.sliva.btc.scanner.db.model.TxInput;
@@ -37,9 +38,9 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class DbUpdateInput extends DbUpdate {
 
-    private static int MIN_BATCH_SIZE = 1;
-    private static int MAX_BATCH_SIZE = 20000;
-    private static int MAX_INSERT_QUEUE_LENGTH = 50000;
+    private static int MIN_BATCH_SIZE = 1000;
+    private static int MAX_BATCH_SIZE = 60000;
+    private static int MAX_INSERT_QUEUE_LENGTH = 120000;
     private static int MAX_UPDATE_QUEUE_LENGTH = 10000;
     private static final String TABLE_NAME = "input";
     private static final String SQL_ADD = "INSERT INTO input(transaction_id,pos,in_transaction_id,in_pos)VALUES(?,?,?,?)";
@@ -77,6 +78,7 @@ public class DbUpdateInput extends DbUpdate {
 
     public void add(TxInput txInput) throws SQLException {
         log.trace("add(txInput:{})", txInput);
+        checkState(isActive(), "Instance has been closed");
         waitFullQueue(cacheData.addQueue, MAX_INSERT_QUEUE_LENGTH);
         synchronized (cacheData) {
             cacheData.addQueue.add(txInput);
@@ -88,6 +90,7 @@ public class DbUpdateInput extends DbUpdate {
 
     public void delete(TxInput txInput) {
         log.trace("delete(txInput:{})", txInput);
+        checkState(isActive(), "Instance has been closed");
         synchronized (cacheData) {
             psDelete.setParameters(p -> p.setInt(txInput.getTransactionId()).setInt(txInput.getPos())).execute();
             cacheData.addQueue.remove(txInput);
@@ -104,6 +107,7 @@ public class DbUpdateInput extends DbUpdate {
 
     public void update(TxInput txInput) throws SQLException {
         log.trace("update(txInput:{})", txInput);
+        checkState(isActive(), "Instance has been closed");
         synchronized (cacheData) {
             TxInput txInput2 = cacheData.queueMap.get(txInput);
             boolean updatedInQueue = false;

@@ -46,13 +46,15 @@ public class RpcTransaction<I extends RpcInput, O extends RpcOutput<RpcAddress>>
     private final String txid;
     private Transaction tran;
     private final LazyInitializer<RawTransaction> rawTransaction;
+    private final LazyInitializer<Collection<RpcInput>> inputs;
+    private final LazyInitializer<Collection<RpcOutput<RpcAddress>>> outputs;
 
     public RpcTransaction(String txid) {
-        this(null, checkNotNull(txid));
+        this(null, txid);
     }
 
     public RpcTransaction(Transaction tran) {
-        this(checkNotNull(tran), tran.getHashAsString());
+        this(checkNotNull(tran, "Argument 'tran' is null"), tran.getHashAsString());
     }
 
     private RpcTransaction(Transaction tran, String txid) {
@@ -60,6 +62,8 @@ public class RpcTransaction<I extends RpcInput, O extends RpcOutput<RpcAddress>>
         this.tran = tran;
         this.txid = txid;
         rawTransaction = new LazyInitializer<>(() -> RpcClient.getInstance().getRawTransaction(txid));
+        inputs = new LazyInitializer<>(this::_getInputs);
+        outputs = new LazyInitializer<>(this::_getOutputs);
     }
 
     @Override
@@ -70,6 +74,17 @@ public class RpcTransaction<I extends RpcInput, O extends RpcOutput<RpcAddress>>
     @NonNull
     @Override
     public Collection<RpcInput> getInputs() {
+        return inputs.get();
+    }
+
+    @NonNull
+    @Override
+    public Collection<RpcOutput<RpcAddress>> getOutputs() {
+        return outputs.get();
+    }
+
+    @NonNull
+    private Collection<RpcInput> _getInputs() {
         if (TRANSACTION_ZERO_ID.equalsIgnoreCase(txid)) {
             //Bitcoin Core RPC does not return first transaction - generate it here
             return Collections.emptyList();
@@ -93,8 +108,7 @@ public class RpcTransaction<I extends RpcInput, O extends RpcOutput<RpcAddress>>
     }
 
     @NonNull
-    @Override
-    public Collection<RpcOutput<RpcAddress>> getOutputs() {
+    private Collection<RpcOutput<RpcAddress>> _getOutputs() {
         if (TRANSACTION_ZERO_ID.equalsIgnoreCase(txid)) {
             //Bitcoin Core RPC does not return first transaction - generate it here
             return Collections.singletonList(buildTransactionZero());

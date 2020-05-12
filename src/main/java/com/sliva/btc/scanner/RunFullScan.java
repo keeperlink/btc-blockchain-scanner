@@ -16,11 +16,9 @@
 package com.sliva.btc.scanner;
 
 import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
-import com.sliva.btc.scanner.db.DbUpdateBlock;
 import com.sliva.btc.scanner.db.DbCachedAddress;
 import com.sliva.btc.scanner.db.DbCachedOutput;
 import com.sliva.btc.scanner.db.DbCachedTransaction;
@@ -28,6 +26,7 @@ import com.sliva.btc.scanner.db.DbQueryBlock;
 import com.sliva.btc.scanner.db.DbQueryInput;
 import com.sliva.btc.scanner.db.DbQueryInputSpecial;
 import com.sliva.btc.scanner.db.DbUpdate;
+import com.sliva.btc.scanner.db.DbUpdateBlock;
 import com.sliva.btc.scanner.db.DbUpdateInput;
 import com.sliva.btc.scanner.db.DbUpdateInputSpecial;
 import com.sliva.btc.scanner.db.model.BtcAddress;
@@ -93,7 +92,7 @@ public class RunFullScan {
     private static final int DEFAULT_LOAD_BLOCK_THREADS = 3;
     private static final int DEFAULT_PREPROC_BLOCK_THREADS = 3;
 
-    private static final CmdOptions CMD_OPTS = new CmdOptions().add(DBConnectionSupplier.class).add(RpcClient.class).add(RpcClientDirect.class).add(BJBlockProvider.class);
+    private static final CmdOptions CMD_OPTS = new CmdOptions().add(DBConnectionSupplier.class).add(DbUpdate.class).add(RpcClient.class).add(RpcClientDirect.class).add(BJBlockProvider.class);
     private static final CmdOption safeRunOpt = buildOption(CMD_OPTS, null, "safe-run", true, "Run in safe mode - check DB for existing records before adding new");
     private static final CmdOption updateSpentOpt = buildOption(CMD_OPTS, null, "update-spent", true, "Update spent flag on outpus. Default is true. For better performance of massive update you might want to disable it and run separate process after this update is done.");
     private static final CmdOption blocksBackOpt = buildOption(CMD_OPTS, null, "blocks-back", true, "Check last number of blocks. Process will run in safe mode (option --safe-run=true)");
@@ -107,7 +106,6 @@ public class RunFullScan {
     private static final CmdOption preprocBlockThreadsOpt = buildOption(CMD_OPTS, null, "preproc-block-threads", true, "Number of threads pre-processing blocks. Default: " + DEFAULT_PREPROC_BLOCK_THREADS);
 
     private static final AtomicBoolean terminateLoop = new AtomicBoolean();
-    private static final ShutdownHook shutdownHook = new ShutdownHook(() -> terminateLoop.set(true));
 
     private final File stopFile;
     private final boolean safeRun;
@@ -135,9 +133,10 @@ public class RunFullScan {
      */
     @SuppressWarnings({"SleepWhileInLoop"})
     public static void main(String[] args) throws Exception {
+        CmdArguments cmd = CommandLineUtils.buildCmdArguments(args, Main.Command.update.name(), "Fill DB with block data retrieved from blockchain", null, CMD_OPTS);
         log.info("MAIN STARTED");
+        ShutdownHook shutdownHook = new ShutdownHook(() -> terminateLoop.set(true));
         try {
-            CmdArguments cmd = CommandLineUtils.buildCmdArguments(args, Main.Command.update.name(), "Fill DB with block data retrieved from blockchain", null, CMD_OPTS);
             Integer loopTime = cmd.getOption(loopOpt).map(Integer::parseInt).orElse(null);
             do {
                 new RunFullScan(cmd).runProcess();
@@ -150,7 +149,9 @@ public class RunFullScan {
             log.error(null, e);
         } finally {
             log.info("MAIN FINISHED");
-            shutdownHook.finished();
+            if (shutdownHook != null) {
+                shutdownHook.finished();
+            }
         }
     }
 
@@ -182,15 +183,9 @@ public class RunFullScan {
         }
         inputsCache = !safeRun ? null : CacheBuilder.newBuilder()
                 .concurrencyLevel(Runtime.getRuntime().availableProcessors())
-                .maximumSize(20_000)
+                .maximumSize(200_000)
                 .recordStats()
-                .build(
-                        new CacheLoader<Integer, Collection<TxInput>>() {
-                    @Override
-                    public Collection<TxInput> load(Integer transactionId) throws SQLException {
-                        return queryInput.getInputs(transactionId);
-                    }
-                });
+                .build(Utils.getCacheLoader(key -> queryInput.getInputs(key)));
     }
 
     public void runProcess() throws Exception {
@@ -430,7 +425,7 @@ public class RunFullScan {
         });
         if (txOutputs != null) {
             txOutputs.forEach(txOut -> {
-                log.debug("processTransactionOutputs: Deleting record: " + txOut);
+                log.debug("processTransactionOutputs: Deleting record: {}", txOut);
                 db.cachedOutput.delete(txOut);
             });
         }
@@ -473,13 +468,13 @@ public class RunFullScan {
                     .map(tr -> updateSpent ? db.cachedOutput.getOutput(tr.getTransactionId(), ti.getInPos()) : Optional.empty()), execInsOuts))
                     .collect(Collectors.toList());
             List<CompletableFuture<Void>> outFutures = t.getOutputs().stream()
-                    .map(to -> CompletableFuture.runAsync(() -> to.getAddress().map(to3 -> db.cachedAddress.getOrAdd(to3, true)), execInsOuts))
+                    .map(to -> CompletableFuture.runAsync(() -> to.getAddress().map(adr -> db.cachedAddress.getOrAdd(adr, true)), execInsOuts))
                     .collect(Collectors.toList());
             inFutures.forEach(CompletableFuture::join);
             outFutures.forEach(CompletableFuture::join);
         } finally {
             if (System.nanoTime() - started > 800_000_000) {
-                log.debug("preProcTransaction: Long running transaction. txid={}, runtime={}", t.getTxid(), Duration.ofNanos(System.nanoTime() - started));
+                log.trace("preProcTransaction: Long running transaction. txid={}, runtime={}", t.getTxid(), Duration.ofNanos(System.nanoTime() - started));
             }
         }
     }

@@ -67,7 +67,7 @@ public class RunUpdateSpent {
             + " LEFT JOIN input I ON I.in_transaction_id=O.transaction_id AND I.in_pos=O.pos"
             + " WHERE (O.address_id <> 0 OR O.spent <> " + OutputStatus.UNSPENDABLE + ") AND O.transaction_id BETWEEN ? AND ?";
 
-    private static final ShutdownHook shutdownHook = new ShutdownHook();
+    private static ShutdownHook shutdownHook;
     private static final NumberFormat nf = NumberFormat.getInstance();
 
     private final DBConnectionSupplier dbCon;
@@ -84,6 +84,7 @@ public class RunUpdateSpent {
      */
     public static void main(String[] args) throws Exception {
         CmdArguments cmd = buildCmdArguments(args, Main.Command.update_spent.name(), "Update \"spent\" column for existing transactions in in DB", null, CMD_OPTS);
+        shutdownHook = new ShutdownHook();
         log.info("START");
         try {
             new RunUpdateSpent(cmd).runProcess();

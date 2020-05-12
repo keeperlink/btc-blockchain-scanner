@@ -16,6 +16,7 @@
 package com.sliva.btc.scanner.db;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkState;
 import com.sliva.btc.scanner.db.model.BtcTransaction;
 import static com.sliva.btc.scanner.util.Utils.optionalBuilder;
 import java.util.HashMap;
@@ -35,7 +36,7 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class DbCachedTransaction implements AutoCloseable {
 
-    private static final int MAX_CACHE_SIZE = 50000;
+    private static final int MAX_CACHE_SIZE = 200000;
     private final DbUpdateTransaction updateTransaction;
     private final DbQueryTransaction queryTransaction;
     @Getter
@@ -57,26 +58,23 @@ public class DbCachedTransaction implements AutoCloseable {
     @NonNull
     public BtcTransaction add(BtcTransaction btcTransaction) {
         checkArgument(btcTransaction != null, "Argument 'btcTransaction' is null");
+        checkState(updateTransaction.isActive(), "Instance has been closed");
+        BtcTransaction result = btcTransaction;
         synchronized (cacheData) {
-            BtcTransaction result = btcTransaction;
             if (result.getTransactionId() == 0) {
-                if (cacheData.lastTransactionId.get() == 0) {
-                    cacheData.lastTransactionId.set(queryTransaction.getLastTransactionId().orElse(0));
-                }
-                result = result.toBuilder().transactionId(cacheData.lastTransactionId.incrementAndGet()).build();
+                result = result.toBuilder().transactionId(getNextTransactionId()).build();
             }
             updateTransaction.add(result);
             updateCache(result);
-            return result;
         }
+        return result;
     }
 
     public void delete(BtcTransaction tx) {
         checkArgument(tx != null, "Argument 'tx' is null");
         synchronized (cacheData) {
             updateTransaction.delete(tx);
-            cacheData.cacheMap.remove(tx.getTxid());
-            cacheData.cacheMapId.remove(tx.getTransactionId());
+            removeFromCache(tx);
         }
     }
 
@@ -132,8 +130,18 @@ public class DbCachedTransaction implements AutoCloseable {
     @NonNull
     public List<BtcTransaction> getTransactionsInBlock(int blockHeight) {
         List<BtcTransaction> result = queryTransaction.getTransactionsInBlock(blockHeight);
-        result.forEach(this::updateCache);
+        synchronized (cacheData) {
+            result.forEach(this::updateCache);
+        }
         return result;
+    }
+
+    @Override
+    public void close() {
+        log.debug("DbCachedTransaction.close()");
+        synchronized (cacheData) {
+            updateTransaction.close();
+        }
     }
 
     private void updateCache(BtcTransaction btcTransaction) {
@@ -150,12 +158,18 @@ public class DbCachedTransaction implements AutoCloseable {
         }
     }
 
-    @Override
-    public void close() {
-        log.debug("DbCachedTransaction.close()");
+    private void removeFromCache(BtcTransaction tx) {
         synchronized (cacheData) {
-            updateTransaction.close();
+            cacheData.cacheMap.remove(tx.getTxid());
+            cacheData.cacheMapId.remove(tx.getTransactionId());
         }
+    }
+
+    private int getNextTransactionId() {
+        if (cacheData.lastTransactionId.get() == -1) {
+            cacheData.lastTransactionId.set(queryTransaction.getLastTransactionId().orElse(0));
+        }
+        return cacheData.lastTransactionId.incrementAndGet();
     }
 
     @Getter
@@ -163,7 +177,7 @@ public class DbCachedTransaction implements AutoCloseable {
 
         private final Map<String, BtcTransaction> cacheMap = new LinkedHashMap<>();
         private final Map<Integer, BtcTransaction> cacheMapId = new HashMap<>();
-        private final AtomicInteger lastTransactionId = new AtomicInteger(0);
+        private final AtomicInteger lastTransactionId = new AtomicInteger(-1);
         private final DbUpdateTransaction.CacheData updateCachedData = new DbUpdateTransaction.CacheData();
     }
 }

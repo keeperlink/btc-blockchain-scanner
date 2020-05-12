@@ -16,6 +16,7 @@
 package com.sliva.btc.scanner.db;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkState;
 import com.sliva.btc.scanner.db.model.BtcWallet;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -67,6 +68,7 @@ public class DbUpdateWallet extends DbUpdate {
 
     @NonNull
     public BtcWallet add() throws SQLException {
+        checkState(isActive(), "Instance has been closed");
         return add(getNextWalletId());
     }
 
@@ -79,6 +81,7 @@ public class DbUpdateWallet extends DbUpdate {
     public BtcWallet add(BtcWallet wallet) {
         checkArgument(wallet != null, "Argument 'wallet' is null");
         log.trace("add(wallet:{})", wallet);
+        checkState(isActive(), "Instance has been closed");
         waitFullQueue(cacheData.addQueue, MAX_INSERT_QUEUE_LENGTH);
         BtcWallet wallet2 = wallet;
         if (wallet2.getWalletId() == 0) {

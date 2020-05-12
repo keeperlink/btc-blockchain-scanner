@@ -16,6 +16,7 @@
 package com.sliva.btc.scanner.db;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkState;
 import static com.sliva.btc.scanner.db.DbUpdate.waitFullQueue;
 import com.sliva.btc.scanner.db.model.BtcTransaction;
 import com.sliva.btc.scanner.util.Utils;
@@ -36,9 +37,9 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class DbUpdateTransaction extends DbUpdate {
 
-    private static int MIN_BATCH_SIZE = 1;
-    private static int MAX_BATCH_SIZE = 20000;
-    private static int MAX_INSERT_QUEUE_LENGTH = 20000;
+    private static int MIN_BATCH_SIZE = 1000;
+    private static int MAX_BATCH_SIZE = 60000;
+    private static int MAX_INSERT_QUEUE_LENGTH = 120000;
     private static int MAX_UPDATE_QUEUE_LENGTH = 5000;
     private static final String TABLE_NAME = "transaction";
     private static final String SQL_ADD = "INSERT INTO `transaction`(transaction_id,txid,block_height,nInputs,nOutputs)VALUES(?,?,?,?,?)";
@@ -76,6 +77,7 @@ public class DbUpdateTransaction extends DbUpdate {
 
     public void add(BtcTransaction tx) {
         log.trace("add(t:{})", tx);
+        checkState(isActive(), "Instance has been closed");
         waitFullQueue(cacheData.addQueue, MAX_INSERT_QUEUE_LENGTH);
         synchronized (cacheData) {
             cacheData.addQueue.add(tx);
@@ -86,6 +88,7 @@ public class DbUpdateTransaction extends DbUpdate {
 
     public void delete(BtcTransaction tx) {
         log.trace("delete(tx:{})", tx);
+        checkState(isActive(), "Instance has been closed");
         synchronized (cacheData) {
             psDelete.setParameters(p -> p.setInt(tx.getTransactionId())).execute();
             cacheData.addQueue.remove(tx);

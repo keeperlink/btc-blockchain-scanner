@@ -16,6 +16,7 @@
 package com.sliva.btc.scanner.db;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkState;
 import com.sliva.btc.scanner.db.model.BtcBlock;
 import com.sliva.btc.scanner.util.Utils;
 import java.util.Collection;
@@ -64,6 +65,7 @@ public class DbUpdateBlock extends DbUpdate {
 
     public void add(BtcBlock btcBlock) {
         log.trace("add(btcBlock:{})", btcBlock);
+        checkState(isActive(), "Instance has been closed");
         waitFullQueue(cacheData.addQueue, MAX_INSERT_QUEUE_LENGTH);
         synchronized (cacheData) {
             cacheData.addQueue.add(btcBlock);

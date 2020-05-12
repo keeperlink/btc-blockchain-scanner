@@ -16,6 +16,7 @@
 package com.sliva.btc.scanner.db;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkState;
 import com.sliva.btc.scanner.db.model.InOutKey;
 import com.sliva.btc.scanner.db.model.TxOutput;
 import java.util.ArrayList;
@@ -35,9 +36,9 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class DbUpdateOutput extends DbUpdate {
 
-    private static int MIN_BATCH_SIZE = 1;
-    private static int MAX_BATCH_SIZE = 20000;
-    private static int MAX_INSERT_QUEUE_LENGTH = 50000;
+    private static int MIN_BATCH_SIZE = 1000;
+    private static int MAX_BATCH_SIZE = 60000;
+    private static int MAX_INSERT_QUEUE_LENGTH = 120000;
     private static int MAX_UPDATE_QUEUE_LENGTH = 100000;
     private static final String TABLE_NAME = "output";
     private static final String SQL_ADD = "INSERT INTO output(transaction_id,pos,address_id,amount,spent)VALUES(?,?,?,?,?)";
@@ -85,6 +86,7 @@ public class DbUpdateOutput extends DbUpdate {
 
     public void add(TxOutput txOutput) {
         log.trace("add(txOutput:{})", txOutput);
+        checkState(isActive(), "Instance has been closed");
         waitFullQueue(cacheData.addQueue, MAX_INSERT_QUEUE_LENGTH);
         synchronized (cacheData) {
             cacheData.addQueue.add(txOutput);
@@ -95,6 +97,7 @@ public class DbUpdateOutput extends DbUpdate {
 
     public void delete(TxOutput txOutput) {
         log.trace("delete(txOutput:{})", txOutput);
+        checkState(isActive(), "Instance has been closed");
         synchronized (cacheData) {
             psDelete.setParameters(p -> p.setInt(txOutput.getTransactionId()).setInt(txOutput.getPos())).execute();
             cacheData.addQueue.remove(txOutput);
@@ -111,6 +114,7 @@ public class DbUpdateOutput extends DbUpdate {
 
     public void updateSpent(int transactionId, short pos, byte status) {
         log.trace("updateSpent(transactionId:{},pos:{},status:{})", transactionId, pos, status);
+        checkState(isActive(), "Instance has been closed");
         synchronized (cacheData) {
             InOutKey pk = new InOutKey(transactionId, pos);
             TxOutput txOutput = cacheData.queueMap.get(pk);
@@ -139,6 +143,7 @@ public class DbUpdateOutput extends DbUpdate {
 
     public void updateAddress(int transactionId, short pos, int addressId) {
         log.trace("updateAddress(transactionId:{},pos:{},addressId:{})", transactionId, pos, addressId);
+        checkState(isActive(), "Instance has been closed");
         synchronized (cacheData) {
             InOutKey pk = new InOutKey(transactionId, pos);
             TxOutput txOutput = cacheData.queueMap.get(pk);
@@ -167,6 +172,7 @@ public class DbUpdateOutput extends DbUpdate {
 
     public void updateAmount(int transactionId, short pos, long amount) {
         log.trace("updateAmount(transactionId:{},pos:{},amount:{})", transactionId, pos, amount);
+        checkState(isActive(), "Instance has been closed");
         synchronized (cacheData) {
             InOutKey pk = new InOutKey(transactionId, pos);
             TxOutput txOutput = cacheData.queueMap.get(pk);
