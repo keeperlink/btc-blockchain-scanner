@@ -125,6 +125,9 @@ public abstract class DbUpdate implements AutoCloseable {
         log.debug("{}.close()", tableName);
         isActive = false;
         flushCache();
+        synchronized (dbUpdateInstances) {
+            dbUpdateInstances.remove(this);
+        }
         log.trace("{}.close() FINISHED", tableName);
     }
 
@@ -296,8 +299,10 @@ public abstract class DbUpdate implements AutoCloseable {
                 }
             } finally {
                 executor.get().shutdown();
-                log.info(getName() + ": FINISHED");
-                executeDbUpdateThread = null;
+                synchronized (ExecuteDbUpdate.class) {
+                    log.info(getName() + ": FINISHED");
+                    executeDbUpdateThread = null;
+                }
             }
         }
 

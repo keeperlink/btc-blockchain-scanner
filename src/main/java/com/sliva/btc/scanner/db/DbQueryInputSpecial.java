@@ -36,8 +36,8 @@ public class DbQueryInputSpecial {
     private final DBPreparedStatement psQueryInputs;
 
     public DbQueryInputSpecial(DBConnectionSupplier conn) {
-        this.psQueryInput = conn.prepareStatement(SQL_QUERY_INPUT);
-        this.psQueryInputs = conn.prepareStatement(SQL_QUERY_INPUTS);
+        this.psQueryInput = conn.prepareStatement(SQL_QUERY_INPUT, "input_special.transaction_id");
+        this.psQueryInputs = conn.prepareStatement(SQL_QUERY_INPUTS, "input_special.transaction_id");
     }
 
     @NonNull

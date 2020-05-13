@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS `address_p2pkh` (
   `address` binary(20) NOT NULL,
   `wallet_id` int(10) unsigned NOT NULL DEFAULT '0',
   PRIMARY KEY (`address_id`),
-  UNIQUE KEY `ix_address` (`address`)
+  UNIQUE KEY `ix_address_p2pkh_address` (`address`)
 ) ENGINE=MyISAM;
 
 CREATE TABLE IF NOT EXISTS `address_p2sh` (
@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS `address_p2sh` (
   `address` binary(20) NOT NULL,
   `wallet_id` int(10) unsigned NOT NULL DEFAULT '0',
   PRIMARY KEY (`address_id`),
-  UNIQUE KEY `ix_address` (`address`)
+  UNIQUE KEY `ix_address_p2sh_address` (`address`)
 ) ENGINE=MyISAM;
 
 CREATE TABLE IF NOT EXISTS `address_p2wpkh` (
@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS `address_p2wpkh` (
   `address` binary(20) NOT NULL,
   `wallet_id` int(10) unsigned NOT NULL DEFAULT '0',
   PRIMARY KEY (`address_id`),
-  UNIQUE KEY `ix_address` (`address`)
+  UNIQUE KEY `ix_address_p2wpkh_address` (`address`)
 ) ENGINE=MyISAM;
 
 CREATE TABLE IF NOT EXISTS `address_p2wsh` (
@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS `address_p2wsh` (
   `address` binary(32) NOT NULL,
   `wallet_id` int(10) unsigned NOT NULL DEFAULT '0',
   PRIMARY KEY (`address_id`),
-  UNIQUE KEY `ix_address` (`address`)
+  UNIQUE KEY `ix_address_p2wsh_address` (`address`)
 ) ENGINE=MyISAM;
 
 CREATE TABLE IF NOT EXISTS `block` (
@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS `block` (
   `hash` binary(32) NOT NULL,
   `txn_count` int(10) unsigned NOT NULL,
   PRIMARY KEY (`height`),
-  UNIQUE KEY `ix_hash` (`hash`)
+  UNIQUE KEY `ix_block_hash` (`hash`)
 ) ENGINE=MyISAM;
 
 CREATE TABLE IF NOT EXISTS `input` (
@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS `input` (
   `in_transaction_id` int(10) unsigned NOT NULL,
   `in_pos` smallint(5) unsigned NOT NULL,
   PRIMARY KEY (`transaction_id`,`pos`),
-  UNIQUE KEY `ix_in_txn_pos` (`in_transaction_id`,`in_pos`)
+  UNIQUE KEY `ix_input_in_txn_pos` (`in_transaction_id`,`in_pos`)
 ) ENGINE=MyISAM;
 
 CREATE TABLE IF NOT EXISTS `input_special` (
@@ -63,7 +63,7 @@ CREATE TABLE IF NOT EXISTS `output` (
   `amount` bigint(16) NOT NULL,
   `spent` tinyint(3) unsigned NOT NULL DEFAULT '0',
   PRIMARY KEY (`transaction_id`,`pos`),
-  KEY `ix_address` (`address_id`)
+  KEY `ix_output_address_id` (`address_id`)
 ) ENGINE=MyISAM;
 
 CREATE TABLE IF NOT EXISTS `transaction` (
@@ -73,6 +73,6 @@ CREATE TABLE IF NOT EXISTS `transaction` (
   `nInputs` smallint(5) unsigned NOT NULL DEFAULT '0',
   `nOutputs` smallint(5) unsigned NOT NULL DEFAULT '0',
   PRIMARY KEY (`transaction_id`),
-  UNIQUE KEY `ix_txid` (`txid`),
-  KEY `ix_block_height` (`block_height`)
+  UNIQUE KEY `ix_transaction_txid` (`txid`),
+  KEY `ix_transaction_block_height` (`block_height`)
 ) ENGINE=MyISAM;

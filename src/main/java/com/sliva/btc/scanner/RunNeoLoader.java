@@ -240,7 +240,7 @@ public class RunNeoLoader {
                         tx.put("nOutputs", (short) t.getNOutputs());
                         Collection<Map<String, Object>> inputs = new ArrayList<>();
                         tx.put("inputs", inputs);
-                        queryInput.getInputs(t.getTransactionId()).forEach(i -> {
+                        queryInput.findInputsByTransactionId(t.getTransactionId()).forEach(i -> {
                             Map<String, Object> input = new HashMap<>();
                             inputs.add(input);
                             input.put("id", toOutputId(i.getInTransactionId(), i.getInPos()));
@@ -248,7 +248,7 @@ public class RunNeoLoader {
                         });
                         Collection<Map<String, Object>> outputs = new ArrayList<>();
                         tx.put("outputs", outputs);
-                        queryOutput.getOutputs(t.getTransactionId()).forEach(o -> {
+                        queryOutput.findOutputsByTransactionId(t.getTransactionId()).forEach(o -> {
                             try {
                                 CAddress adr = o.getAddressId() == 0 ? null : addressCache.get(o.getAddressId());
                                 Map<String, Object> output = new HashMap<>();

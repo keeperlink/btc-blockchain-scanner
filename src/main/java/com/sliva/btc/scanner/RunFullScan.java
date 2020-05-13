@@ -85,7 +85,6 @@ import lombok.extern.slf4j.Slf4j;
 public class RunFullScan {
 
     private static final boolean DEFAULT_SAFE_RUN = false;
-    private static final int DEFAULT_BLOCKS_BACK = 0;
     private static final boolean DEFAULT_UPDATE_SPENT = true;
     private static final String DEFAULT_STOP_FILE_NAME = "/tmp/btc-scan-stop";
     private static final int DEFAULT_TXN_THREADS = 30;
@@ -93,14 +92,16 @@ public class RunFullScan {
     private static final int DEFAULT_LOAD_BLOCK_THREADS = 3;
     private static final int DEFAULT_PREPROC_BLOCK_THREADS = 3;
 
-    private static final CmdOptions CMD_OPTS = new CmdOptions().add(DBConnectionSupplier.class).add(DbUpdate.class).add(RpcClient.class).add(RpcClientDirect.class).add(BJBlockProvider.class);
-    private static final CmdOption safeRunOpt = buildOption(CMD_OPTS, null, "safe-run", true, "Run in safe mode - check DB for existing records before adding new");
-    private static final CmdOption updateSpentOpt = buildOption(CMD_OPTS, null, "update-spent", true, "Update spent flag on outpus. Default is true. For better performance of massive update you might want to disable it and run separate process after this update is done.");
+    private static final CmdOptions CMD_OPTS = new CmdOptions().add(DBConnectionSupplier.class)
+            .add(DbUpdate.class).add(RpcClient.class).add(RpcClientDirect.class)
+            .add(BJBlockProvider.class).add(DbValidationUtils.class);
+    private static final CmdOption safeRunOpt = buildOption(CMD_OPTS, null, "safe-run", true, "Run in safe mode - check DB for existing records before adding new. Default: " + DEFAULT_SAFE_RUN);
+    private static final CmdOption updateSpentOpt = buildOption(CMD_OPTS, null, "update-spent", true, "Update spent flag on outpus. For better performance of massive update you might want to disable it and run separate process after this update is done. Default: " + DEFAULT_UPDATE_SPENT);
     private static final CmdOption blocksBackOpt = buildOption(CMD_OPTS, null, "blocks-back", true, "Check last number of blocks. Process will run in safe mode (option --safe-run=true)");
     private static final CmdOption startFromBlockOpt = buildOption(CMD_OPTS, null, "start-from-block", true, "Start checking from block hight provided. Process will run in safe mode (option --safe-run=true)");
     private static final CmdOption runToBlockOpt = buildOption(CMD_OPTS, null, "run-to-block", true, "Last block number to run");
-    private static final CmdOption threadsOpt = buildOption(CMD_OPTS, null, "threads", true, "Number of threads to query DB. Default is " + DEFAULT_TXN_THREADS + ". To disable parallel threading set value to 0");
-    private static final CmdOption stopFileOpt = buildOption(CMD_OPTS, null, "stop-file", true, "File to be watched on each new block to stop process. If file is present the process stops and file renamed by adding '1' to the end.");
+    private static final CmdOption threadsOpt = buildOption(CMD_OPTS, null, "threads", true, "Number of threads to query DB. To disable parallel threading set value to 0. Default is " + DEFAULT_TXN_THREADS);
+    private static final CmdOption stopFileOpt = buildOption(CMD_OPTS, null, "stop-file", true, "File to be watched on each new block to stop process. If file is present the process stops and file renamed by adding '1' to the end. Default: " + DEFAULT_STOP_FILE_NAME);
     private static final CmdOption loopOpt = buildOption(CMD_OPTS, null, "loop", true, "Repeat update every provided number of seconds");
     private static final CmdOption prefetchBufferSizeOpt = buildOption(CMD_OPTS, null, "prefetch-buffer-size", true, "Read ahead buffer size. Default: " + DEFAULT_PREFETCH_BUFFER_SIZE);
     private static final CmdOption loadBlockThreadsOpt = buildOption(CMD_OPTS, null, "load-block-threads", true, "Number of threads loading blocks. Default: " + DEFAULT_LOAD_BLOCK_THREADS);
@@ -121,7 +122,7 @@ public class RunFullScan {
     private final BlockProvider<?> blockProvider;
     private final Optional<Integer> startBlock;
     private final Optional<Integer> lastBlock;
-    private final int blocksBack;
+    private final Optional<Integer> blocksBack;
     private final int nExecTxnThreads;
     private final int prefetchBufferSize;
     private final int loadBlockThreads;
@@ -159,7 +160,7 @@ public class RunFullScan {
                 .orElse(cmd.hasOption(startFromBlockOpt) || cmd.hasOption(blocksBackOpt) || DEFAULT_SAFE_RUN);
         startBlock = cmd.getOption(startFromBlockOpt).map(Integer::valueOf);
         lastBlock = cmd.getOption(runToBlockOpt).map(Integer::valueOf);
-        blocksBack = cmd.getOption(blocksBackOpt).map(Integer::parseInt).orElse(DEFAULT_BLOCKS_BACK);
+        blocksBack = cmd.getOption(blocksBackOpt).map(Integer::parseInt);
         updateSpent = cmd.getOption(updateSpentOpt).map(Boolean::valueOf).orElse(DEFAULT_UPDATE_SPENT);
         stopFile = new File(cmd.getOption(stopFileOpt).orElse(DEFAULT_STOP_FILE_NAME));
         nExecTxnThreads = cmd.getOption(threadsOpt).map(Integer::parseInt).orElse(DEFAULT_TXN_THREADS);
@@ -184,12 +185,13 @@ public class RunFullScan {
                 .concurrencyLevel(Runtime.getRuntime().availableProcessors())
                 .maximumSize(200_000)
                 .recordStats()
-                .build(Utils.getCacheLoader(key -> queryInput.getInputs(key)));
+                .build(Utils.getCacheLoader(key -> queryInput.findInputsByTransactionId(key)));
     }
 
     public void runProcess() throws Exception {
         if (!safeRun) {
             DbValidationUtils.checkAndFixDataTails(dbCon);
+            Utils.sleep(50);
         }
         log.info("Execution STARTED");
         try (DbUpdateBlock addBlock = new DbUpdateBlock(dbCon);
@@ -199,7 +201,7 @@ public class RunFullScan {
                 DbCachedAddress cachedAddress = new DbCachedAddress(dbCon);
                 DbCachedOutput cachedOutput = new DbCachedOutput(dbCon)) {
             DbAccess db = new DbAccess(addBlock, updateInput, updateInputSpecial, cachedTxn, cachedAddress, cachedOutput);
-            int firstBlockToProcess = startBlock.orElseGet(() -> queryBlock.findLastHeight().orElse(-1) + 1 - blocksBack);
+            int firstBlockToProcess = startBlock.orElseGet(() -> queryBlock.findLastHeight().orElse(-1) + 1 - blocksBack.orElse(0));
             int lastBlockToProcess = lastBlock.orElseGet(() -> new RpcClient().getBlocksNumber());
             log.info("firstBlockToProcess={}, lastBlockToProcess={}", firstBlockToProcess, lastBlockToProcess);
 

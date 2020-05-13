@@ -34,9 +34,9 @@ public class DbQueryBlock {
     private final DBPreparedStatement psFindLastHeight;
 
     public DbQueryBlock(DBConnectionSupplier conn) {
-        this.psQueryBlockHash = conn.prepareStatement(SQL_QUERY_BLOCK_HASH);
-        this.psFindBlockByHash = conn.prepareStatement(SQL_FIND_BLOCK_BY_HASH);
-        this.psFindLastHeight = conn.prepareStatement(SQL_FIND_LAST_HEIGHT);
+        this.psQueryBlockHash = conn.prepareStatement(SQL_QUERY_BLOCK_HASH, "block.height");
+        this.psFindBlockByHash = conn.prepareStatement(SQL_FIND_BLOCK_BY_HASH, "block.hash");
+        this.psFindLastHeight = conn.prepareStatement(SQL_FIND_LAST_HEIGHT, "block.height");
     }
 
     @NonNull

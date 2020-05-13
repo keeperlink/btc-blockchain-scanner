@@ -63,16 +63,16 @@ public class DbQueryInput {
 //    private final DBPreparedStatement psQueryTransactionIdsAbove;
 
     public DbQueryInput(DBConnectionSupplier conn) {
-        this.psQueryInputs = conn.prepareStatement(SQL_QUERY_INPUTS);
-        this.psCountInputsInTx = conn.prepareStatement(SQL_COUNT_INPUTS_IN_TX);
-        this.psFindInputByOutTx = conn.prepareStatement(SQL_FIND_INPUT_BY_OUT_TX);
-        this.psQueryInputsWithOutput = conn.prepareStatement(SQL_QUERY_INPUTS_WITH_OUTPUT);
-        this.psQueryInputAddresses = conn.prepareStatement(SQL_QUERY_INPUT_ADDRESSES);
+        this.psQueryInputs = conn.prepareStatement(SQL_QUERY_INPUTS, "input.transaction_id");
+        this.psCountInputsInTx = conn.prepareStatement(SQL_COUNT_INPUTS_IN_TX, "input.transaction_id");
+        this.psFindInputByOutTx = conn.prepareStatement(SQL_FIND_INPUT_BY_OUT_TX, "input.in_transaction_id");
+        this.psQueryInputsWithOutput = conn.prepareStatement(SQL_QUERY_INPUTS_WITH_OUTPUT, "input.transaction_id", "output.transaction_id");
+        this.psQueryInputAddresses = conn.prepareStatement(SQL_QUERY_INPUT_ADDRESSES, "input.transaction_id", "output.transaction_id", "address_p2pkh.address_id", "address_p2sh.address_id", "address_p2wpkh.address_id", "address_p2wsh.address_id");
 //        this.psQueryTransactionIdsAbove = conn.prepareStatement(SQL_QUERY_TRANSACTION_IDS_ABOVE);
     }
 
     @NonNull
-    public List<TxInput> getInputs(int transactionId) {
+    public List<TxInput> findInputsByTransactionId(int transactionId) {
         return psQueryInputs
                 .setParameters(ps -> ps.setInt(transactionId))
                 .executeQueryToList(
@@ -84,7 +84,7 @@ public class DbQueryInput {
                                 .build());
     }
 
-    public int countInputsInTransaction(int transactionId) {
+    public int countInputsByTransactionId(int transactionId) {
         return DBUtils.readInteger(psCountInputsInTx.setParameters(ps -> ps.setInt(transactionId))).orElse(0);
     }
 

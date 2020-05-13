@@ -17,11 +17,12 @@ package com.sliva.btc.scanner.db;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
+import com.sliva.btc.scanner.db.DbResultSetUtils.QueryConsumer;
+import com.sliva.btc.scanner.db.DbResultSetUtils.QueryResultProcessor;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -29,6 +30,7 @@ import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.SneakyThrows;
 import org.apache.commons.lang3.StringUtils;
 
@@ -42,39 +44,61 @@ public class DBPreparedStatement {
     private final String query;
     private final int paramsCount;
     private final ThreadLocal<PreparedStatement> psPool;
+    private final String cannotExecuteReason;
 
-    public DBPreparedStatement(String query, Supplier<Connection> conn) {
+    /**
+     * Create new instance of DBPreparedStatement.
+     *
+     * @param query SQL query string
+     * @param conn DBConnectionSupplier object
+     * @param cannotExecuteReason The reason why this query cannot be executed
+     * or null if query can be executed.
+     */
+    public DBPreparedStatement(String query, DBConnectionSupplier conn, String cannotExecuteReason) {
         checkArgument(query != null, "Argument 'query' is null");
         checkArgument(conn != null, "Argument 'conn' is null");
         this.query = query;
+        this.cannotExecuteReason = cannotExecuteReason;
         this.paramsCount = StringUtils.countMatches(query, '?');
-        this.psPool = ThreadLocal.withInitial(() -> buildPreparedStatement(conn));
+        this.psPool = cannotExecuteReason != null ? null : ThreadLocal.withInitial(() -> buildPreparedStatement(conn));
     }
 
+    public boolean canExecute() {
+        return cannotExecuteReason == null;
+    }
+
+    @NonNull
     public ParamSetter getParamSetter() {
+        checkCanExecute();
         return new ParamSetter();
     }
 
+    @NonNull
     public <T> DBPreparedStatement setParameters(T element, BiConsumer<T, ParamSetter> fillCallback) {
+        checkCanExecute();
         ParamSetter pSetter = getParamSetter();
         fillCallback.accept(element, pSetter);
         pSetter.checkStateReady();
         return this;
     }
 
+    @NonNull
     public DBPreparedStatement setParameters(Consumer<ParamSetter> fillCallback) {
+        checkCanExecute();
         ParamSetter pSetter = getParamSetter();
         fillCallback.accept(pSetter);
         pSetter.checkStateReady();
         return this;
     }
 
+    @NonNull
     @SneakyThrows(SQLException.class)
     public DBPreparedStatement setMaxRows(int maxRowsLimit) {
         getPreparedStatement().setMaxRows(maxRowsLimit);
         return this;
     }
 
+    @NonNull
     @SneakyThrows(SQLException.class)
     public DBPreparedStatement setFetchSize(int rows) {
         getPreparedStatement().setFetchSize(rows);
@@ -111,32 +135,19 @@ public class DBPreparedStatement {
         return getPreparedStatement().executeUpdate();
     }
 
+    @NonNull
     @SneakyThrows(SQLException.class)
     public ResultSet executeQuery() {
         return getPreparedStatement().executeQuery();
     }
 
-    @SneakyThrows(SQLException.class)
     public int executeQuery(QueryConsumer consumer) {
-        AtomicInteger result = new AtomicInteger();
-        try (ResultSet rs = executeQuery()) {
-            while (rs.next()) {
-                consumer.accept(rs);
-                result.incrementAndGet();
-            }
-        }
-        return result.get();
+        return DbResultSetUtils.executeQuery(executeQuery(), consumer);
     }
 
-    @SneakyThrows(SQLException.class)
+    @NonNull
     public <T> List<T> executeQueryToList(QueryResultProcessor<T> processor) {
-        List<T> result = new ArrayList<>();
-        try (ResultSet rs = executeQuery()) {
-            while (rs.next()) {
-                result.add(processor.apply(rs));
-            }
-        }
-        return result;
+        return DbResultSetUtils.executeQueryToList(executeQuery(), processor);
     }
 
     /**
@@ -146,23 +157,25 @@ public class DBPreparedStatement {
      * @param processor Record processor to be called
      * @return Value returned by processor or empty if no record processed
      */
-    @SneakyThrows(SQLException.class)
+    @NonNull
     public <T> Optional<T> querySingleRow(QueryResultProcessor<T> processor) {
-        try (ResultSet rs = setMaxRows(1).executeQuery()) {
-            if (rs.next()) {
-                return Optional.ofNullable(processor.apply(rs));
-            }
-        }
-        return Optional.empty();
+        return DbResultSetUtils.querySingleRow(setMaxRows(1).executeQuery(), processor);
     }
 
+    @NonNull
     private PreparedStatement getPreparedStatement() {
+        checkCanExecute();
         return psPool.get();
     }
 
+    @NonNull
     @SneakyThrows(SQLException.class)
     private PreparedStatement buildPreparedStatement(Supplier<Connection> conn) {
         return conn.get().prepareStatement(query, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
+    }
+
+    private void checkCanExecute() {
+        checkState(cannotExecuteReason == null, "Cannot execute query. %s. Query: %s", cannotExecuteReason, query);
     }
 
     public class ParamSetter {
@@ -226,15 +239,5 @@ public class DBPreparedStatement {
             ps.setBoolean(paramCounter.incrementAndGet(), value);
             return this;
         }
-    }
-
-    public interface QueryConsumer {
-
-        void accept(ResultSet rs) throws SQLException;
-    }
-
-    public interface QueryResultProcessor<T> {
-
-        T apply(ResultSet rs) throws SQLException;
     }
 }

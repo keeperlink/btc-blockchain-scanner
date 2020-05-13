@@ -127,7 +127,7 @@ public class DbCachedOutput implements AutoCloseable {
             updateCache(lt);
             ol = cacheData.cacheMap.get(transactionId);
         }
-        lt = queryOutput.getOutputs(transactionId);
+        lt = queryOutput.findOutputsByTransactionId(transactionId);
         if (ol != null) {
             ol.merge(lt, true);
             updateCache(transactionId, ol);

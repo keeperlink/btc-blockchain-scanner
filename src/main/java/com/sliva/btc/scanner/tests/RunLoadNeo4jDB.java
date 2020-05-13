@@ -201,12 +201,12 @@ public class RunLoadNeo4jDB {
                         synchronized (txnWriter) {
                             txnWriter.println(t.getTransactionId() + "," + t.getTxid() + "," + t.getBlockHeight() + "," + t.getNInputs() + "," + t.getNOutputs());
                         }
-                        queryInput.getInputs(t.getTransactionId()).forEach(i -> {
+                        queryInput.findInputsByTransactionId(t.getTransactionId()).forEach(i -> {
                             synchronized (inWriter) {
                                 inWriter.println(i.getTransactionId() + "," + i.getPos() + "," + i.getInTransactionId() + "," + i.getInPos());
                             }
                         });
-                        queryOutput.getOutputs(t.getTransactionId()).forEach(o -> {
+                        queryOutput.findOutputsByTransactionId(t.getTransactionId()).forEach(o -> {
                             DbAddress adr = o.getAddressId() == 0 ? null : new DbAddress(blockProvider, o.getAddressId(), null, -1);
                             String address = adr == null ? "Undefined" : adr.getName();
                             synchronized (outWriter) {

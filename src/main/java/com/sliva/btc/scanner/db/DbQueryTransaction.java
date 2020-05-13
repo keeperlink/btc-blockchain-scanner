@@ -28,8 +28,6 @@ import lombok.NonNull;
  */
 public class DbQueryTransaction {
 
-    private static final String SQL_QUERY_TXNS_NO_OUTPUTS = "SELECT transaction_id,txid,block_height,nInputs,nOutputs"
-            + " FROM `transaction` WHERE transaction_id NOT IN (SELECT transaction_id FROM `output`) ORDER BY transaction_id";
     private static final String SQL_QUERY_TXNS_RANGE = "SELECT transaction_id,txid,block_height,nInputs,nOutputs"
             + " FROM `transaction` WHERE transaction_id BETWEEN ? AND ?";
     private static final String SQL_QUERY_TXNS_IN_BLOCK = "SELECT txid FROM `transaction` WHERE block_height=?";
@@ -40,10 +38,12 @@ public class DbQueryTransaction {
     private static final String SQL_QUERY_TRANSACTIONS_IN_BLOCK = "SELECT transaction_id,txid,nInputs,nOutputs FROM `transaction` WHERE block_height=?";
     private static final String SQL_FIND_LAST_TRANSACTION = "SELECT transaction_id,txid,block_height,nInputs,nOutputs FROM `transaction` ORDER BY transaction_id DESC LIMIT 1";
     private static final String SQL_QUERY_SPENDING_TRANSACTIONS_BY_ADDRESS
-            = "SELECT I.transaction_id FROM input I"
-            + " INNER JOIN output O ON O.transaction_id=I.in_transaction_id AND O.pos=I.in_pos"
+            = "SELECT I.transaction_id FROM `input` I"
+            + " INNER JOIN `output` O ON O.transaction_id=I.in_transaction_id AND O.pos=I.in_pos"
             + " WHERE O.address_id=?";
-    private final DBPreparedStatement psQueryTxnsNoOutputs;
+    private static final String SQL_QUERY_TXNS_NO_OUTPUTS = "SELECT transaction_id,txid,block_height,nInputs,nOutputs"
+            + " FROM `transaction` WHERE transaction_id NOT IN (SELECT transaction_id FROM `output`) ORDER BY transaction_id";
+
     private final DBPreparedStatement psQueryTxnsRange;
     private final DBPreparedStatement psQueryTxnsInBlock;
     private final DBPreparedStatement psCountTxnsInBlock;
@@ -52,24 +52,25 @@ public class DbQueryTransaction {
     private final DBPreparedStatement psFindTransactionById;
     private final DBPreparedStatement psQueryTransactionsInBlock;
     private final DBPreparedStatement psFindLastTransaction;
-    private final DBPreparedStatement psQuerySpeninfTransactionsByAddress;
+    private final DBPreparedStatement psQuerySpeningTransactionsByAddress;
+    private final DBPreparedStatement psQueryTxnsNoOutputs;
 
     public DbQueryTransaction(DBConnectionSupplier conn) {
-        this.psQueryTxnsNoOutputs = conn.prepareStatement(SQL_QUERY_TXNS_NO_OUTPUTS);
-        this.psQueryTxnsRange = conn.prepareStatement(SQL_QUERY_TXNS_RANGE);
-        this.psQueryTxnsInBlock = conn.prepareStatement(SQL_QUERY_TXNS_IN_BLOCK);
-        this.psCountTxnsInBlock = conn.prepareStatement(SQL_COUNT_TXNS_IN_BLOCK);
-        this.psFindTransactionByTxid = conn.prepareStatement(SQL_FIND_TRANSACTION_BY_TXID);
-        this.psFindTransactionIdByTxid = conn.prepareStatement(SQL_FIND_TRANSACTION_ID_BY_TXID);
-        this.psFindTransactionById = conn.prepareStatement(SQL_FIND_TRANSACTION_BY_ID);
-        this.psQueryTransactionsInBlock = conn.prepareStatement(SQL_QUERY_TRANSACTIONS_IN_BLOCK);
-        this.psFindLastTransaction = conn.prepareStatement(SQL_FIND_LAST_TRANSACTION);
-        this.psQuerySpeninfTransactionsByAddress = conn.prepareStatement(SQL_QUERY_SPENDING_TRANSACTIONS_BY_ADDRESS);
+        this.psQueryTxnsRange = conn.prepareStatement(SQL_QUERY_TXNS_RANGE, "transaction.transaction_id");
+        this.psQueryTxnsInBlock = conn.prepareStatement(SQL_QUERY_TXNS_IN_BLOCK, "transaction.block_height");
+        this.psCountTxnsInBlock = conn.prepareStatement(SQL_COUNT_TXNS_IN_BLOCK, "transaction.block_height");
+        this.psFindTransactionByTxid = conn.prepareStatement(SQL_FIND_TRANSACTION_BY_TXID, "transaction.txid");
+        this.psFindTransactionIdByTxid = conn.prepareStatement(SQL_FIND_TRANSACTION_ID_BY_TXID, "transaction.txid");
+        this.psFindTransactionById = conn.prepareStatement(SQL_FIND_TRANSACTION_BY_ID, "transaction.transaction_id");
+        this.psQueryTransactionsInBlock = conn.prepareStatement(SQL_QUERY_TRANSACTIONS_IN_BLOCK, "transaction.block_height");
+        this.psFindLastTransaction = conn.prepareStatement(SQL_FIND_LAST_TRANSACTION, "transaction.transaction_id");
+        this.psQuerySpeningTransactionsByAddress = conn.prepareStatement(SQL_QUERY_SPENDING_TRANSACTIONS_BY_ADDRESS, "output.address_id", "input.in_transaction_id");
+        this.psQueryTxnsNoOutputs = conn.prepareStatement(SQL_QUERY_TXNS_NO_OUTPUTS, "transaction.transaction_id", "output.transaction_id");
     }
 
     @NonNull
     public Optional<BtcTransaction> findTransaction(String txid) {
-        byte[] binTxid = Utils.id2bin(txid);
+        byte[] binTxid = Utils.id2binNonNull(txid);
         return psFindTransactionByTxid
                 .setParameters(ps -> ps.setBytes(binTxid))
                 .querySingleRow(
@@ -84,7 +85,7 @@ public class DbQueryTransaction {
 
     @NonNull
     public Optional<Integer> findTransactionId(String txid) {
-        return DBUtils.readInteger(psFindTransactionIdByTxid.setParameters(ps -> ps.setBytes(Utils.id2bin(txid))));
+        return DBUtils.readInteger(psFindTransactionIdByTxid.setParameters(ps -> ps.setBytes(Utils.id2binNonNull(txid))));
     }
 
     @NonNull
@@ -171,6 +172,6 @@ public class DbQueryTransaction {
 
     @NonNull
     public Collection<Integer> getSpendingTransactionsByAddress(int addressId) {
-        return DBUtils.readIntegersToSet(psQuerySpeninfTransactionsByAddress.setParameters(ps -> ps.setInt(addressId)));
+        return DBUtils.readIntegersToSet(psQuerySpeningTransactionsByAddress.setParameters(ps -> ps.setInt(addressId)));
     }
 }

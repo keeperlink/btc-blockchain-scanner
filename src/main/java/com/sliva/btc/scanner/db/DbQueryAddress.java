@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkState;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.src.SrcAddressType;
 import java.util.Optional;
+import lombok.Getter;
 import lombok.NonNull;
 
 /**
@@ -38,6 +39,8 @@ public class DbQueryAddress {
     private final DBPreparedStatement psFindByAddress;
     private final DBPreparedStatement psQueryWalletId;
     private final DBPreparedStatement psQueryLastAddressId;
+    @Getter
+    private final String tableName;
 
     public DbQueryAddress() {
         this.addressType = null;
@@ -45,21 +48,18 @@ public class DbQueryAddress {
         this.psFindByAddress = null;
         this.psQueryWalletId = null;
         this.psQueryLastAddressId = null;
+        this.tableName = null;
     }
 
     public DbQueryAddress(DBConnectionSupplier conn, SrcAddressType addressType) {
         checkArgument(conn != null, "Argument 'conn' is null");
         checkArgument(addressType != null, "Argument 'addressType' is null");
         this.addressType = addressType;
-        this.psFindByAddressId = conn == null ? null : conn.prepareStatement(fixTableName(SQL_FIND_BY_ADDRESS_ID));
-        this.psFindByAddress = conn == null ? null : conn.prepareStatement(fixTableName(SQL_FIND_BY_ADDRESS));
-        this.psQueryWalletId = conn == null ? null : conn.prepareStatement(fixTableName(SQL_QUERY_WALLET_ID));
-        this.psQueryLastAddressId = conn == null ? null : conn.prepareStatement(fixTableName(SQL_QUERY_LAST_ADDRESS_ID));
-    }
-
-    @NonNull
-    public String getTableName() {
-        return _getTableName(addressType);
+        this.tableName = getTableName(addressType);
+        this.psFindByAddressId = conn == null ? null : conn.prepareStatement(fixTableName(SQL_FIND_BY_ADDRESS_ID), tableName + ".address_id");
+        this.psFindByAddress = conn == null ? null : conn.prepareStatement(fixTableName(SQL_FIND_BY_ADDRESS), tableName + ".address");
+        this.psQueryWalletId = conn == null ? null : conn.prepareStatement(fixTableName(SQL_QUERY_WALLET_ID), tableName + ".address_id");
+        this.psQueryLastAddressId = conn == null ? null : conn.prepareStatement(fixTableName(SQL_QUERY_LAST_ADDRESS_ID), tableName + ".address_id");
     }
 
     @NonNull
@@ -101,17 +101,17 @@ public class DbQueryAddress {
     }
 
     @NonNull
-    private String fixTableName(String sql) {
-        return updateQueryTableName(sql, addressType);
+    private String fixTableName(String query) {
+        return query.replaceAll(ADDRESS_TABLE_NAME, getTableName());
     }
 
     @NonNull
-    private static String _getTableName(SrcAddressType addressType) {
+    public static String getTableName(SrcAddressType addressType) {
         return "address_" + addressType.name().toLowerCase();
     }
 
     @NonNull
     public static String updateQueryTableName(String query, SrcAddressType addressType) {
-        return query.replaceAll(ADDRESS_TABLE_NAME, _getTableName(addressType));
+        return query.replaceAll(ADDRESS_TABLE_NAME, getTableName(addressType));
     }
 }

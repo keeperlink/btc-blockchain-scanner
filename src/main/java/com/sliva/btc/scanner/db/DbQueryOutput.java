@@ -16,6 +16,8 @@
 package com.sliva.btc.scanner.db;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.sliva.btc.scanner.db.DbQueryAddress.getTableName;
+import static com.sliva.btc.scanner.db.DbQueryAddress.updateQueryTableName;
 import com.sliva.btc.scanner.db.model.InOutKey;
 import com.sliva.btc.scanner.db.model.TxInput;
 import com.sliva.btc.scanner.db.model.TxOutput;
@@ -62,16 +64,16 @@ public class DbQueryOutput {
     private final Map<SrcAddressType, DBPreparedStatement> psQueryOutputsInTxnRange = new HashMap<>();
 
     public DbQueryOutput(DBConnectionSupplier conn) {
-        this.psQueryOutputs = conn.prepareStatement(SQL_QUERY_OUTPUTS);
-        this.psCountOutputsInTx = conn.prepareStatement(SQL_COUNT_OUTPUTS_IN_TX);
-        this.psQueryOutput = conn.prepareStatement(SQL_QUERY_OUTPUT);
-        this.psQueryOutputsWithInput = conn.prepareStatement(SQL_QUERY_OUTPUTS_WITH_INPUT);
+        this.psQueryOutputs = conn.prepareStatement(SQL_QUERY_OUTPUTS, "output.transaction_id");
+        this.psCountOutputsInTx = conn.prepareStatement(SQL_COUNT_OUTPUTS_IN_TX, "output.transaction_id");
+        this.psQueryOutput = conn.prepareStatement(SQL_QUERY_OUTPUT, "output.transaction_id");
+        this.psQueryOutputsWithInput = conn.prepareStatement(SQL_QUERY_OUTPUTS_WITH_INPUT, "output.transaction_id", "input.transaction_id");
         Stream.of(SrcAddressType.values()).filter(SrcAddressType::isReal).forEach(t -> psQueryOutputsInTxnRange.put(t,
-                conn.prepareStatement(DbQueryAddress.updateQueryTableName(SQL_QUERY_OUTPUTS_IN_TXN_RANGE, t))));
+                conn.prepareStatement(updateQueryTableName(SQL_QUERY_OUTPUTS_IN_TXN_RANGE, t), "output.transaction_id", getTableName(t) + ".address_id")));
     }
 
     @NonNull
-    public List<TxOutput> getOutputs(int transactionId) {
+    public List<TxOutput> findOutputsByTransactionId(int transactionId) {
         return psQueryOutputs.setParameters(ps -> ps.setInt(transactionId)).executeQueryToList(rs
                 -> TxOutput.builder()
                         .transactionId(transactionId)
@@ -82,7 +84,7 @@ public class DbQueryOutput {
                         .build());
     }
 
-    public int countOutputsInTransaction(int transactionId) {
+    public int countOutputsByTransactionId(int transactionId) {
         return DBUtils.readInteger(psCountOutputsInTx.setParameters(ps -> ps.setInt(transactionId))).orElse(0);
     }
 

@@ -74,13 +74,13 @@ public class DbQueryWallet {
     private final DBPreparedStatement psQueryUnusedWalletsInRange;
 
     public DbQueryWallet(DBConnectionSupplier conn) {
-        this.psQueryWallet = conn.prepareStatement(SQL_QUERY_WALLET);
-        this.psMaxId = conn.prepareStatement(SQL_MAX_ID);
-        this.psQueryWalletAddresses = conn.prepareStatement(SQL_QUERY_WALLET_ADDRESSES);
+        this.psQueryWallet = conn.prepareStatement(SQL_QUERY_WALLET, "wallet.wallet_id");
+        this.psMaxId = conn.prepareStatement(SQL_MAX_ID, "wallet.wallet_id");
+        this.psQueryWalletAddresses = conn.prepareStatement(SQL_QUERY_WALLET_ADDRESSES, "address_p2pkh.wallet_id", "address_p2sh.wallet_id", "address_p2wpkh.wallet_id", "address_p2wsh.wallet_id");
         this.psQueryMissingWallets = conn.prepareStatement(SQL_QUERY_MISSING_WALLETS);
-        this.psQueryMissingWalletsInRange = conn.prepareStatement(SQL_QUERY_MISSING_WALLETS_IN_RANGE);
+        this.psQueryMissingWalletsInRange = conn.prepareStatement(SQL_QUERY_MISSING_WALLETS_IN_RANGE, "address_p2pkh.wallet_id", "address_p2sh.wallet_id", "address_p2wpkh.wallet_id", "address_p2wsh.wallet_id");
         this.psQueryUnusedWallets = conn.prepareStatement(SQL_QUERY_UNUSED_WALLETS);
-        this.psQueryUnusedWalletsInRange = conn.prepareStatement(SQL_QUERY_UNUSED_WALLETS_IN_RANGE);
+        this.psQueryUnusedWalletsInRange = conn.prepareStatement(SQL_QUERY_UNUSED_WALLETS_IN_RANGE, "address_p2pkh.wallet_id", "address_p2sh.wallet_id", "address_p2wpkh.wallet_id", "address_p2wsh.wallet_id");
     }
 
     @NonNull
