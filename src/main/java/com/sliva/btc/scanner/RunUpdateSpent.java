@@ -100,14 +100,14 @@ public class RunUpdateSpent {
         startTransactionId = startFromFile.getNumber().intValue();
         batchSize = cmd.getOption(batchSizeOpt).map(Integer::parseInt).orElse(DEFAULT_BATCH_SIZE);
         threads = cmd.getOption(threadsOpt).map(Integer::parseInt).orElse(DEFAULT_THREADS);
-        dbCon = new DBConnectionSupplier();
-        psQueryOutputs = dbCon.prepareStatement(SQL_QUERY_OUTPUTS);
+        dbCon = new DBConnectionSupplier().checkTablesExist("input", "output");
+        psQueryOutputs = dbCon.prepareStatement(SQL_QUERY_OUTPUTS, "output.transaction_id", "input.in_transaction_id");
         dbQueryTransaction = new DbQueryTransaction(dbCon);
     }
 
     private void runProcess() throws SQLException {
         int lastTxnId = dbQueryTransaction.getLastTransactionId().orElse(0);
-        log.info("Run transactions from {} to {}", startTransactionId, lastTxnId);
+        log.info("Run transactions from {} to {}", nf.format(startTransactionId), nf.format(lastTxnId));
         Supplier<Integer> batchNumberSupplier = getNumberSupplier(startTransactionId, batchSize, n -> n <= lastTxnId && !shutdownHook.isInterrupted());
         ExecutorService loadThreadpool = Executors.newFixedThreadPool(threads, new ThreadFactoryBuilder().setDaemon(true).setNameFormat("loadThread-%02d").build());
         StopWatch startTime = StopWatch.createStarted();

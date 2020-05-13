@@ -15,6 +15,7 @@
  */
 package com.sliva.btc.scanner.db;
 
+import static com.google.common.base.Preconditions.checkState;
 import com.sliva.btc.scanner.util.CommandLineUtils.CmdArguments;
 import com.sliva.btc.scanner.util.CommandLineUtils.CmdOption;
 import com.sliva.btc.scanner.util.CommandLineUtils.CmdOptions;
@@ -31,6 +32,7 @@ import java.util.function.Supplier;
 import java.util.logging.Logger;
 import java.util.stream.Stream;
 import javax.sql.DataSource;
+import lombok.NonNull;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.cli.CommandLine;
@@ -80,32 +82,37 @@ public class DBConnectionSupplier implements Supplier<Connection>, DataSource, A
         this.dbMetaData = new LazyInitializer<>(this::_getDBMetaData);
     }
 
+    /**
+     * Get current database name
+     *
+     * @return current database name
+     */
+    @NonNull
     public String getDBName() {
         return dbname.get();
     }
 
+    /**
+     * Get current DB meta data.
+     *
+     * @return DBMetaData instance for current DB.
+     */
+    @NonNull
     public DBMetaData getDBMetaData() {
         return dbMetaData.get();
     }
 
-    @SneakyThrows(SQLException.class)
-    private String _getCatalog() {
-        return get().getCatalog();
-    }
-
-    private DBMetaData _getDBMetaData() {
-        return new DBMetaData(this);
-    }
-
-    private Connection makeJDBCConnection(String url, String user, String password) {
-        try {
-            Connection con = DriverManager.getConnection(url, user, password);
-            con.createStatement().execute("SET sql_log_bin=OFF");
-            return con;
-        } catch (SQLException e) {
-            //log.error("url=" + url, e);
-            throw new IllegalStateException(e);
-        }
+    /**
+     * Check that all tables exist in current database and throw
+     * IlligalStateException if any is missing.
+     *
+     * @param tableNames table names to check
+     * @return this
+     */
+    @NonNull
+    public DBConnectionSupplier checkTablesExist(String... tableNames) {
+        Stream.of(tableNames).forEach(tableName -> checkState(getDBMetaData().hasTable(tableName), "Table \"%s\" does not exist in database \"%s\"", tableName, getDBName()));
+        return this;
     }
 
     /**
@@ -113,11 +120,15 @@ public class DBConnectionSupplier implements Supplier<Connection>, DataSource, A
      *
      * @return
      */
+    @NonNull
     @Override
     public Connection get() {
         return conn.get();
     }
 
+    /**
+     * Close current thread's connection.
+     */
     @SneakyThrows(SQLException.class)
     @Override
     public void close() {
@@ -125,6 +136,16 @@ public class DBConnectionSupplier implements Supplier<Connection>, DataSource, A
         conn.remove();
     }
 
+    /**
+     * Prepare SQL statement.
+     *
+     * @param query Query string
+     * @param requiredIndexes list of fields that required to be indexed in
+     * order to execute this query. If any of these indexes is missing in DB,
+     * then returned instance will fail on execution request.
+     * @return DBPreparedStatement instance
+     */
+    @NonNull
     public DBPreparedStatement prepareStatement(String query, String... requiredIndexes) {
         String reason = Stream.of(requiredIndexes).filter(idxField -> !getDBMetaData().isIndexed(idxField)).map(r -> "Missing index on field \"" + r + '"').findFirst().orElse(null);
         return new DBPreparedStatement(query, this, reason);
@@ -151,11 +172,13 @@ public class DBConnectionSupplier implements Supplier<Connection>, DataSource, A
         return options;
     }
 
+    @NonNull
     @Override
     public Connection getConnection() throws SQLException {
         return get();
     }
 
+    @NonNull
     @Override
     public Connection getConnection(String username, String password) throws SQLException {
         return get();
@@ -194,5 +217,25 @@ public class DBConnectionSupplier implements Supplier<Connection>, DataSource, A
     @Override
     public boolean isWrapperFor(Class<?> iface) throws SQLException {
         return false;
+    }
+
+    @SneakyThrows(SQLException.class)
+    private String _getCatalog() {
+        return get().getCatalog();
+    }
+
+    private DBMetaData _getDBMetaData() {
+        return new DBMetaData(this);
+    }
+
+    private Connection makeJDBCConnection(String url, String user, String password) {
+        try {
+            Connection con = DriverManager.getConnection(url, user, password);
+            con.createStatement().execute("SET sql_log_bin=OFF");
+            return con;
+        } catch (SQLException e) {
+            //log.error("url=" + url, e);
+            throw new IllegalStateException(e);
+        }
     }
 }

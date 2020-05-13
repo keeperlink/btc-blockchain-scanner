@@ -62,9 +62,9 @@ public class DbUpdateInputSpecial extends DbUpdate {
         super(TABLE_NAME, conn);
         checkArgument(cacheData != null, "Argument 'cacheData' is null");
         this.psAdd = conn.prepareStatement(SQL_ADD);
-        this.psDelete = conn.prepareStatement(SQL_DELETE);
-        this.psUpdate = conn.prepareStatement(SQL_UPDATE);
-        this.psDeleteAllAboveTransactionId = conn.prepareStatement(SQL_DELETE_ALL_ABOVE_TRANSACTION_ID);
+        this.psDelete = conn.prepareStatement(SQL_DELETE, "input_special.transaction_id");
+        this.psUpdate = conn.prepareStatement(SQL_UPDATE, "input_special.transaction_id");
+        this.psDeleteAllAboveTransactionId = conn.prepareStatement(SQL_DELETE_ALL_ABOVE_TRANSACTION_ID, "input_special.transaction_id");
         this.cacheData = cacheData;
     }
 

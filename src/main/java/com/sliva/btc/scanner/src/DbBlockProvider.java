@@ -17,10 +17,12 @@ package com.sliva.btc.scanner.src;
 
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import com.sliva.btc.scanner.db.DBPreparedStatement;
+import static com.sliva.btc.scanner.db.DbQueryAddressOne.updateQueryTableName;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Stream;
 import lombok.NonNull;
+import static com.sliva.btc.scanner.db.DbQueryAddressOne.getAddressTableName;
 
 /**
  *
@@ -55,15 +57,15 @@ public class DbBlockProvider implements BlockProvider<DbBlock> {
     final DBPreparedStatement psQueryWalletAddresses;
 
     public DbBlockProvider(DBConnectionSupplier conn) {
-        this.psQueryBlockHash = conn.prepareStatement(SQL_QUERY_BLOCK_HASH);
-        this.psQueryBlockHeight = conn.prepareStatement(SQL_QUERY_BLOCK_HEIGHT);
-        this.psQueryBlockTransactions = conn.prepareStatement(SQL_QUERY_BLOCK_TRANSACTIONS);
-        this.psQueryTransactionHash = conn.prepareStatement(SQL_QUERY_TRANSACTION_HASH);
-        this.psQueryTransactionInputs = conn.prepareStatement(SQL_QUERY_TRANSACTION_INPUTS);
-        this.psQueryTransactionOutputs = conn.prepareStatement(SQL_QUERY_TRANSACTION_OUTPUTS);
-        Stream.of(SrcAddressType.values()).filter(SrcAddressType::isReal).forEach((type) -> psQueryAddress.put(type, conn.prepareStatement(fixTableName(SQL_QUERY_ADDRESS, type))));
-        this.psQueryWallet = conn.prepareStatement(SQL_QUERY_WALLET);
-        this.psQueryWalletAddresses = conn.prepareStatement(SQL_QUERY_WALLET_ADDRESSES);
+        this.psQueryBlockHash = conn.prepareStatement(SQL_QUERY_BLOCK_HASH, "block.height");
+        this.psQueryBlockHeight = conn.prepareStatement(SQL_QUERY_BLOCK_HEIGHT, "block.hash");
+        this.psQueryBlockTransactions = conn.prepareStatement(SQL_QUERY_BLOCK_TRANSACTIONS, "transaction.block_height");
+        this.psQueryTransactionHash = conn.prepareStatement(SQL_QUERY_TRANSACTION_HASH, "transaction.transaction_id");
+        this.psQueryTransactionInputs = conn.prepareStatement(SQL_QUERY_TRANSACTION_INPUTS, "input.transaction_id", "input_special.transaction_id");
+        this.psQueryTransactionOutputs = conn.prepareStatement(SQL_QUERY_TRANSACTION_OUTPUTS, "output.transaction_id");
+        Stream.of(SrcAddressType.values()).filter(SrcAddressType::isReal).forEach((type) -> psQueryAddress.put(type, conn.prepareStatement(updateQueryTableName(SQL_QUERY_ADDRESS, type), getAddressTableName(type) + ".address_id")));
+        this.psQueryWallet = conn.prepareStatement(SQL_QUERY_WALLET, "wallet.wallet_id");
+        this.psQueryWalletAddresses = conn.prepareStatement(SQL_QUERY_WALLET_ADDRESSES, "address_p2pkh.wallet_id", "address_p2sh.wallet_id", "address_p2wpkh.wallet_id", "address_p2wsh.wallet_id");
     }
 
     @Override
@@ -76,10 +78,5 @@ public class DbBlockProvider implements BlockProvider<DbBlock> {
     @NonNull
     public DbBlock getBlock(String hash) {
         return new DbBlock(this, hash);
-    }
-
-    @NonNull
-    private String fixTableName(String sql, SrcAddressType type) {
-        return sql.replaceAll("address_table_name", "address_" + type.name().toLowerCase());
     }
 }

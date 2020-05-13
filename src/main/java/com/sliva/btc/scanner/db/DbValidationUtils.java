@@ -74,7 +74,7 @@ public final class DbValidationUtils {
         DbQueryTransaction queryTransaction = new DbQueryTransaction(dbCon);
         DbQueryInput queryInput = new DbQueryInput(dbCon);
         DbQueryOutput queryOutput = new DbQueryOutput(dbCon);
-        DbQueryAddressCombo queryAddress = new DbQueryAddressCombo(dbCon);
+        DbQueryAddress queryAddress = new DbQueryAddress(dbCon);
         try (DbUpdateBlock updateBlock = new DbUpdateBlock(dbCon);
                 DbUpdateTransaction updateTxn = new DbUpdateTransaction(dbCon);
                 DbUpdateInput updateInput = new DbUpdateInput(dbCon);

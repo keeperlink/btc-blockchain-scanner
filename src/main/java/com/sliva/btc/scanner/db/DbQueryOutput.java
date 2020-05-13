@@ -16,8 +16,7 @@
 package com.sliva.btc.scanner.db;
 
 import static com.google.common.base.Preconditions.checkArgument;
-import static com.sliva.btc.scanner.db.DbQueryAddress.getTableName;
-import static com.sliva.btc.scanner.db.DbQueryAddress.updateQueryTableName;
+import static com.sliva.btc.scanner.db.DbQueryAddressOne.updateQueryTableName;
 import com.sliva.btc.scanner.db.model.InOutKey;
 import com.sliva.btc.scanner.db.model.TxInput;
 import com.sliva.btc.scanner.db.model.TxOutput;
@@ -33,6 +32,7 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.ToString;
 import lombok.experimental.SuperBuilder;
+import static com.sliva.btc.scanner.db.DbQueryAddressOne.getAddressTableName;
 
 /**
  *
@@ -69,7 +69,7 @@ public class DbQueryOutput {
         this.psQueryOutput = conn.prepareStatement(SQL_QUERY_OUTPUT, "output.transaction_id");
         this.psQueryOutputsWithInput = conn.prepareStatement(SQL_QUERY_OUTPUTS_WITH_INPUT, "output.transaction_id", "input.transaction_id");
         Stream.of(SrcAddressType.values()).filter(SrcAddressType::isReal).forEach(t -> psQueryOutputsInTxnRange.put(t,
-                conn.prepareStatement(updateQueryTableName(SQL_QUERY_OUTPUTS_IN_TXN_RANGE, t), "output.transaction_id", getTableName(t) + ".address_id")));
+                conn.prepareStatement(updateQueryTableName(SQL_QUERY_OUTPUTS_IN_TXN_RANGE, t), "output.transaction_id", getAddressTableName(t) + ".address_id")));
     }
 
     @NonNull

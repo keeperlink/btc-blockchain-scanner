@@ -65,11 +65,11 @@ public class DbUpdateOutput extends DbUpdate {
         super(TABLE_NAME, conn);
         checkArgument(cacheData != null, "Argument 'cacheData' is null");
         this.psAdd = conn.prepareStatement(SQL_ADD);
-        this.psDelete = conn.prepareStatement(SQL_DELETE);
-        this.psDeleteAllAboveTransactionId = conn.prepareStatement(SQL_DELETE_ALL_ABOVE_TRANSACTION_ID);
-        this.psUpdateSpent = conn.prepareStatement(SQL_UPDATE_SPENT);
-        this.psUpdateAddress = conn.prepareStatement(SQL_UPDATE_ADDRESS);
-        this.psUpdateAmount = conn.prepareStatement(SQL_UPDATE_AMOUNT);
+        this.psDelete = conn.prepareStatement(SQL_DELETE, "output.transaction_id");
+        this.psDeleteAllAboveTransactionId = conn.prepareStatement(SQL_DELETE_ALL_ABOVE_TRANSACTION_ID, "output.transaction_id");
+        this.psUpdateSpent = conn.prepareStatement(SQL_UPDATE_SPENT, "output.transaction_id");
+        this.psUpdateAddress = conn.prepareStatement(SQL_UPDATE_ADDRESS, "output.transaction_id");
+        this.psUpdateAmount = conn.prepareStatement(SQL_UPDATE_AMOUNT, "output.transaction_id");
         this.cacheData = cacheData;
     }
 

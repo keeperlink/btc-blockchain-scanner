@@ -172,7 +172,7 @@ public class RunFullScan {
                 new ThreadFactoryBuilder().setDaemon(true).setNameFormat("ExecTxn-%02d").build()) : null;
         execInsOuts = runParallel ? Executors.newFixedThreadPool(Math.max(1, nExecTxnThreads * 2 / 3),
                 new ThreadFactoryBuilder().setDaemon(true).setNameFormat("execInsOuts-%02d").build()) : null;
-        dbCon = new DBConnectionSupplier();
+        dbCon = new DBConnectionSupplier().checkTablesExist("block", "transaction", "input", "input_special", "output", "address_p2pkh", "address_p2sh", "address_p2wpkh", "address_p2wsh");
         queryBlock = new DbQueryBlock(dbCon);
         queryInput = new DbQueryInput(dbCon);
         queryInputSpecial = new DbQueryInputSpecial(dbCon);

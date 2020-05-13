@@ -18,6 +18,8 @@ package com.sliva.btc.scanner.db;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
+import static com.sliva.btc.scanner.db.DbQueryAddressOne.getAddressTableName;
+import static com.sliva.btc.scanner.db.DbQueryAddressOne.updateQueryTableName;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.src.SrcAddressType;
 import java.util.ArrayList;
@@ -42,10 +44,8 @@ public class DbUpdateAddressOne extends DbUpdate {
     private static int MAX_BATCH_SIZE = 60000;
     private static int MAX_INSERT_QUEUE_LENGTH = 120000;
     private static int MAX_UPDATE_QUEUE_LENGTH = 10000;
-    private static final String TABLE_NAME_TO_FILL = "__address_table_name__";
-    private static final String SQL_ADD = "INSERT INTO __address_table_name__(address_id,address,wallet_id)VALUES(?,?,?)";
-    private static final String SQL_UPDATE_WALLET = "UPDATE __address_table_name__ SET wallet_id=? WHERE address_id=?";
-    private final SrcAddressType addressType;
+    private static final String SQL_ADD = "INSERT INTO `address_table_name`(address_id,`address`,wallet_id)VALUES(?,?,?)";
+    private static final String SQL_UPDATE_WALLET = "UPDATE `address_table_name` SET wallet_id=? WHERE address_id=?";
     private final DBPreparedStatement psAdd;
     private final DBPreparedStatement psUpdateWallet;
     @Getter
@@ -60,9 +60,8 @@ public class DbUpdateAddressOne extends DbUpdate {
         super("address_" + checkNotNull(addressType, "Argument 'addressType' is null").name().toLowerCase(), conn);
         checkArgument(addressType.isReal(), "Argument 'addressType' is not a real type: %s", addressType);
         checkArgument(cacheData != null, "Argument 'cacheData' is null");
-        this.addressType = addressType;
-        this.psAdd = conn.prepareStatement(fixTableName(SQL_ADD));
-        this.psUpdateWallet = conn.prepareStatement(fixTableName(SQL_UPDATE_WALLET));
+        this.psAdd = conn.prepareStatement(updateQueryTableName(SQL_ADD, addressType));
+        this.psUpdateWallet = conn.prepareStatement(updateQueryTableName(SQL_UPDATE_WALLET, addressType), getAddressTableName(addressType) + ".address_id");
         this.cacheData = cacheData;
     }
 
@@ -139,11 +138,6 @@ public class DbUpdateAddressOne extends DbUpdate {
     private int _executeUpdateWallet() {
         return executeBatch(cacheData, cacheData.updateWalletQueue, psUpdateWallet, MAX_BATCH_SIZE,
                 (t, p) -> p.setInt(t.getWalletId()).setInt(t.getAddressId()), null);
-    }
-
-    @NonNull
-    private String fixTableName(String sql) {
-        return sql.replaceAll(TABLE_NAME_TO_FILL, getTableName());
     }
 
     @Getter
