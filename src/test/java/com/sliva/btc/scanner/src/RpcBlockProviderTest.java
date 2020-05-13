@@ -15,12 +15,8 @@
  */
 package com.sliva.btc.scanner.src;
 
-import com.sliva.btc.scanner.rpc.RpcClientDirect;
 import java.util.Collection;
-import org.apache.commons.cli.CommandLine;
-import org.apache.commons.cli.DefaultParser;
-import org.apache.commons.cli.Options;
-import org.apache.commons.cli.ParseException;
+import java.util.Optional;
 import org.junit.After;
 import org.junit.AfterClass;
 import static org.junit.Assert.*;
@@ -34,15 +30,14 @@ import org.junit.Test;
  */
 public class RpcBlockProviderTest {
 
-    private static final String CONF_FILE = "/etc/rpc.conf";
     private final RpcBlockProvider instance = new RpcBlockProvider();
 
     public RpcBlockProviderTest() {
     }
 
     @BeforeClass
-    public static void setUpClass() {
-        init();
+    public static void setUpClass() throws Exception {
+        com.sliva.btc.scanner.rpc.RpcSetup.init();
     }
 
     @AfterClass
@@ -57,15 +52,6 @@ public class RpcBlockProviderTest {
     public void tearDown() {
     }
 
-    public static void init() {
-        try {
-            CommandLine cmd = new DefaultParser().parse(RpcClientDirect.addOptions(new Options()), new String[]{"--rpc-config=" + CONF_FILE});
-            RpcClientDirect.applyArguments(cmd);
-        } catch (ParseException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
     /**
      * Test of getBlock method, of class RpcBlockProvider.
      */
@@ -73,7 +59,7 @@ public class RpcBlockProviderTest {
     public void testGetBlock_int() {
         System.out.println("testGetBlock_int");
         int height = 123456;
-        RpcBlock result = instance.getBlock(height);
+        RpcBlock<?> result = instance.getBlock(height);
         assertEquals("0000000000002917ed80650c6174aac8dfc46f5fe36480aaef682ff6cd83c3ca", result.getHash());
     }
 
@@ -84,7 +70,7 @@ public class RpcBlockProviderTest {
     public void testGetBlock_String() {
         System.out.println("testGetBlock_String");
         String hash = "0000000000002917ed80650c6174aac8dfc46f5fe36480aaef682ff6cd83c3ca";
-        RpcBlock result = instance.getBlock(hash);
+        RpcBlock<?> result = instance.getBlock(hash);
         assertEquals(hash, result.getHash());
         assertEquals(123456, result.getHeight());
     }
@@ -96,17 +82,29 @@ public class RpcBlockProviderTest {
     public void testGetBlock_transactions() {
         System.out.println("testGetBlock_transactions");
         int height = 1;
-        RpcBlock result = instance.getBlock(height);
+        RpcBlock<?> result = instance.getBlock(height);
         assertEquals("00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048", result.getHash());
-        Collection<RpcTransaction> tlist = result.getTransactions();
+        Collection<? extends RpcTransaction<?, ?>> tlist = result.getTransactions();
         assertNotNull(tlist);
         assertEquals(1, tlist.size());
-        RpcTransaction t = tlist.iterator().next();
-        assertNull(t.getInputs());
+        RpcTransaction<?, ?> t = tlist.iterator().next();
+        assertNotNull(t.getInputs());
+        assertTrue(t.getInputs().isEmpty());
         assertNotNull(t.getOutputs());
         assertEquals(1, t.getOutputs().size());
-        RpcOutput out = t.getOutputs().iterator().next();
-        assertEquals("12c6DSiU4Rq3P4ZxziKxzrL5LmMBrzjrJX", out.getAddress().getName());
+        RpcOutput<?> out = t.getOutputs().iterator().next();
+        assertEquals("12c6DSiU4Rq3P4ZxziKxzrL5LmMBrzjrJX", out.getAddress().map(RpcAddress::getName).orElse(null));
+    }
+
+    /**
+     * Test of getBlock method, of class RpcBlockProvider.
+     */
+    @Test
+    public void testGetAddress_OP_DUP() {
+        System.out.println("testGetBlock_String");
+        RpcBlock<?> block = instance.getBlock(150951);
+        RpcTransaction<?, ?> tran = block.getTransactions().stream().filter(t -> t.getTxid().equalsIgnoreCase("07d33c8c74e945c50e45d3eaf4add7553534154503a478cf6d48e1c617b3f9f3")).findFirst().orElseThrow(() -> new IllegalStateException());
+        assertEquals(Optional.empty(), tran.getOutputs().iterator().next().getAddress());
     }
 
     /**
@@ -116,9 +114,9 @@ public class RpcBlockProviderTest {
     public void testGetBlock_transactions2() {
         System.out.println("testGetBlock_transactions2");
         int height = 123456;
-        RpcBlock result = instance.getBlock(height);
+        RpcBlock<?> result = instance.getBlock(height);
         assertEquals("0000000000002917ed80650c6174aac8dfc46f5fe36480aaef682ff6cd83c3ca", result.getHash());
-        Collection<RpcTransaction> tlist = result.getTransactions();
+        Collection<? extends RpcTransaction<?, ?>> tlist = result.getTransactions();
         assertNotNull(tlist);
 //        RpcTransaction t = tlist.get(10);
 //        assertEquals("dda726e3dad9504dce5098dfab5064ecd4a7650bfe854bb2606da3152b60e427", t.getTxid());

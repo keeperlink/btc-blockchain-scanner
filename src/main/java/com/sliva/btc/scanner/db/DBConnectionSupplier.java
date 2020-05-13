@@ -19,12 +19,18 @@ import com.sliva.btc.scanner.util.CommandLineUtils.CmdArguments;
 import com.sliva.btc.scanner.util.CommandLineUtils.CmdOption;
 import com.sliva.btc.scanner.util.CommandLineUtils.CmdOptions;
 import static com.sliva.btc.scanner.util.CommandLineUtils.buildOption;
+import com.sliva.btc.scanner.util.LazyInitializer;
 import com.sliva.btc.scanner.util.Utils;
+import java.io.PrintWriter;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.sql.SQLFeatureNotSupportedException;
 import java.util.Properties;
 import java.util.function.Supplier;
+import java.util.logging.Logger;
+import java.util.stream.Stream;
+import javax.sql.DataSource;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.cli.CommandLine;
@@ -39,7 +45,7 @@ import org.apache.commons.cli.Options;
  * @author Sliva Co
  */
 @Slf4j
-public class DBConnectionSupplier implements Supplier<Connection> {
+public class DBConnectionSupplier implements Supplier<Connection>, DataSource, AutoCloseable {
 
     private static String DEFAULT_CONN_URL = "jdbc:mysql://localhost:3306/btc_default_db"
             + "?verifyServerCertificate=false&useSSL=true"
@@ -56,8 +62,9 @@ public class DBConnectionSupplier implements Supplier<Connection> {
     public static final CmdOption dbPasswordOpt = buildOption(CMD_OPTS, null, "db-password", true, "DB password.");
     public static final CmdOption dbConfigOpt = buildOption(CMD_OPTS, null, "db-config", true, "Configuration file name with db url, user and password values.");
 
-    private final String dbname;
     private final ThreadLocal<Connection> conn;
+    private final LazyInitializer<String> dbname;
+    private final LazyInitializer<DBMetaData> dbMetaData;
 
     public DBConnectionSupplier() {
         this(DEFAULT_CONN_URL, DEFAULT_DB_USER, DEFAULT_DB_PASSWORD);
@@ -68,12 +75,26 @@ public class DBConnectionSupplier implements Supplier<Connection> {
     }
 
     public DBConnectionSupplier(String url, String user, String password) {
-        this.dbname = url;
         this.conn = ThreadLocal.withInitial(() -> makeJDBCConnection(url, user, password));
+        this.dbname = new LazyInitializer<>(this::_getCatalog);
+        this.dbMetaData = new LazyInitializer<>(this::_getDBMetaData);
     }
 
-    public String getDbname() {
-        return dbname;
+    public String getDBName() {
+        return dbname.get();
+    }
+
+    public DBMetaData getDBMetaData() {
+        return dbMetaData.get();
+    }
+
+    @SneakyThrows(SQLException.class)
+    private String _getCatalog() {
+        return get().getCatalog();
+    }
+
+    private DBMetaData _getDBMetaData() {
+        return new DBMetaData(this);
     }
 
     private Connection makeJDBCConnection(String url, String user, String password) {
@@ -98,13 +119,15 @@ public class DBConnectionSupplier implements Supplier<Connection> {
     }
 
     @SneakyThrows(SQLException.class)
+    @Override
     public void close() {
         get().close();
         conn.remove();
     }
 
-    public DBPreparedStatement prepareStatement(String query) {
-        return new DBPreparedStatement(query, this);
+    public DBPreparedStatement prepareStatement(String query, String... requiredIndexes) {
+        String reason = Stream.of(requiredIndexes).filter(idxField -> !getDBMetaData().isIndexed(idxField)).map(r -> "Missing index on field \"" + r + '"').findFirst().orElse(null);
+        return new DBPreparedStatement(query, this, reason);
     }
 
     public static void applyArguments(CmdArguments cmdArguments) {
@@ -126,5 +149,50 @@ public class DBConnectionSupplier implements Supplier<Connection> {
     public static Options addOptions(Options options) {
         CMD_OPTS.forEach(o -> options.addOption(o.getOpt(), o.getLongOpt(), o.isHasArg(), o.getDescription()));
         return options;
+    }
+
+    @Override
+    public Connection getConnection() throws SQLException {
+        return get();
+    }
+
+    @Override
+    public Connection getConnection(String username, String password) throws SQLException {
+        return get();
+    }
+
+    @Override
+    public PrintWriter getLogWriter() throws SQLException {
+        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+    }
+
+    @Override
+    public void setLogWriter(PrintWriter out) throws SQLException {
+        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+    }
+
+    @Override
+    public void setLoginTimeout(int seconds) throws SQLException {
+        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+    }
+
+    @Override
+    public int getLoginTimeout() throws SQLException {
+        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+    }
+
+    @Override
+    public Logger getParentLogger() throws SQLFeatureNotSupportedException {
+        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+    }
+
+    @Override
+    public <T> T unwrap(Class<T> iface) throws SQLException {
+        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+    }
+
+    @Override
+    public boolean isWrapperFor(Class<?> iface) throws SQLException {
+        return false;
     }
 }

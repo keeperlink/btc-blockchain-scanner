@@ -17,7 +17,7 @@ package com.sliva.btc.scanner;
 
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import com.sliva.btc.scanner.db.DBPreparedStatement;
-import com.sliva.btc.scanner.db.DbAddWallet;
+import com.sliva.btc.scanner.db.DbUpdateWallet;
 import com.sliva.btc.scanner.db.DbQueries;
 import com.sliva.btc.scanner.db.DbQueryInput;
 import com.sliva.btc.scanner.db.DbQueryTransaction;
@@ -108,7 +108,7 @@ public class RunUpdateWallets2 {
         log.info("START");
         try {
             try (DbUpdateAddress updateAddress = new DbUpdateAddress(conn);
-                    DbAddWallet addWallet = new DbAddWallet(conn)) {
+                    DbUpdateWallet addWallet = new DbUpdateWallet(conn)) {
                 initProcess(addWallet);
                 int endTransaction = queryTransaction.getLastTransactionId().orElse(0);
                 int batchFirstTransaction = firstTransaction;
@@ -132,7 +132,7 @@ public class RunUpdateWallets2 {
         }
     }
 
-    private void initProcess(DbAddWallet addWallet) throws SQLException, InterruptedException {
+    private void initProcess(DbUpdateWallet addWallet) throws SQLException, InterruptedException {
         log.debug("Checking for missing wallet records...");
         long s = System.currentTimeMillis();
         Collection<Integer> missing = queryWallet.getMissingWalletsParallel();
@@ -148,7 +148,7 @@ public class RunUpdateWallets2 {
         }
     }
 
-    private void processBatch(int minTxn, int maxTxn, DbUpdateAddress updateAddress, DbAddWallet addWallet) throws SQLException, InterruptedException {
+    private void processBatch(int minTxn, int maxTxn, DbUpdateAddress updateAddress, DbUpdateWallet addWallet) throws SQLException, InterruptedException {
         final Map<Integer, Map<Integer, Integer>> needToProcess = getNeedToProccessTxnList(minTxn, maxTxn);
         proccessTxnList(needToProcess, updateAddress, addWallet);
     }
@@ -175,7 +175,7 @@ public class RunUpdateWallets2 {
         return result;
     }
 
-    private void proccessTxnList(Map<Integer, Map<Integer, Integer>> needToProcess, DbUpdateAddress updateAddress, DbAddWallet addWallet) throws SQLException {
+    private void proccessTxnList(Map<Integer, Map<Integer, Integer>> needToProcess, DbUpdateAddress updateAddress, DbUpdateWallet addWallet) throws SQLException {
         AtomicInteger newWalletsAssigned = new AtomicInteger();
         AtomicInteger walletsMerged = new AtomicInteger();
         for (Map.Entry<Integer, Map<Integer, Integer>> proc : new ArrayList<>(needToProcess.entrySet())) {
@@ -251,7 +251,7 @@ public class RunUpdateWallets2 {
         needToProcess.forEach((t, m) -> m.entrySet().stream().filter(e -> e.getValue() == walletToReplace).forEach(e -> e.setValue(walletToUse)));
     }
 
-    private int getNextWalletId(DbAddWallet addWallet) throws SQLException {
+    private int getNextWalletId(DbUpdateWallet addWallet) throws SQLException {
         synchronized (unusedWallets) {
             if (!unusedWallets.isEmpty()) {
                 Integer w = unusedWallets.iterator().next();
@@ -259,7 +259,7 @@ public class RunUpdateWallets2 {
                 return w;
             }
         }
-        return addWallet.add(null).getWalletId();
+        return addWallet.add().getWalletId();
     }
 
     private String fixAddressTableName(String sql, SrcAddressType addressType) {

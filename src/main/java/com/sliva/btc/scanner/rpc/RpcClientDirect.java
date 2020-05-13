@@ -52,9 +52,9 @@ public class RpcClientDirect {
     private static String RPC_PASSWORD = "password";
 
     public static final CmdOptions CMD_OPTS = new CmdOptions();
-    public static final CmdOption rpcUrlOpt = buildOption(CMD_OPTS, "r", "rpc-url", true, "RPC URL to running bitcoin core. Default is '" + RPC_URL + "'.");
-    public static final CmdOption rpcUserOpt = buildOption(CMD_OPTS, "x", "rpc-user", true, "RPC user name.");
-    public static final CmdOption rpcPasswordOpt = buildOption(CMD_OPTS, "y", "rpc-password", true, "RPC password.");
+    public static final CmdOption rpcUrlOpt = buildOption(CMD_OPTS, null, "rpc-url", true, "RPC URL to running bitcoin core. Default is '" + RPC_URL + "'.");
+    public static final CmdOption rpcUserOpt = buildOption(CMD_OPTS, null, "rpc-user", true, "RPC user name.");
+    public static final CmdOption rpcPasswordOpt = buildOption(CMD_OPTS, null, "rpc-password", true, "RPC password.");
     public static final CmdOption rpcConfigOpt = buildOption(CMD_OPTS, null, "rpc-config", true, "Configuration file name with RPC url, user and password values.");
 
     private static RpcClientDirect instance;

@@ -39,21 +39,15 @@ import org.bitcoinj.core.Address;
 public class DbCachedAddress implements AutoCloseable {
 
     private final Map<SrcAddressType, DbCachedAddressOne> updaters = new HashMap<>();
-    private final CacheData cacheData;
 
-    public DbCachedAddress(DBConnectionSupplier conn) throws SQLException {
+    public DbCachedAddress(DBConnectionSupplier conn) {
         this(conn, new CacheData());
     }
 
     public DbCachedAddress(DBConnectionSupplier conn, CacheData cacheData) {
-        this.cacheData = cacheData;
+        checkArgument(cacheData != null, "Argument 'cacheData' is null");
         Stream.of(SrcAddressType.values()).filter(SrcAddressType::isReal)
                 .forEach((t) -> updaters.put(t, new DbCachedAddressOne(conn, t, cacheData.dataOneMap.get(t))));
-    }
-
-    @NonNull
-    public CacheData getCacheData() {
-        return cacheData;
     }
 
     @SuppressWarnings("DoubleCheckedLocking")

@@ -89,7 +89,7 @@ public class TestRawBlock {
                         throw new IllegalStateException("Transaction not found in DB: " + t.getHashAsString());
                     }
                     log.info("Tx.inputs: " + t.getInputs().size());
-                    List<TxInput> txInputs = queryInput.getInputs(btcTransaction.getTransactionId());
+                    List<TxInput> txInputs = queryInput.findInputsByTransactionId(btcTransaction.getTransactionId());
                     for (TransactionInput ti : t.getInputs()) {
 //                    log.info("\tIn.isCoinBase: " + ti.isCoinBase());
                         if (!ti.isCoinBase()) {
@@ -107,7 +107,7 @@ public class TestRawBlock {
                         throw new IllegalStateException("More inputs in DB: " + txInputs);
                     }
                     log.info("Tx.outputs: " + t.getOutputs().size());
-                    List<TxOutput> txOutputs = queryOutput.getOutputs(btcTransaction.getTransactionId());
+                    List<TxOutput> txOutputs = queryOutput.findOutputsByTransactionId(btcTransaction.getTransactionId());
                     t.getOutputs().stream().forEach((to) -> {
                         log.info("\tOut.amount: " + to.getValue().longValue());
                         try {
@@ -154,7 +154,7 @@ public class TestRawBlock {
 
     private static BtcTransaction findTx(List<BtcTransaction> list, String hash) {
         for (BtcTransaction t : list) {
-            if (t.getTxid().equalsIgnoreCase(hash)) {
+            if (t.getTxid().toString().equalsIgnoreCase(hash)) {
                 list.remove(t);
                 return t;
             }

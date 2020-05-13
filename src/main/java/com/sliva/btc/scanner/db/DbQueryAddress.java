@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkState;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.src.SrcAddressType;
 import java.util.Optional;
+import lombok.Getter;
 import lombok.NonNull;
 
 /**
@@ -29,15 +30,17 @@ import lombok.NonNull;
 public class DbQueryAddress {
 
     private static final String ADDRESS_TABLE_NAME = "address_table_name";
-    private static final String SQL_FIND_BY_ADDRESS_ID = "SELECT address,wallet_id FROM address_table_name WHERE address_id=?";
-    private static final String SQL_FIND_BY_ADDRESS = "SELECT address_id FROM address_table_name WHERE address=? LIMIT 1";
-    private static final String SQL_QUERY_WALLET_ID = "SELECT wallet_id FROM address_table_name WHERE address_id=?";
-    private static final String SQL_QUERY_LAST_ADDRESS_ID = "SELECT address_id FROM address_table_name ORDER BY address_id DESC LIMIT 1";
+    private static final String SQL_FIND_BY_ADDRESS_ID = "SELECT `address`,wallet_id FROM `address_table_name` WHERE address_id=? LIMIT 1";
+    private static final String SQL_FIND_BY_ADDRESS = "SELECT address_id FROM `address_table_name` WHERE `address`=? LIMIT 1";
+    private static final String SQL_QUERY_WALLET_ID = "SELECT wallet_id FROM `address_table_name` WHERE address_id=? LIMIT 1";
+    private static final String SQL_QUERY_LAST_ADDRESS_ID = "SELECT address_id FROM `address_table_name` ORDER BY address_id DESC LIMIT 1";
     private final SrcAddressType addressType;
     private final DBPreparedStatement psFindByAddressId;
     private final DBPreparedStatement psFindByAddress;
     private final DBPreparedStatement psQueryWalletId;
     private final DBPreparedStatement psQueryLastAddressId;
+    @Getter
+    private final String tableName;
 
     public DbQueryAddress() {
         this.addressType = null;
@@ -45,26 +48,23 @@ public class DbQueryAddress {
         this.psFindByAddress = null;
         this.psQueryWalletId = null;
         this.psQueryLastAddressId = null;
+        this.tableName = null;
     }
 
     public DbQueryAddress(DBConnectionSupplier conn, SrcAddressType addressType) {
         checkArgument(conn != null, "Argument 'conn' is null");
         checkArgument(addressType != null, "Argument 'addressType' is null");
         this.addressType = addressType;
-        this.psFindByAddressId = conn == null ? null : conn.prepareStatement(fixTableName(SQL_FIND_BY_ADDRESS_ID));
-        this.psFindByAddress = conn == null ? null : conn.prepareStatement(fixTableName(SQL_FIND_BY_ADDRESS));
-        this.psQueryWalletId = conn == null ? null : conn.prepareStatement(fixTableName(SQL_QUERY_WALLET_ID));
-        this.psQueryLastAddressId = conn == null ? null : conn.prepareStatement(fixTableName(SQL_QUERY_LAST_ADDRESS_ID));
-    }
-
-    @NonNull
-    public String getTableName() {
-        return getTableName(addressType);
+        this.tableName = getTableName(addressType);
+        this.psFindByAddressId = conn == null ? null : conn.prepareStatement(fixTableName(SQL_FIND_BY_ADDRESS_ID), tableName + ".address_id");
+        this.psFindByAddress = conn == null ? null : conn.prepareStatement(fixTableName(SQL_FIND_BY_ADDRESS), tableName + ".address");
+        this.psQueryWalletId = conn == null ? null : conn.prepareStatement(fixTableName(SQL_QUERY_WALLET_ID), tableName + ".address_id");
+        this.psQueryLastAddressId = conn == null ? null : conn.prepareStatement(fixTableName(SQL_QUERY_LAST_ADDRESS_ID), tableName + ".address_id");
     }
 
     @NonNull
     public Optional<BtcAddress> findByAddressId(int addressId) {
-        checkState(addressType != null, "Method not supported due to instance created with no-arguments constructor");
+        checkState(psFindByAddressId != null, "Method not supported due to instance created with no-arguments constructor");
         return psFindByAddressId.setParameters(ps -> ps.setInt(addressId)).querySingleRow(rs -> BtcAddress.builder()
                 .type(addressType)
                 .addressId(addressId)
@@ -101,8 +101,8 @@ public class DbQueryAddress {
     }
 
     @NonNull
-    private String fixTableName(String sql) {
-        return updateQueryTableName(sql, addressType);
+    private String fixTableName(String query) {
+        return query.replaceAll(ADDRESS_TABLE_NAME, getTableName());
     }
 
     @NonNull

@@ -15,11 +15,13 @@
  */
 package com.sliva.btc.scanner.db;
 
+import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkState;
 import com.sliva.btc.scanner.db.model.BtcBlock;
-import com.sliva.btc.scanner.util.Utils;
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -27,57 +29,68 @@ import lombok.extern.slf4j.Slf4j;
  * @author Sliva Co
  */
 @Slf4j
-public class DbAddBlock extends DbUpdate {
+public class DbUpdateBlock extends DbUpdate {
 
     private static int MIN_BATCH_SIZE = 1;
     private static int MAX_BATCH_SIZE = 10000;
     private static int MAX_INSERT_QUEUE_LENGTH = 30000;
     private static final String TABLE_NAME = "block";
-    private static final String SQL_ADD = "INSERT INTO block(height,hash,txn_count)VALUES(?,?,?)";
+    private static final String SQL_ADD = "INSERT INTO `block`(`height`,`hash`,txn_count)VALUES(?,?,?)";
+    private static final String SQL_DELETE = "DELETE FROM `block` WHERE height=?";
     private final DBPreparedStatement psAdd;
+    private final DBPreparedStatement psDelete;
+    @Getter
+    @NonNull
     private final CacheData cacheData;
 
-    public DbAddBlock(DBConnectionSupplier conn) {
+    public DbUpdateBlock(DBConnectionSupplier conn) {
         this(conn, new CacheData());
     }
 
-    public DbAddBlock(DBConnectionSupplier conn, CacheData cacheData) {
-        super(conn);
+    public DbUpdateBlock(DBConnectionSupplier conn, CacheData cacheData) {
+        super(TABLE_NAME, conn);
+        checkArgument(cacheData != null, "Argument 'cacheData' is null");
         this.psAdd = conn.prepareStatement(SQL_ADD);
+        this.psDelete = conn.prepareStatement(SQL_DELETE);
         this.cacheData = cacheData;
-    }
-
-    public CacheData getCacheData() {
-        return cacheData;
-    }
-
-    @Override
-    public String getTableName() {
-        return TABLE_NAME;
     }
 
     @Override
     public int getCacheFillPercent() {
-        return cacheData == null ? 0 : cacheData.addQueue.size() * 100 / MAX_INSERT_QUEUE_LENGTH;
+        return cacheData.addQueue.size() * 100 / MAX_INSERT_QUEUE_LENGTH;
     }
 
     @Override
     public boolean isExecuteNeeded() {
-        return cacheData != null && cacheData.addQueue.size() >= MIN_BATCH_SIZE;
+        return cacheData.addQueue.size() >= MIN_BATCH_SIZE;
     }
 
     public void add(BtcBlock btcBlock) {
         log.trace("add(btcBlock:{})", btcBlock);
+        checkState(isActive(), "Instance has been closed");
         waitFullQueue(cacheData.addQueue, MAX_INSERT_QUEUE_LENGTH);
         synchronized (cacheData) {
             cacheData.addQueue.add(btcBlock);
         }
     }
 
+    public boolean delete(BtcBlock btcBlock) {
+        log.trace("delete(btcBlock:{})", btcBlock);
+        checkState(isActive(), "Instance has been closed");
+        synchronized (cacheData) {
+            cacheData.addQueue.remove(btcBlock);
+        }
+        return psDelete.setParameters(p -> p.setInt(btcBlock.getHeight())).executeUpdate() == 1;
+    }
+
+    public boolean delete(int blockHeight) {
+        return delete(BtcBlock.builder().height(blockHeight).build());
+    }
+
     @Override
     public int executeInserts() {
         return executeBatch(cacheData, cacheData.addQueue, psAdd, MAX_BATCH_SIZE,
-                (t, ps) -> ps.setInt(t.getHeight()).setBytes(Utils.id2bin(t.getHash())).setInt(t.getTxnCount()), null);
+                (t, ps) -> ps.setInt(t.getHeight()).setBytes(t.getHash().getData()).setInt(t.getTxnCount()), null);
     }
 
     @Override

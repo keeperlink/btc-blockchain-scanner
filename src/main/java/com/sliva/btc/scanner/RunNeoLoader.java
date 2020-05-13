@@ -231,56 +231,52 @@ public class RunNeoLoader {
             try {
                 execProcessTransactions.invokeAll(queryTransaction.getTxnsRangle(start, end).stream().map(t -> {
                     return (Callable<Void>) () -> {
-                        try {
-                            Map<String, Object> tx = new HashMap<>();
-                            data.getData().add(tx);
-                            tx.put("id", t.getTransactionId());
-                            tx.put("hash", t.getTxid());
-                            tx.put("block", t.getBlockHeight());
-                            tx.put("nInputs", (short) t.getNInputs());
-                            tx.put("nOutputs", (short) t.getNOutputs());
-                            Collection<Map<String, Object>> inputs = new ArrayList<>();
-                            tx.put("inputs", inputs);
-                            queryInput.getInputs(t.getTransactionId()).forEach(i -> {
-                                Map<String, Object> input = new HashMap<>();
-                                inputs.add(input);
-                                input.put("id", toOutputId(i.getInTransactionId(), i.getInPos()));
-                                input.put("pos", (short) i.getPos());
-                            });
-                            Collection<Map<String, Object>> outputs = new ArrayList<>();
-                            tx.put("outputs", outputs);
-                            queryOutput.getOutputs(t.getTransactionId()).forEach(o -> {
-                                try {
-                                    CAddress adr = o.getAddressId() == 0 ? null : addressCache.get(o.getAddressId());
-                                    Map<String, Object> output = new HashMap<>();
-                                    outputs.add(output);
-                                    output.put("id", toOutputId(t.getTransactionId(), o.getPos()));
-                                    output.put("pos", (short) o.getPos());
-                                    output.put("address", adr == null ? "Undefined" : adr.getName());
-                                    output.put("amount", new BigDecimal(o.getAmount()).movePointLeft(8).doubleValue());
-                                    if (adr != null && adr.getWalletId() > 0) {
-                                        Map<String, Object> wallet = new HashMap<>();
-                                        wallet.put("id", adr.getWalletId());
-                                        Optional<String> name = walletCache.get(adr.getWalletId());
-                                        if (name.isPresent()) {
-                                            wallet.put("name", name.get());
-                                        }
-                                        output.put("wallets", Collections.singleton(wallet));
+                        Map<String, Object> tx = new HashMap<>();
+                        data.getData().add(tx);
+                        tx.put("id", t.getTransactionId());
+                        tx.put("hash", t.getTxid());
+                        tx.put("block", t.getBlockHeight());
+                        tx.put("nInputs", (short) t.getNInputs());
+                        tx.put("nOutputs", (short) t.getNOutputs());
+                        Collection<Map<String, Object>> inputs = new ArrayList<>();
+                        tx.put("inputs", inputs);
+                        queryInput.findInputsByTransactionId(t.getTransactionId()).forEach(i -> {
+                            Map<String, Object> input = new HashMap<>();
+                            inputs.add(input);
+                            input.put("id", toOutputId(i.getInTransactionId(), i.getInPos()));
+                            input.put("pos", i.getPos());
+                        });
+                        Collection<Map<String, Object>> outputs = new ArrayList<>();
+                        tx.put("outputs", outputs);
+                        queryOutput.findOutputsByTransactionId(t.getTransactionId()).forEach(o -> {
+                            try {
+                                CAddress adr = o.getAddressId() == 0 ? null : addressCache.get(o.getAddressId());
+                                Map<String, Object> output = new HashMap<>();
+                                outputs.add(output);
+                                output.put("id", toOutputId(t.getTransactionId(), o.getPos()));
+                                output.put("pos", o.getPos());
+                                output.put("address", adr == null ? "Undefined" : adr.getName());
+                                output.put("amount", new BigDecimal(o.getAmount()).movePointLeft(8).doubleValue());
+                                if (adr != null && adr.getWalletId() > 0) {
+                                    Map<String, Object> wallet = new HashMap<>();
+                                    wallet.put("id", adr.getWalletId());
+                                    Optional<String> name = walletCache.get(adr.getWalletId());
+                                    if (name.isPresent()) {
+                                        wallet.put("name", name.get());
                                     }
-                                } catch (ExecutionException e) {
-                                    throw new RuntimeException(e);
+                                    output.put("wallets", Collections.singleton(wallet));
                                 }
-                            });
-                        } catch (SQLException e) {
-                            throw new RuntimeException(e);
-                        }
+                            } catch (ExecutionException e) {
+                                throw new RuntimeException(e);
+                            }
+                        });
                         return null;
                     };
                 }).collect(Collectors.toList()));
             } finally {
                 log.debug("prepareData [{} - {}]: FINISHED. Runtime: {} msec.", start, end, (System.currentTimeMillis() - s));
             }
-        } catch (InterruptedException | SQLException e) {
+        } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
         return data;

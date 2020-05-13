@@ -16,17 +16,22 @@
 package com.sliva.btc.scanner.src;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+import lombok.NonNull;
 import lombok.ToString;
 import org.bitcoinj.core.Transaction;
 
 /**
  *
  * @author Sliva Co
+ * @param <I>
+ * @param <O>
  */
 @ToString
-public class BJTransaction implements SrcTransaction<BJInput, BJOutput> {
+public class BJTransaction<I extends BJInput, O extends BJOutput<BJAddress>>
+        implements SrcTransaction<BJInput, BJOutput<BJAddress>> {
 
     private final Transaction t;
 
@@ -39,18 +44,19 @@ public class BJTransaction implements SrcTransaction<BJInput, BJOutput> {
         return t.getHashAsString();
     }
 
+    @NonNull
     @Override
     public Collection<BJInput> getInputs() {
         if (t.isCoinBase()) {
-            return null;
+            return Collections.emptyList();
         }
         final AtomicInteger pos = new AtomicInteger(0);
-        return t.getInputs().stream().map((i) -> new BJInput(i, (short) pos.getAndIncrement())).collect(Collectors.toList());
+        return t.getInputs().stream().map(ti -> new BJInput(ti, (short) pos.getAndIncrement())).collect(Collectors.toList());
     }
 
+    @NonNull
     @Override
-    public Collection<BJOutput> getOutputs() {
-        return t.getOutputs().stream().map((o) -> new BJOutput(o)).collect(Collectors.toList());
+    public Collection<BJOutput<BJAddress>> getOutputs() {
+        return t.getOutputs().stream().map((o) -> new BJOutput<>(o)).collect(Collectors.toList());
     }
-
 }

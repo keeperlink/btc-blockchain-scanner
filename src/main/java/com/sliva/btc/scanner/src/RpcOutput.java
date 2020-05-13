@@ -15,6 +15,11 @@
  */
 package com.sliva.btc.scanner.src;
 
+import static com.google.common.base.Preconditions.checkArgument;
+import com.sliva.btc.scanner.util.LazyInitializer;
+import java.util.Optional;
+import lombok.Getter;
+import lombok.NonNull;
 import lombok.ToString;
 import org.bitcoinj.core.TransactionOutput;
 import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient.RawTransaction.Out;
@@ -22,40 +27,34 @@ import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient.RawTransaction.Out;
 /**
  *
  * @author Sliva Co
+ * @param <A>
  */
 @ToString
-public class RpcOutput implements SrcOutput<RpcAddress> {
+public class RpcOutput<A extends RpcAddress> implements SrcOutput<RpcAddress> {
 
-    private final Out out;
-    private final TransactionOutput txout;
+    @Getter
+    private final short pos;
+    @Getter
+    private final long value;
+    private final LazyInitializer<Optional<RpcAddress>> rpcAddress;
 
     public RpcOutput(Out out) {
-        this.out = out;
-        this.txout = null;
+        checkArgument(out != null, "Argument 'out' is null");
+        pos = (short) out.n();
+        value = out.value().movePointRight(8).longValueExact();
+        rpcAddress = new LazyInitializer<>(() -> Optional.of(out.scriptPubKey().addresses()).map(a -> a.size() > 0 ? a.get(0) : null).map(RpcAddress::fromString));
     }
 
     public RpcOutput(TransactionOutput txout) {
-        this.out = null;
-        this.txout = txout;
+        checkArgument(txout != null, "Argument 'txout' is null");
+        pos = (short) txout.getIndex();
+        value = txout.getValue().getValue();
+        this.rpcAddress = new LazyInitializer<>(() -> new BJOutput<>(txout).getAddress().map(BJAddress::getName).map(RpcAddress::fromString));
     }
 
+    @NonNull
     @Override
-    public short getPos() {
-        return txout != null ? (short) txout.getIndex() : (short) out.n();
+    public Optional<RpcAddress> getAddress() {
+        return rpcAddress.get();
     }
-
-    @Override
-    public RpcAddress getAddress() {
-        try {
-            return RpcAddress.fromString(txout != null ? new BJOutput(txout).getAddress().getName() : out.scriptPubKey().addresses().get(0));
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    @Override
-    public long getValue() {
-        return txout != null ? txout.getValue().getValue() : out.value().movePointRight(8).longValueExact();
-    }
-
 }

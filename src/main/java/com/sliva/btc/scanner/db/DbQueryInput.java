@@ -18,10 +18,10 @@ package com.sliva.btc.scanner.db;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.db.model.TxInput;
 import com.sliva.btc.scanner.db.model.TxOutput;
-import java.sql.SQLException;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
@@ -35,14 +35,16 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class DbQueryInput {
 
-    private static final String SQL_QUERY_INPUTS = "SELECT pos,in_transaction_id,in_pos FROM input WHERE transaction_id=? ORDER BY pos";
+    private static final int MAX_INS_IN_TXN = 99999;
+    private static final String SQL_QUERY_INPUTS = "SELECT pos,in_transaction_id,in_pos FROM input WHERE transaction_id=? ORDER BY pos LIMIT " + MAX_INS_IN_TXN;
+    private static final String SQL_COUNT_INPUTS_IN_TX = "SELECT count(*) FROM input WHERE transaction_id=? LIMIT 1";
     private static final String SQL_FIND_INPUT_BY_OUT_TX = "SELECT transaction_id,pos FROM input WHERE in_transaction_id=? AND in_pos=? LIMIT 1";
     private static final String SQL_QUERY_INPUTS_WITH_OUTPUT = "SELECT"
             + " I.pos,I.in_transaction_id,I.in_pos"
             + ",O.address_id,O.amount,O.spent"
             + " FROM input I"
             + " INNER JOIN output O ON O.transaction_id=I.in_transaction_id AND O.pos = I.in_pos"
-            + " WHERE I.transaction_id=? ORDER BY I.pos";
+            + " WHERE I.transaction_id=? ORDER BY I.pos LIMIT " + MAX_INS_IN_TXN;
     private static final String SQL_QUERY_INPUT_ADDRESSES
             = "SELECT O.address_id,IFNULL(P2PKH.wallet_id, IFNULL(P2SH.wallet_id, IFNULL(P2WPKH.wallet_id, P2WSH.wallet_id)))"
             + " FROM input I"
@@ -51,21 +53,26 @@ public class DbQueryInput {
             + " LEFT JOIN address_p2sh P2SH ON P2SH.address_id=O.address_id"
             + " LEFT JOIN address_p2wpkh P2WPKH ON P2WPKH.address_id=O.address_id"
             + " LEFT JOIN address_p2wsh P2WSH ON P2WSH.address_id=O.address_id"
-            + " WHERE O.address_id>0 AND I.transaction_id=?";
+            + " WHERE O.address_id>0 AND I.transaction_id=? LIMIT " + MAX_INS_IN_TXN;
+//    private static final String SQL_QUERY_TRANSACTION_IDS_ABOVE = "SELECT DISTINCT transaction_id FROM input WHERE transaction_id>? LIMIT " + MAX_INS_IN_TXN;
     private final DBPreparedStatement psQueryInputs;
+    private final DBPreparedStatement psCountInputsInTx;
     private final DBPreparedStatement psFindInputByOutTx;
     private final DBPreparedStatement psQueryInputsWithOutput;
     private final DBPreparedStatement psQueryInputAddresses;
+//    private final DBPreparedStatement psQueryTransactionIdsAbove;
 
     public DbQueryInput(DBConnectionSupplier conn) {
-        this.psQueryInputs = conn.prepareStatement(SQL_QUERY_INPUTS);
-        this.psFindInputByOutTx = conn.prepareStatement(SQL_FIND_INPUT_BY_OUT_TX);
-        this.psQueryInputsWithOutput = conn.prepareStatement(SQL_QUERY_INPUTS_WITH_OUTPUT);
-        this.psQueryInputAddresses = conn.prepareStatement(SQL_QUERY_INPUT_ADDRESSES);
+        this.psQueryInputs = conn.prepareStatement(SQL_QUERY_INPUTS, "input.transaction_id");
+        this.psCountInputsInTx = conn.prepareStatement(SQL_COUNT_INPUTS_IN_TX, "input.transaction_id");
+        this.psFindInputByOutTx = conn.prepareStatement(SQL_FIND_INPUT_BY_OUT_TX, "input.in_transaction_id");
+        this.psQueryInputsWithOutput = conn.prepareStatement(SQL_QUERY_INPUTS_WITH_OUTPUT, "input.transaction_id", "output.transaction_id");
+        this.psQueryInputAddresses = conn.prepareStatement(SQL_QUERY_INPUT_ADDRESSES, "input.transaction_id", "output.transaction_id", "address_p2pkh.address_id", "address_p2sh.address_id", "address_p2wpkh.address_id", "address_p2wsh.address_id");
+//        this.psQueryTransactionIdsAbove = conn.prepareStatement(SQL_QUERY_TRANSACTION_IDS_ABOVE);
     }
 
     @NonNull
-    public List<TxInput> getInputs(int transactionId) throws SQLException {
+    public List<TxInput> findInputsByTransactionId(int transactionId) {
         return psQueryInputs
                 .setParameters(ps -> ps.setInt(transactionId))
                 .executeQueryToList(
@@ -77,8 +84,12 @@ public class DbQueryInput {
                                 .build());
     }
 
+    public int countInputsByTransactionId(int transactionId) {
+        return DBUtils.readInteger(psCountInputsInTx.setParameters(ps -> ps.setInt(transactionId))).orElse(0);
+    }
+
     @NonNull
-    public Optional<TxInput> findInputByOutTx(int inTransactionId, short inPos) throws SQLException {
+    public Optional<TxInput> findInputByOutTx(int inTransactionId, short inPos) {
         return psFindInputByOutTx
                 .setParameters(ps -> ps.setInt(inTransactionId).setInt(inPos))
                 .querySingleRow(
@@ -91,7 +102,7 @@ public class DbQueryInput {
     }
 
     @NonNull
-    public List<TxInputOutput> getInputsWithOutput(int transactionId) throws SQLException {
+    public List<TxInputOutput> getInputsWithOutput(int transactionId) {
         return psQueryInputsWithOutput
                 .setParameters(ps -> ps.setInt(transactionId))
                 .executeQueryToList(
@@ -117,7 +128,7 @@ public class DbQueryInput {
     }
 
     @NonNull
-    public Collection<BtcAddress> getInputAddresses(int transactionId) throws SQLException {
+    public Collection<BtcAddress> getInputAddresses(int transactionId) {
         return psQueryInputAddresses
                 .setParameters(ps -> ps.setInt(transactionId))
                 .executeQueryToList(
@@ -125,6 +136,11 @@ public class DbQueryInput {
                                 .addressId(rs.getInt(1))
                                 .walletId(rs.getInt(2))
                                 .build());
+    }
+
+    @NonNull
+    public Set<Integer> getTransactionIdsAbove(int transactionId) {
+        return DBUtils.readIntegersToSet(psQueryInputs.setParameters(ps -> ps.setInt(transactionId)));
     }
 
     @Getter

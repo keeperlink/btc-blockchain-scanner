@@ -30,7 +30,7 @@ import org.apache.commons.cli.Options;
  *
  * @author Sliva Co
  */
-public class BJBlockProvider implements BlockProvider<BJBlock> {
+public class BJBlockProvider implements BlockProvider<BJBlock<BJTransaction<BJInput, BJOutput<BJAddress>>>> {
 
     public static final CmdOptions CMD_OPTS = new CmdOptions();
     public static final CmdOption fullBlocksPathOpt = buildOption(CMD_OPTS, null, "full-blocks-path", true, "Path to pre-loaded full blocks. Reading from pre-loaded full blocks is much faster than calling Bitcoin Core RPC. Helpful for massive update");
@@ -38,23 +38,24 @@ public class BJBlockProvider implements BlockProvider<BJBlock> {
     private final RpcClient client = new RpcClient();
 
     @Override
-    public BJBlock getBlock(int height) {
+    public BJBlock<BJTransaction<BJInput, BJOutput<BJAddress>>> getBlock(int height) {
         try {
-            return new BJBlock(client.getBlock(height).hash(), height);
+            return new BJBlock<>(client.getBlock(height).hash(), height);
         } catch (IOException e) {
             throw new IllegalStateException(e);
         }
     }
 
     @Override
-    public BJBlock getBlock(String hash) {
+    public BJBlock<BJTransaction<BJInput, BJOutput<BJAddress>>> getBlock(String hash) {
         try {
-            return new BJBlock(hash, client.getBlock(hash).height());
+            return new BJBlock<>(hash, client.getBlock(hash).height());
         } catch (IOException e) {
             throw new IllegalStateException(e);
         }
     }
 
+    @SuppressWarnings("NestedAssignment")
     public static void applyArguments(CmdArguments cmdArguments) {
         cmdArguments.getOption(fullBlocksPathOpt).map(File::new).ifPresent(f -> BJBlockHandler.FULL_BLOCKS_PATH = f);
     }

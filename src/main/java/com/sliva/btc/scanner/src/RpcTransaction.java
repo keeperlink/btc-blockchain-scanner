@@ -15,13 +15,17 @@
  */
 package com.sliva.btc.scanner.src;
 
+import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkNotNull;
 import com.sliva.btc.scanner.rpc.RpcClient;
+import com.sliva.btc.scanner.util.LazyInitializer;
 import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+import lombok.NonNull;
 import lombok.ToString;
 import org.bitcoinj.core.Transaction;
 import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient;
@@ -31,23 +35,35 @@ import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient.RawTransaction.In;
 /**
  *
  * @author Sliva Co
+ * @param <I>
+ * @param <O>
  */
 @ToString(doNotUseGetters = true)
-public class RpcTransaction implements SrcTransaction<RpcInput, RpcOutput> {
+public class RpcTransaction<I extends RpcInput, O extends RpcOutput<RpcAddress>> implements SrcTransaction<RpcInput, RpcOutput<RpcAddress>> {
 
     public static final String TRANSACTION_ZERO_ID = "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b";
 
     private final String txid;
     private Transaction tran;
-    private RawTransaction rawTransaction;
+    private final LazyInitializer<RawTransaction> rawTransaction;
+    private final LazyInitializer<Collection<RpcInput>> inputs;
+    private final LazyInitializer<Collection<RpcOutput<RpcAddress>>> outputs;
 
     public RpcTransaction(String txid) {
-        this.txid = txid;
+        this(null, txid);
     }
 
     public RpcTransaction(Transaction tran) {
+        this(checkNotNull(tran, "Argument 'tran' is null"), tran.getHashAsString());
+    }
+
+    private RpcTransaction(Transaction tran, String txid) {
+        checkArgument(txid != null, "Argument 'txid' is null");
         this.tran = tran;
-        this.txid = tran.getHashAsString();
+        this.txid = txid;
+        rawTransaction = new LazyInitializer<>(() -> RpcClient.getInstance().getRawTransaction(txid));
+        inputs = new LazyInitializer<>(this::_getInputs);
+        outputs = new LazyInitializer<>(this::_getOutputs);
     }
 
     @Override
@@ -55,52 +71,63 @@ public class RpcTransaction implements SrcTransaction<RpcInput, RpcOutput> {
         return txid;
     }
 
+    @NonNull
     @Override
     public Collection<RpcInput> getInputs() {
+        return inputs.get();
+    }
+
+    @NonNull
+    @Override
+    public Collection<RpcOutput<RpcAddress>> getOutputs() {
+        return outputs.get();
+    }
+
+    @NonNull
+    private Collection<RpcInput> _getInputs() {
         if (TRANSACTION_ZERO_ID.equalsIgnoreCase(txid)) {
             //Bitcoin Core RPC does not return first transaction - generate it here
-            return null;
+            return Collections.emptyList();
         }
         if (tran != null) {
             if (tran.isCoinBase()) {
-                return null;
+                return Collections.emptyList();
             }
         } else {
             List<In> ins = getRawTransaction().vIn();
             if (ins == null || ins.isEmpty() || ins.get(0).txid() == null) {
-                return null;
+                return Collections.emptyList();
             }
         }
         final AtomicInteger pos = new AtomicInteger(0);
         if (tran != null) {
             return tran.getInputs().stream().map((t) -> new RpcInput(t, (short) pos.getAndIncrement())).collect(Collectors.toList());
         } else {
-            return getRawTransaction().vIn().stream().map((t) -> new RpcInput(t, (short) pos.getAndIncrement())).collect(Collectors.toList());
+            return getRawTransaction().vIn().stream().map(t -> new RpcInput(t, (short) pos.getAndIncrement())).collect(Collectors.toList());
         }
     }
 
-    @Override
-    public Collection<RpcOutput> getOutputs() {
+    @NonNull
+    private Collection<RpcOutput<RpcAddress>> _getOutputs() {
         if (TRANSACTION_ZERO_ID.equalsIgnoreCase(txid)) {
             //Bitcoin Core RPC does not return first transaction - generate it here
             return Collections.singletonList(buildTransactionZero());
         }
         if (tran != null) {
-            return tran.getOutputs().stream().map(t -> new RpcOutput(t)).collect(Collectors.toList());
+            return tran.getOutputs().stream().map(t -> new RpcOutput<>(t)).collect(Collectors.toList());
         } else {
-            return getRawTransaction().vOut().stream().map(t -> new RpcOutput(t)).collect(Collectors.toList());
+            return getRawTransaction().vOut().stream().map(t -> new RpcOutput<>(t)).collect(Collectors.toList());
         }
     }
 
+    @NonNull
     private RawTransaction getRawTransaction() {
-        if (rawTransaction == null) {
-            rawTransaction = RpcClient.getInstance().getRawTransaction(txid);
-        }
-        return rawTransaction;
+        return rawTransaction.get();
     }
 
-    private RpcOutput buildTransactionZero() {
-        return new RpcOutput(new RawTransaction.Out() {
+    @NonNull
+    private RpcOutput<RpcAddress> buildTransactionZero() {
+        return new RpcOutput<>(new RawTransaction.Out() {
             @Override
             public BigDecimal value() {
                 return new BigDecimal("50");

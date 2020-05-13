@@ -17,10 +17,13 @@ package com.sliva.btc.scanner.db.model;
 
 import com.sliva.btc.scanner.src.SrcAddressType;
 import com.sliva.btc.scanner.util.BJBlockHandler;
+import com.sliva.btc.scanner.util.LazyInitializer;
 import com.sliva.btc.scanner.util.Utils;
+import java.util.Optional;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.ToString;
 import org.bitcoinj.core.Address;
 
@@ -28,8 +31,6 @@ import org.bitcoinj.core.Address;
  *
  * @author Sliva Co
  */
-@Getter
-@Builder(toBuilder = true)
 @ToString
 @EqualsAndHashCode(of = {"addressId"})
 public class BtcAddress {
@@ -48,31 +49,36 @@ public class BtcAddress {
     public static final int ADDR_OTHER_MIN = 0x70000001;
     public static final int ADDR_OTHER_MAX = 0x7FFFFFFF;
 
+    @Getter
     private final int addressId;
+    @Getter
     private final byte[] address;
+    @Getter
     private final int walletId;
-    private SrcAddressType type;
-    private Address bjAddress;
+    @Getter
+    @NonNull
+    private final SrcAddressType type;
+    private final LazyInitializer<Optional<Address>> bjAddress;
 
-    public SrcAddressType getType() {
-        if (type == null) {
-            if (addressId != 0) {
-                type = getTypeFromId(addressId);
-            }
-            if (type == null) {
-                type = SrcAddressType.UNKNOWN;
-            }
-        }
-        return type;
+    @Builder(toBuilder = true)
+    public BtcAddress(int addressId, byte[] address, int walletId, SrcAddressType type) {
+        this.addressId = addressId;
+        this.address = address;
+        this.walletId = walletId;
+        this.type = type != null && type.isReal() ? type : getTypeFromId(addressId);
+        this.bjAddress = new LazyInitializer<>(() -> this.type.isReal() ? Optional.of(BJBlockHandler.getAddress(this.type, address)) : Optional.empty());
     }
 
-    public Address getBjAddress() {
-        if (bjAddress == null) {
-            bjAddress = BJBlockHandler.getAddress(getType(), address);
-        }
-        return bjAddress;
+    @NonNull
+    public Optional<Address> getBjAddress() {
+        return bjAddress.get();
     }
 
+    public static boolean isRealAddress(int addressId) {
+        return addressId >= ADDR_P2PKH_MIN && addressId <= ADDR_P2WSH_MAX;
+    }
+
+    @NonNull
     public static SrcAddressType getTypeFromId(int addressId) {
         return addressId == ADDR_NONE ? SrcAddressType.UNKNOWN
                 : addressId >= ADDR_P2PKH_MIN && addressId <= ADDR_P2PKH_MAX ? SrcAddressType.P2PKH
@@ -80,14 +86,12 @@ public class BtcAddress {
                                 : addressId >= ADDR_P2WPKH_MIN && addressId <= ADDR_P2WPKH_MAX ? SrcAddressType.P2WPKH
                                         : addressId >= ADDR_P2WSH_MIN && addressId <= ADDR_P2WSH_MAX ? SrcAddressType.P2WSH
                                                 : addressId >= ADDR_OTHER_MIN && addressId <= ADDR_OTHER_MAX ? SrcAddressType.OTHER
-                                                        : null;
+                                                        : SrcAddressType.UNKNOWN;
     }
 
+    @NonNull
     public static SrcAddressType getTypeFromAddress(String address) {
         Address a = BJBlockHandler.getAddress(address);
-        if (a != null) {
-            return Utils.getBtcAddressType(a.getOutputScriptType());
-        }
-        return null;
+        return Utils.getBtcAddressType(a.getOutputScriptType());
     }
 }

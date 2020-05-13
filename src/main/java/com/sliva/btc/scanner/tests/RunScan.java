@@ -16,9 +16,9 @@
 package com.sliva.btc.scanner.tests;
 
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
-import com.sliva.btc.scanner.db.DbAddBlock;
 import com.sliva.btc.scanner.db.DbQueryBlock;
 import com.sliva.btc.scanner.db.DbQueryTransaction;
+import com.sliva.btc.scanner.db.DbUpdateBlock;
 import com.sliva.btc.scanner.db.DbUpdateTransaction;
 import com.sliva.btc.scanner.db.model.BtcBlock;
 import com.sliva.btc.scanner.db.model.BtcTransaction;
@@ -75,7 +75,7 @@ public class RunScan {
     @SuppressWarnings("CallToPrintStackTrace")
     private static void updateDb(int nThreads, int firstBlock, int numBlocks) throws SQLException {
         ParallelGetBlock parallelGetBlock = new ParallelGetBlock(nThreads, firstBlock, numBlocks);
-        try (DbAddBlock addBlock = new DbAddBlock(conn);
+        try (DbUpdateBlock addBlock = new DbUpdateBlock(conn);
                 DbUpdateTransaction addTxn = new DbUpdateTransaction(conn)) {
             for (int i = 0; i < Math.abs(numBlocks); i++) {
                 long s = System.currentTimeMillis();
@@ -95,18 +95,18 @@ public class RunScan {
         }
     }
 
-    private static void saveBlock(Block block, DbAddBlock addBlock, DbUpdateTransaction addTxn) throws SQLException {
+    private static void saveBlock(Block block, DbUpdateBlock addBlock, DbUpdateTransaction addTxn) throws SQLException {
 //        log.info("block.hash=" + block.hash());
 //        log.info("block.nTXNs=" + block.tx().size());
         List<String> txnsInDb = null;
-        if (!RUN_SAFE_MODE || queryBlock.getBlockHash(block.height()) == null) {
+        if (!RUN_SAFE_MODE || !queryBlock.getBlockHash(block.height()).isPresent()) {
             try {
-                addBlock.add(BtcBlock.builder().height(block.height()).hash(block.hash()).txnCount(block.tx().size()).build());
+                addBlock.add(BtcBlock.builder().height(block.height()).hash(Utils.id2bin(block.hash())).txnCount(block.tx().size()).build());
             } catch (Exception e) {
                 log.info("saveBlock(): Err: " + e.getClass() + ": " + e.getMessage());
                 queryBlock.getBlock(block.height()).orElseThrow(() -> new SQLException(e));
                 txnsInDb = queryTransaction.getTxnsInBlock(block.height());
-                if (txnsInDb != null && txnsInDb.size() == block.tx().size()) {
+                if (txnsInDb.size() == block.tx().size()) {
                     return;
                 }
             }
@@ -114,17 +114,15 @@ public class RunScan {
         if (RUN_SAFE_MODE && txnsInDb == null) {
             txnsInDb = queryTransaction.getTxnsInBlock(block.height());
         }
-        for (String txid : block.tx()) {
-            txid = Utils.fixDupeTxid(txid, block.height());
-            if (txnsInDb == null || !txnsInDb.contains(txid)) {
+        if (txnsInDb != null) {
+            for (String txid : block.tx()) {
+                String txid2 = Utils.fixDupeTxid(txid, block.height());
+                if (!txnsInDb.contains(txid2)) {
 //                log.info("addTxn: " + txid + ", block: " + block.height());
-                try {
                     addTxn.add(BtcTransaction.builder()
-                            .txid(txid)
+                            .txid(Utils.id2bin(txid2))
                             .blockHeight(block.height())
                             .build());
-                } catch (SQLException e) {
-                    e.printStackTrace();
                 }
             }
         }

@@ -43,14 +43,17 @@ public final class BatchUtils {
         checkArgument(source != null, "Argument 'source' is null");
         checkArgument(limit > 0, "Argument 'limit' (%s) must be a positive number", limit);
         Collection<T> result = null;
-        if (!source.isEmpty()) {
-            if (source.size() <= limit) {
-                result = new ArrayList<>(source);
-                source.clear();
-            } else {
-                result = source.stream().limit(limit).collect(Collectors.toList());
-                source.removeAll(result);
+        synchronized (source) {
+            if (!source.isEmpty()) {
+                if (source.size() <= limit) {
+                    result = new ArrayList<>(source);
+                    source.clear();
+                } else {
+                    result = source.stream().limit(limit).collect(Collectors.toList());
+                    source.removeAll(result);
+                }
             }
+            source.notifyAll();
         }
         return result;
     }

@@ -15,6 +15,8 @@
  */
 package com.sliva.btc.scanner.db;
 
+import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkState;
 import static com.sliva.btc.scanner.db.DbUpdate.waitFullQueue;
 import com.sliva.btc.scanner.db.model.InOutKey;
 import com.sliva.btc.scanner.db.model.TxInput;
@@ -26,6 +28,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -35,17 +38,21 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class DbUpdateInput extends DbUpdate {
 
-    private static int MIN_BATCH_SIZE = 1;
-    private static int MAX_BATCH_SIZE = 40000;
-    private static int MAX_INSERT_QUEUE_LENGTH = 10000;
-    private static int MAX_UPDATE_QUEUE_LENGTH = 5000;
+    private static int MIN_BATCH_SIZE = 1000;
+    private static int MAX_BATCH_SIZE = 60000;
+    private static int MAX_INSERT_QUEUE_LENGTH = 120000;
+    private static int MAX_UPDATE_QUEUE_LENGTH = 10000;
     private static final String TABLE_NAME = "input";
-    private static final String SQL_ADD = "INSERT INTO input(transaction_id,pos,in_transaction_id,in_pos)VALUES(?,?,?,?)";
-    private static final String SQL_DELETE = "DELETE FROM input WHERE transaction_id=? AND pos=?";
-    private static final String SQL_UPDATE = "UPDATE input SET in_transaction_id=?,in_pos=? WHERE transaction_id=? AND pos=?";
+    private static final String SQL_ADD = "INSERT INTO `input`(transaction_id,pos,in_transaction_id,in_pos)VALUES(?,?,?,?)";
+    private static final String SQL_UPDATE = "UPDATE `input` SET in_transaction_id=?,in_pos=? WHERE transaction_id=? AND pos=?";
+    private static final String SQL_DELETE = "DELETE FROM `input` WHERE transaction_id=? AND pos=?";
+    private static final String SQL_DELETE_ALL_ABOVE_TRANSACTION_ID = "DELETE FROM `input` WHERE transaction_id>?";
     private final DBPreparedStatement psAdd;
-    private final DBPreparedStatement psDelete;
     private final DBPreparedStatement psUpdate;
+    private final DBPreparedStatement psDelete;
+    private final DBPreparedStatement psDeleteAllAboveTransactionId;
+    @Getter
+    @NonNull
     private final CacheData cacheData;
 
     public DbUpdateInput(DBConnectionSupplier conn) {
@@ -53,34 +60,28 @@ public class DbUpdateInput extends DbUpdate {
     }
 
     public DbUpdateInput(DBConnectionSupplier conn, CacheData cacheData) {
-        super(conn);
+        super(TABLE_NAME, conn);
+        checkArgument(cacheData != null, "Argument 'cacheData' is null");
         this.psAdd = conn.prepareStatement(SQL_ADD);
-        this.psDelete = conn.prepareStatement(SQL_DELETE);
         this.psUpdate = conn.prepareStatement(SQL_UPDATE);
+        this.psDelete = conn.prepareStatement(SQL_DELETE);
+        this.psDeleteAllAboveTransactionId = conn.prepareStatement(SQL_DELETE_ALL_ABOVE_TRANSACTION_ID);
         this.cacheData = cacheData;
-    }
-
-    public CacheData getCacheData() {
-        return cacheData;
-    }
-
-    @Override
-    public String getTableName() {
-        return TABLE_NAME;
     }
 
     @Override
     public int getCacheFillPercent() {
-        return cacheData == null ? 0 : Math.max(cacheData.addQueue.size() * 100 / MAX_INSERT_QUEUE_LENGTH, cacheData.queueUpdate.size() * 100 / MAX_UPDATE_QUEUE_LENGTH);
+        return Math.max(cacheData.addQueue.size() * 100 / MAX_INSERT_QUEUE_LENGTH, cacheData.queueUpdate.size() * 100 / MAX_UPDATE_QUEUE_LENGTH);
     }
 
     @Override
     public boolean isExecuteNeeded() {
-        return cacheData != null && (cacheData.addQueue.size() >= MIN_BATCH_SIZE || cacheData.queueUpdate.size() >= MIN_BATCH_SIZE);
+        return cacheData.addQueue.size() >= MIN_BATCH_SIZE || cacheData.queueUpdate.size() >= MIN_BATCH_SIZE;
     }
 
     public void add(TxInput txInput) throws SQLException {
         log.trace("add(txInput:{})", txInput);
+        checkState(isActive(), "Instance has been closed");
         waitFullQueue(cacheData.addQueue, MAX_INSERT_QUEUE_LENGTH);
         synchronized (cacheData) {
             cacheData.addQueue.add(txInput);
@@ -90,24 +91,9 @@ public class DbUpdateInput extends DbUpdate {
         }
     }
 
-    public void delete(TxInput txInput) {
-        log.trace("delete(txInput:{})", txInput);
-        synchronized (cacheData) {
-            psDelete.setParameters(p -> p.setInt(txInput.getTransactionId()).setInt(txInput.getPos())).execute();
-            cacheData.addQueue.remove(txInput);
-            cacheData.queueMap.remove(txInput);
-            List<TxInput> l = cacheData.queueMapTx.get(txInput.getTransactionId());
-            if (l != null) {
-                l.remove(txInput);
-                if (l.isEmpty()) {
-                    cacheData.queueMapTx.remove(txInput.getTransactionId());
-                }
-            }
-        }
-    }
-
     public void update(TxInput txInput) throws SQLException {
         log.trace("update(txInput:{})", txInput);
+        checkState(isActive(), "Instance has been closed");
         synchronized (cacheData) {
             TxInput txInput2 = cacheData.queueMap.get(txInput);
             boolean updatedInQueue = false;
@@ -125,6 +111,36 @@ public class DbUpdateInput extends DbUpdate {
         }
         if (cacheData.queueUpdate.size() >= MAX_UPDATE_QUEUE_LENGTH) {
             executeUpdates();
+        }
+    }
+
+    public boolean delete(TxInput txInput) {
+        log.trace("delete(txInput:{})", txInput);
+        checkState(isActive(), "Instance has been closed");
+        synchronized (cacheData) {
+            boolean result = psDelete.setParameters(p -> p.setInt(txInput.getTransactionId()).setInt(txInput.getPos())).executeUpdate() == 1;
+            cacheData.addQueue.remove(txInput);
+            cacheData.queueMap.remove(txInput);
+            List<TxInput> l = cacheData.queueMapTx.get(txInput.getTransactionId());
+            if (l != null) {
+                l.remove(txInput);
+                if (l.isEmpty()) {
+                    cacheData.queueMapTx.remove(txInput.getTransactionId());
+                }
+            }
+            return result;
+        }
+    }
+
+    public int deleteAllAboveTransactionId(int transactionId) {
+        log.trace("deleteAllAboveTransactionId(transactionId:{})", transactionId);
+        checkState(isActive(), "Instance has been closed");
+        synchronized (cacheData) {
+            int result = psDeleteAllAboveTransactionId.setParameters(p -> p.setInt(transactionId)).executeUpdate();
+            cacheData.addQueue.removeIf(txInput -> txInput.getTransactionId() == transactionId);
+            cacheData.queueMap.entrySet().removeIf(e -> e.getKey().getTransactionId() == transactionId);
+            cacheData.queueMapTx.entrySet().removeIf(e -> e.getKey() == transactionId);
+            return result;
         }
     }
 

@@ -43,8 +43,7 @@ CREATE TABLE IF NOT EXISTS `input` (
   `pos` smallint(5) unsigned NOT NULL,
   `in_transaction_id` int(10) unsigned NOT NULL,
   `in_pos` smallint(5) unsigned NOT NULL,
-  PRIMARY KEY (`transaction_id`,`pos`),
-  UNIQUE KEY `ix_input_in_txn_pos` (`in_transaction_id`,`in_pos`)
+  PRIMARY KEY (`transaction_id`,`pos`)
 ) ENGINE=MyISAM;
 
 CREATE TABLE IF NOT EXISTS `input_special` (
@@ -62,8 +61,7 @@ CREATE TABLE IF NOT EXISTS `output` (
   `address_id` int(10) unsigned NOT NULL,
   `amount` bigint(16) NOT NULL,
   `spent` tinyint(3) unsigned NOT NULL DEFAULT '0',
-  PRIMARY KEY (`transaction_id`,`pos`),
-  KEY `ix_output_address_id` (`address_id`)
+  PRIMARY KEY (`transaction_id`,`pos`)
 ) ENGINE=MyISAM;
 
 CREATE TABLE IF NOT EXISTS `transaction` (
@@ -73,6 +71,5 @@ CREATE TABLE IF NOT EXISTS `transaction` (
   `nInputs` smallint(5) unsigned NOT NULL DEFAULT '0',
   `nOutputs` smallint(5) unsigned NOT NULL DEFAULT '0',
   PRIMARY KEY (`transaction_id`),
-  UNIQUE KEY `ix_transaction_txid` (`txid`),
-  KEY `ix_transaction_block_height` (`block_height`)
+  UNIQUE KEY `ix_txid` (`txid`)
 ) ENGINE=MyISAM;

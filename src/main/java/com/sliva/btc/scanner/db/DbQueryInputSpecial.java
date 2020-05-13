@@ -29,14 +29,15 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class DbQueryInputSpecial {
 
-    private static final String SQL_QUERY_INPUT = "SELECT sighash_type,segwit,multisig FROM input_special WHERE transaction_id=? AND pos=?";
-    private static final String SQL_QUERY_INPUTS = "SELECT pos,sighash_type,segwit,multisig FROM input_special WHERE transaction_id=? ORDER BY pos";
+    private static final int MAX_INS_IN_TXN = 99999;
+    private static final String SQL_QUERY_INPUT = "SELECT sighash_type,segwit,multisig FROM input_special WHERE transaction_id=? AND pos=? LIMIT 1";
+    private static final String SQL_QUERY_INPUTS = "SELECT pos,sighash_type,segwit,multisig FROM input_special WHERE transaction_id=? ORDER BY pos LIMIT " + MAX_INS_IN_TXN;
     private final DBPreparedStatement psQueryInput;
     private final DBPreparedStatement psQueryInputs;
 
     public DbQueryInputSpecial(DBConnectionSupplier conn) {
-        this.psQueryInput = conn.prepareStatement(SQL_QUERY_INPUT);
-        this.psQueryInputs = conn.prepareStatement(SQL_QUERY_INPUTS);
+        this.psQueryInput = conn.prepareStatement(SQL_QUERY_INPUT, "input_special.transaction_id");
+        this.psQueryInputs = conn.prepareStatement(SQL_QUERY_INPUTS, "input_special.transaction_id");
     }
 
     @NonNull

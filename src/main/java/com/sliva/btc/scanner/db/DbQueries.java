@@ -16,10 +16,9 @@
 package com.sliva.btc.scanner.db;
 
 import com.sliva.btc.scanner.db.model.BtcAddress;
-import java.sql.SQLException;
-import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
+import lombok.NonNull;
 
 /**
  *
@@ -35,35 +34,28 @@ public class DbQueries {
         this.queryTransaction = new DbQueryTransaction(con);
     }
 
-    public Collection<BtcAddress> getRelatedAddresses(int transactionId) throws SQLException {
+    @NonNull
+    public Set<BtcAddress> getRelatedAddresses(int transactionId) {
         return new RelatedAddressesProc().processTransaction(transactionId).result;
     }
 
     private class RelatedAddressesProc {
 
-        final Collection<BtcAddress> result = new HashSet<>();
+        final Set<BtcAddress> result = new HashSet<>();
         final Set<Integer> processedTxn = new HashSet<>();
 
-        RelatedAddressesProc processTransaction(int transactionId) {
-            if (!processedTxn.contains(transactionId)) {
-                processedTxn.add(transactionId);
-                try {
-                    queryInput.getInputAddresses(transactionId).forEach(a -> processAddress(a));
-                } catch (SQLException e) {
-                    throw new RuntimeException(e);
-                }
+        @NonNull
+        private RelatedAddressesProc processTransaction(int transactionId) {
+            if (processedTxn.add(transactionId)) {
+                queryInput.getInputAddresses(transactionId).forEach(this::processAddress);
             }
             return this;
         }
 
-        RelatedAddressesProc processAddress(BtcAddress address) {
-            if (!result.contains(address)) {
-                result.add(address);
-                try {
-                    queryTransaction.getSpendingTransactionsByAddress(address.getAddressId()).forEach(t -> processTransaction(t));
-                } catch (SQLException e) {
-                    throw new RuntimeException(e);
-                }
+        @NonNull
+        private RelatedAddressesProc processAddress(BtcAddress address) {
+            if (result.add(address)) {
+                queryTransaction.getSpendingTransactionsByAddress(address.getAddressId()).forEach(this::processTransaction);
             }
             return this;
         }

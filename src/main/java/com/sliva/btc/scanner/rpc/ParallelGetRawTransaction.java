@@ -115,7 +115,7 @@ public class ParallelGetRawTransaction {
                 RawTransaction tx = null;
                 for (int i = 0; i < 20; i++) {
                     try {
-                        tx = client.getRawTransaction(Utils.unfixDupeTxid(bt.getTxid()));
+                        tx = client.getRawTransaction(Utils.unfixDupeTxid(bt.getTxid().toString()));
                     } catch (GenericRpcException e) {
                         e.printStackTrace();
                         sleepHere(5000);

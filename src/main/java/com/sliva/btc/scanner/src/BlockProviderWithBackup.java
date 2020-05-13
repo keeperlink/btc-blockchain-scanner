@@ -19,18 +19,19 @@ package com.sliva.btc.scanner.src;
  *
  * @author Sliva Co
  */
-public class BlockProviderWithBackup implements BlockProvider<SrcBlock<?>> {
+public class BlockProviderWithBackup implements BlockProvider<SrcBlock<? extends SrcTransaction<? extends SrcInput, ? extends SrcOutput<? extends SrcAddress>>>> {
 
-    private final BlockProvider primaryBlockProvider;
-    private final BlockProvider backupBlockProvider;
+    private final BlockProvider<? extends SrcBlock<? extends SrcTransaction<? extends SrcInput, ? extends SrcOutput<? extends SrcAddress>>>> primaryBlockProvider;
+    private final BlockProvider<? extends SrcBlock<? extends SrcTransaction<? extends SrcInput, ? extends SrcOutput<? extends SrcAddress>>>> backupBlockProvider;
 
-    public BlockProviderWithBackup(BlockProvider primaryBlockProvider, BlockProvider backupBlockProvider) {
+    public BlockProviderWithBackup(BlockProvider<? extends SrcBlock<? extends SrcTransaction<? extends SrcInput, ? extends SrcOutput<? extends SrcAddress>>>> primaryBlockProvider,
+            BlockProvider<? extends SrcBlock<? extends SrcTransaction<? extends SrcInput, ? extends SrcOutput<? extends SrcAddress>>>> backupBlockProvider) {
         this.primaryBlockProvider = primaryBlockProvider;
         this.backupBlockProvider = backupBlockProvider;
     }
 
     @Override
-    public SrcBlock getBlock(int height) {
+    public SrcBlock<? extends SrcTransaction<? extends SrcInput, ? extends SrcOutput<? extends SrcAddress>>> getBlock(int height) {
         try {
             return primaryBlockProvider.getBlock(height);
         } catch (Exception e) {
@@ -39,7 +40,7 @@ public class BlockProviderWithBackup implements BlockProvider<SrcBlock<?>> {
     }
 
     @Override
-    public SrcBlock getBlock(String hash) {
+    public SrcBlock<? extends SrcTransaction<? extends SrcInput, ? extends SrcOutput<? extends SrcAddress>>> getBlock(String hash) {
         try {
             return primaryBlockProvider.getBlock(hash);
         } catch (Exception e) {

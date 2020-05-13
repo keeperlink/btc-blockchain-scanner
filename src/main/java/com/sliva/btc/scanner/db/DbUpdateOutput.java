@@ -15,9 +15,10 @@
  */
 package com.sliva.btc.scanner.db;
 
+import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkState;
 import com.sliva.btc.scanner.db.model.InOutKey;
 import com.sliva.btc.scanner.db.model.TxOutput;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -25,6 +26,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -34,21 +36,25 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class DbUpdateOutput extends DbUpdate {
 
-    private static int MIN_BATCH_SIZE = 1;
-    private static int MAX_BATCH_SIZE = 40000;
-    private static int MAX_INSERT_QUEUE_LENGTH = 20000;
+    private static int MIN_BATCH_SIZE = 1000;
+    private static int MAX_BATCH_SIZE = 60000;
+    private static int MAX_INSERT_QUEUE_LENGTH = 120000;
     private static int MAX_UPDATE_QUEUE_LENGTH = 100000;
     private static final String TABLE_NAME = "output";
-    private static final String SQL_ADD = "INSERT INTO output(transaction_id,pos,address_id,amount,spent)VALUES(?,?,?,?,?)";
-    private static final String SQL_DELETE = "DELETE FROM output WHERE transaction_id=? AND pos=?";
-    private static final String SQL_UPDATE_SPENT = "UPDATE output SET spent=? WHERE transaction_id=? AND pos=?";
-    private static final String SQL_UPDATE_ADDRESS = "UPDATE output SET address_id=? WHERE transaction_id=? AND pos=?";
-    private static final String SQL_UPDATE_AMOUNT = "UPDATE output SET amount=? WHERE transaction_id=? AND pos=?";
+    private static final String SQL_ADD = "INSERT INTO `output`(transaction_id,pos,address_id,amount,spent)VALUES(?,?,?,?,?)";
+    private static final String SQL_DELETE = "DELETE FROM `output` WHERE transaction_id=? AND pos=?";
+    private static final String SQL_DELETE_ALL_ABOVE_TRANSACTION_ID = "DELETE FROM `output` WHERE transaction_id>?";
+    private static final String SQL_UPDATE_SPENT = "UPDATE `output` SET spent=? WHERE transaction_id=? AND pos=?";
+    private static final String SQL_UPDATE_ADDRESS = "UPDATE `output` SET address_id=? WHERE transaction_id=? AND pos=?";
+    private static final String SQL_UPDATE_AMOUNT = "UPDATE `output` SET amount=? WHERE transaction_id=? AND pos=?";
     private final DBPreparedStatement psAdd;
     private final DBPreparedStatement psDelete;
+    private final DBPreparedStatement psDeleteAllAboveTransactionId;
     private final DBPreparedStatement psUpdateSpent;
     private final DBPreparedStatement psUpdateAddress;
     private final DBPreparedStatement psUpdateAmount;
+    @Getter
+    @NonNull
     private final CacheData cacheData;
 
     public DbUpdateOutput(DBConnectionSupplier conn) {
@@ -56,27 +62,20 @@ public class DbUpdateOutput extends DbUpdate {
     }
 
     public DbUpdateOutput(DBConnectionSupplier conn, CacheData cacheData) {
-        super(conn);
+        super(TABLE_NAME, conn);
+        checkArgument(cacheData != null, "Argument 'cacheData' is null");
         this.psAdd = conn.prepareStatement(SQL_ADD);
         this.psDelete = conn.prepareStatement(SQL_DELETE);
+        this.psDeleteAllAboveTransactionId = conn.prepareStatement(SQL_DELETE_ALL_ABOVE_TRANSACTION_ID);
         this.psUpdateSpent = conn.prepareStatement(SQL_UPDATE_SPENT);
         this.psUpdateAddress = conn.prepareStatement(SQL_UPDATE_ADDRESS);
         this.psUpdateAmount = conn.prepareStatement(SQL_UPDATE_AMOUNT);
         this.cacheData = cacheData;
     }
 
-    public CacheData getCacheData() {
-        return cacheData;
-    }
-
-    @Override
-    public String getTableName() {
-        return TABLE_NAME;
-    }
-
     @Override
     public int getCacheFillPercent() {
-        return cacheData == null ? 0 : Math.max(cacheData.addQueue.size() * 100 / MAX_INSERT_QUEUE_LENGTH,
+        return Math.max(cacheData.addQueue.size() * 100 / MAX_INSERT_QUEUE_LENGTH,
                 Math.max(cacheData.queueUpdateAddress.size() * 100 / MAX_UPDATE_QUEUE_LENGTH,
                         Math.max(cacheData.queueUpdateAmount.size() * 100 / MAX_UPDATE_QUEUE_LENGTH,
                                 cacheData.queueUpdateSpent.size() * 100 / MAX_UPDATE_QUEUE_LENGTH)));
@@ -84,11 +83,13 @@ public class DbUpdateOutput extends DbUpdate {
 
     @Override
     public boolean isExecuteNeeded() {
-        return cacheData != null && (cacheData.addQueue.size() >= MIN_BATCH_SIZE || cacheData.queueUpdateAddress.size() >= MIN_BATCH_SIZE || cacheData.queueUpdateAmount.size() >= MIN_BATCH_SIZE || cacheData.queueUpdateSpent.size() >= MIN_BATCH_SIZE);
+        return cacheData.addQueue.size() >= MIN_BATCH_SIZE || cacheData.queueUpdateAddress.size() >= MIN_BATCH_SIZE
+                || cacheData.queueUpdateAmount.size() >= MIN_BATCH_SIZE || cacheData.queueUpdateSpent.size() >= MIN_BATCH_SIZE;
     }
 
     public void add(TxOutput txOutput) {
         log.trace("add(txOutput:{})", txOutput);
+        checkState(isActive(), "Instance has been closed");
         waitFullQueue(cacheData.addQueue, MAX_INSERT_QUEUE_LENGTH);
         synchronized (cacheData) {
             cacheData.addQueue.add(txOutput);
@@ -97,10 +98,11 @@ public class DbUpdateOutput extends DbUpdate {
         }
     }
 
-    public void delete(TxOutput txOutput) throws SQLException {
+    public boolean delete(TxOutput txOutput) {
         log.trace("delete(txOutput:{})", txOutput);
+        checkState(isActive(), "Instance has been closed");
         synchronized (cacheData) {
-            psDelete.setParameters(p -> p.setInt(txOutput.getTransactionId()).setInt(txOutput.getPos())).execute();
+            boolean result = psDelete.setParameters(p -> p.setInt(txOutput.getTransactionId()).setInt(txOutput.getPos())).executeUpdate() == 1;
             cacheData.addQueue.remove(txOutput);
             cacheData.queueMap.remove(txOutput);
             List<TxOutput> l = cacheData.queueMapTx.get(txOutput.getTransactionId());
@@ -110,11 +112,25 @@ public class DbUpdateOutput extends DbUpdate {
                     cacheData.queueMapTx.remove(txOutput.getTransactionId());
                 }
             }
+            return result;
+        }
+    }
+
+    public int deleteAllAboveTransactionId(int transactionId) {
+        log.trace("deleteAllAboveTransactionId(transactionId:{})", transactionId);
+        checkState(isActive(), "Instance has been closed");
+        synchronized (cacheData) {
+            int result = psDeleteAllAboveTransactionId.setParameters(p -> p.setInt(transactionId)).executeUpdate();
+            cacheData.addQueue.removeIf(txInput -> txInput.getTransactionId() == transactionId);
+            cacheData.queueMap.entrySet().removeIf(e -> e.getKey().getTransactionId() == transactionId);
+            cacheData.queueMapTx.entrySet().removeIf(e -> e.getKey() == transactionId);
+            return result;
         }
     }
 
     public void updateSpent(int transactionId, short pos, byte status) {
         log.trace("updateSpent(transactionId:{},pos:{},status:{})", transactionId, pos, status);
+        checkState(isActive(), "Instance has been closed");
         synchronized (cacheData) {
             InOutKey pk = new InOutKey(transactionId, pos);
             TxOutput txOutput = cacheData.queueMap.get(pk);
@@ -141,8 +157,9 @@ public class DbUpdateOutput extends DbUpdate {
         }
     }
 
-    public void updateAddress(int transactionId, short pos, int addressId) throws SQLException {
+    public void updateAddress(int transactionId, short pos, int addressId) {
         log.trace("updateAddress(transactionId:{},pos:{},addressId:{})", transactionId, pos, addressId);
+        checkState(isActive(), "Instance has been closed");
         synchronized (cacheData) {
             InOutKey pk = new InOutKey(transactionId, pos);
             TxOutput txOutput = cacheData.queueMap.get(pk);
@@ -169,8 +186,9 @@ public class DbUpdateOutput extends DbUpdate {
         }
     }
 
-    public void updateAmount(int transactionId, short pos, long amount) throws SQLException {
+    public void updateAmount(int transactionId, short pos, long amount) {
         log.trace("updateAmount(transactionId:{},pos:{},amount:{})", transactionId, pos, amount);
+        checkState(isActive(), "Instance has been closed");
         synchronized (cacheData) {
             InOutKey pk = new InOutKey(transactionId, pos);
             TxOutput txOutput = cacheData.queueMap.get(pk);

@@ -15,8 +15,8 @@
  */
 package com.sliva.btc.scanner.src;
 
-import com.sliva.btc.scanner.rpc.RpcClientTest;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Map;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -33,15 +33,15 @@ import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient.RawTransaction.In;
 public class RpcTransactionTest {
 
     private static final String REAL_TXID = "fc3a8493cb1597423b212dcc4f25dbcbf0dd992aacdc528e16a8e47c2e6fc2aa";
-    private static final RpcTransaction transactionZero = new RpcTransaction(RpcTransaction.TRANSACTION_ZERO_ID);
-    private static final RpcTransaction realTxInstance = new RpcTransaction(REAL_TXID);
+    private static final RpcTransaction<?, ?> transactionZero = new RpcTransaction<>(RpcTransaction.TRANSACTION_ZERO_ID);
+    private static final RpcTransaction<?, ?> realTxInstance = new RpcTransaction<>(REAL_TXID);
 
     public RpcTransactionTest() {
     }
 
     @BeforeClass
     public static void setUpClass() {
-        RpcClientTest.init();
+        com.sliva.btc.scanner.rpc.RpcSetup.init();
     }
 
     @AfterClass
@@ -73,7 +73,7 @@ public class RpcTransactionTest {
     @Test
     public void testGetInputs() {
         System.out.println("getInputs");
-        Collection<RpcInput> expResult = null;
+        Collection<RpcInput> expResult = Collections.emptyList();
         Collection<RpcInput> result = transactionZero.getInputs();
         assertEquals(expResult, result);
     }
@@ -84,7 +84,7 @@ public class RpcTransactionTest {
     @Test
     public void testGetOutputs() {
         System.out.println("getOutputs");
-        Collection<RpcOutput> result = transactionZero.getOutputs();
+        Collection<?> result = transactionZero.getOutputs();
         assertNotNull(result);
         assertEquals(1, result.size());
     }

@@ -17,10 +17,8 @@ package com.sliva.btc.scanner.db;
 
 import com.sliva.btc.scanner.db.model.BtcBlock;
 import com.sliva.btc.scanner.util.Utils;
-import java.sql.SQLException;
 import java.util.Optional;
 import lombok.NonNull;
-import org.apache.commons.codec.binary.Hex;
 
 /**
  *
@@ -28,44 +26,45 @@ import org.apache.commons.codec.binary.Hex;
  */
 public class DbQueryBlock {
 
-    private static final String SQL_QUERY_BLOCK_HASH = "SELECT hash,txn_count FROM block WHERE height=?";
-    private static final String SQL_FIND_BLOCK_BY_HASH = "SELECT height,txn_count FROM block WHERE hash=?";
-    private static final String SQL_FIND_LAST_HEIGHT = "SELECT height FROM block ORDER BY height DESC LIMIT 1";
+    private static final String SQL_QUERY_BLOCK_HASH = "SELECT `hash`,txn_count FROM `block` WHERE `height`=? LIMIT 1";
+    private static final String SQL_FIND_BLOCK_BY_HASH = "SELECT `height`,txn_count FROM `block` WHERE `hash`=? LIMIT 1";
+    private static final String SQL_FIND_LAST_HEIGHT = "SELECT `height` FROM `block` ORDER BY `height` DESC LIMIT 1";
     private final DBPreparedStatement psQueryBlockHash;
     private final DBPreparedStatement psFindBlockByHash;
     private final DBPreparedStatement psFindLastHeight;
 
     public DbQueryBlock(DBConnectionSupplier conn) {
-        this.psQueryBlockHash = conn.prepareStatement(SQL_QUERY_BLOCK_HASH);
-        this.psFindBlockByHash = conn.prepareStatement(SQL_FIND_BLOCK_BY_HASH);
-        this.psFindLastHeight = conn.prepareStatement(SQL_FIND_LAST_HEIGHT);
+        this.psQueryBlockHash = conn.prepareStatement(SQL_QUERY_BLOCK_HASH, "block.height");
+        this.psFindBlockByHash = conn.prepareStatement(SQL_FIND_BLOCK_BY_HASH, "block.hash");
+        this.psFindLastHeight = conn.prepareStatement(SQL_FIND_LAST_HEIGHT, "block.height");
     }
 
     @NonNull
-    public Optional<byte[]> getBlockHash(int blockHeight) throws SQLException {
+    public Optional<byte[]> getBlockHash(int blockHeight) {
         return psQueryBlockHash.setParameters(ps -> ps.setInt(blockHeight)).querySingleRow(rs -> rs.getBytes(1));
     }
 
     @NonNull
-    public Optional<BtcBlock> getBlock(int blockHeight) throws SQLException {
+    public Optional<BtcBlock> getBlock(int blockHeight) {
         return psQueryBlockHash.setParameters(ps -> ps.setInt(blockHeight)).querySingleRow(rs -> BtcBlock.builder()
                 .height(blockHeight)
-                .hash(Hex.encodeHexString(rs.getBytes(1)))
+                .hash(rs.getBytes(1))
                 .txnCount(rs.getInt(2))
                 .build());
     }
 
     @NonNull
-    public Optional<BtcBlock> findBlockByHash(String hash) throws SQLException {
-        return psFindBlockByHash.setParameters(ps -> ps.setBytes(Utils.id2bin(hash))).querySingleRow(rs -> BtcBlock.builder()
+    public Optional<BtcBlock> findBlockByHash(String hash) {
+        byte[] binHash = Utils.id2bin(hash);
+        return psFindBlockByHash.setParameters(ps -> ps.setBytes(binHash)).querySingleRow(rs -> BtcBlock.builder()
                 .height(rs.getInt(1))
-                .hash(hash)
+                .hash(binHash)
                 .txnCount(rs.getInt(2))
                 .build());
     }
 
     @NonNull
-    public Optional<Integer> findLastHeight() throws SQLException {
+    public Optional<Integer> findLastHeight() {
         return DBUtils.readInteger(psFindLastHeight);
     }
 }

@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,12 +25,18 @@ import lombok.ToString;
  * @author Sliva Co
  */
 @Getter
-@Builder
 @ToString
 @EqualsAndHashCode(of = {"height"})
 public class BtcBlock {
 
     private final int height;
-    private final String hash;
+    private final BlockID hash;
     private final int txnCount;
+
+    @Builder
+    public BtcBlock(int height, byte[] hash, int txnCount) {
+        this.height = height;
+        this.hash = hash == null ? null : new BlockID(hash);
+        this.txnCount = txnCount;
+    }
 }

@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +15,9 @@
  */
 package com.sliva.btc.scanner.src;
 
+import java.util.Optional;
+import lombok.NonNull;
+
 /**
  *
  * @author Sliva Co
@@ -24,7 +27,8 @@ public interface SrcOutput<A extends SrcAddress> {
 
     short getPos();
 
-    A getAddress();
+    @NonNull
+    Optional<A> getAddress();
 
     long getValue();
 }

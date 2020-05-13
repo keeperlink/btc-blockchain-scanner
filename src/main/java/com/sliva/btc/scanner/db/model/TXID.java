@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 Sliva Co.
+ * Copyright 2020 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,25 +13,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.sliva.btc.scanner.src;
+package com.sliva.btc.scanner.db.model;
 
-import java.util.Collection;
-import lombok.NonNull;
+import static com.google.common.base.Preconditions.checkArgument;
+import com.sliva.btc.scanner.util.Utils;
 
 /**
  *
  * @author Sliva Co
- * @param <I>
- * @param <O>
  */
-public interface SrcTransaction<I extends SrcInput, O extends SrcOutput<? extends SrcAddress>> {
+public class TXID extends Binary32 {
 
-    @NonNull
-    String getTxid();
+    public static TXID build(String hex) {
+        checkArgument(hex != null && hex.length() == 64, "Argument 'hex' should be non-null string 64 characters long");
+        return new TXID(Utils.decodeHex(hex));
+    }
 
-    @NonNull
-    Collection<I> getInputs();
+    public TXID(byte[] data) {
+        super(data);
+    }
 
-    @NonNull
-    Collection<O> getOutputs();
 }

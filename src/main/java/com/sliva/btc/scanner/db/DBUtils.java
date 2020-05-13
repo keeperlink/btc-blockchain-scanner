@@ -15,21 +15,22 @@
  */
 package com.sliva.btc.scanner.db;
 
-import java.sql.SQLException;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Stream;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  *
  * @author whost
  */
+@Slf4j
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class DBUtils {
 
@@ -49,10 +50,9 @@ public final class DBUtils {
      *
      * @param ps PreparedStatement
      * @return Collection
-     * @throws SQLException
      */
     @NonNull
-    public static Collection<Integer> readIntegersToSet(DBPreparedStatement ps) throws SQLException {
+    public static Set<Integer> readIntegersToSet(DBPreparedStatement ps) {
         Set<Integer> result = new HashSet<>();
         ps.executeQuery(rs -> result.add(rs.getObject(1, Integer.class)));
         return result;
@@ -63,12 +63,20 @@ public final class DBUtils {
      *
      * @param ps PreparedStatement
      * @return Map
-     * @throws SQLException
      */
     @NonNull
-    public static Map<Integer, Integer> readIntegersToMap(DBPreparedStatement ps) throws SQLException {
+    public static Map<Integer, Integer> readIntegersToMap(DBPreparedStatement ps) {
         Map<Integer, Integer> result = new HashMap<>();
         ps.executeQuery(rs -> result.put(rs.getObject(1, Integer.class), rs.getObject(2, Integer.class)));
         return result;
+    }
+
+    public static void truncateTables(DBConnectionSupplier con, DbUpdate... updates) {
+        Stream.of(updates).map(DbUpdate::getTableName).forEach(name -> truncateTable(con, name));
+    }
+
+    public static void truncateTable(DBConnectionSupplier con, String tableName) {
+        log.debug("Truncating table \"{}\"", tableName);
+        con.prepareStatement("TRUNCATE TABLE `" + tableName + "`").execute();
     }
 }

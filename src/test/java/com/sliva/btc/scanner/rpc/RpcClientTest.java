@@ -21,10 +21,6 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import org.apache.commons.cli.CommandLine;
-import org.apache.commons.cli.DefaultParser;
-import org.apache.commons.cli.Options;
-import org.apache.commons.cli.ParseException;
 import org.junit.After;
 import org.junit.AfterClass;
 import static org.junit.Assert.*;
@@ -43,15 +39,14 @@ import wf.bitcoin.javabitcoindrpcclient.BitcoindRpcClient.WalletInfo;
  */
 public class RpcClientTest {
 
-    private static final String CONF_FILE = "/etc/rpc.conf";
     private final RpcClient instance = new RpcClient();
 
     public RpcClientTest() {
     }
 
     @BeforeClass
-    public static void setUpClass() {
-        init();
+    public static void setUpClass() throws Exception {
+        RpcSetup.init();
     }
 
     @AfterClass
@@ -64,15 +59,6 @@ public class RpcClientTest {
 
     @After
     public void tearDown() {
-    }
-
-    public static void init() {
-        try {
-            CommandLine cmd = new DefaultParser().parse(RpcClient.addOptions(new Options()), new String[]{"--rpc-config=" + CONF_FILE});
-            RpcClient.applyArguments(cmd);
-        } catch (ParseException e) {
-            throw new RuntimeException(e);
-        }
     }
 
     /**
@@ -147,30 +133,8 @@ public class RpcClientTest {
         assertTrue(result > 0);
     }
 
-    /**
-     * Test of applyArguments method, of class RpcClient.
-     *
-     * @throws java.lang.Exception
-     */
     @Test
-    public void testApplyArguments() throws Exception {
-        System.out.println("applyArguments");
-        CommandLine cmd = new DefaultParser().parse(RpcClient.addOptions(new Options()), new String[]{});
-        RpcClient.applyArguments(cmd);
-    }
-
-    /**
-     * Test of addOptions method, of class RpcClient.
-     */
-    @Test
-    public void testAddOptions() {
-        System.out.println("addOptions");
-        Options options = new Options();
-        Options result = RpcClient.addOptions(options);
-        assertTrue(result.hasOption("rpc-config"));
-    }
-
-    @Test
+    @Ignore
     public void testPayment() {
         System.out.println("testPayment");
         BitcoinJSONRPCClient client = instance.getClient();
@@ -201,6 +165,7 @@ public class RpcClientTest {
     }
 
     @Test
+    @Ignore
     public void testQRCode() throws Exception {
         System.out.println("testQRCode");
         BitcoinJSONRPCClient client = instance.getClient();

@@ -27,7 +27,7 @@ import org.bitcoinj.core.Block;
  * @author Sliva Co
  */
 @ToString
-public class BJBlock implements SrcBlock<BJTransaction> {
+public class BJBlock<T extends BJTransaction<BJInput, BJOutput<BJAddress>>> implements SrcBlock<BJTransaction<BJInput, BJOutput<BJAddress>>> {
 
     private final Block block;
     private final int height;
@@ -49,7 +49,7 @@ public class BJBlock implements SrcBlock<BJTransaction> {
 
     @Override
     @SuppressWarnings("null")
-    public Collection<BJTransaction> getTransactions() {
-        return block.getTransactions().stream().map((t) -> new BJTransaction(t)).collect(Collectors.toList());
+    public Collection<BJTransaction<BJInput, BJOutput<BJAddress>>> getTransactions() {
+        return block.getTransactions().stream().map((t) -> new BJTransaction<>(t)).collect(Collectors.toList());
     }
 }
