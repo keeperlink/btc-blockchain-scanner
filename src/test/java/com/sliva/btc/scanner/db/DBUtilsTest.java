@@ -15,14 +15,6 @@
  */
 package com.sliva.btc.scanner.db;
 
-import java.sql.DatabaseMetaData;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.time.Duration;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
-import lombok.SneakyThrows;
-import org.apache.commons.lang3.time.StopWatch;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -55,37 +47,9 @@ public class DBUtilsTest {
     public void tearDown() {
     }
 
-    /**
-     * Test of readInteger method, of class DBUtils.
-     */
     @Test
     public void test1() throws Exception {
         DBConnectionSupplier dbCon = new DBConnectionSupplier();
         System.out.println("dbName=" + dbCon.getDBName());
-        dbCon.get().getMetaData();
-        dbCon.get().prepareCall("SELECT 1").execute();
-        StopWatch start = StopWatch.createStarted();
-//        JdbcMetaDataCollector jmdc = new JdbcMetaDataCollector()
-//                .setConnection(new DBConnectionSupplier().get())
-//                .setParallelism(1);
-//        com.afrunt.jdbcmetadata.JdbcDatabaseMetaData data = jmdc.collectDatabaseMetaData();//"btc3"::equalsIgnoreCase
-//        System.out.println("data=" + data);
-        DatabaseMetaData databaseMetaData = dbCon.getConnection().getMetaData();
-        ResultSet rsTables = databaseMetaData.getTables("btc5", null, null, new String[]{"TABLE"});
-        while (rsTables.next()) {
-            //Print
-            System.out.println(IntStream.rangeClosed(1, 10).mapToObj(n -> getString(n, rsTables)).collect(Collectors.joining("\t")));
-        }
-        ResultSet rsIndexes = databaseMetaData.getIndexInfo(dbCon.getDBName(), null, "input", false, false);
-        while (rsIndexes.next()) {
-            //Print
-            System.out.println(IntStream.rangeClosed(1, 10).mapToObj(n -> getString(n, rsIndexes)).collect(Collectors.joining("\t")));
-        }
-        System.out.println("Runtime: " + Duration.ofNanos(start.getNanoTime()));
-    }
-
-    @SneakyThrows(SQLException.class)
-    private String getString(int n, ResultSet resultSet) {
-        return resultSet.getString(n);
     }
 }

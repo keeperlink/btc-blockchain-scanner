@@ -27,7 +27,7 @@ import org.apache.commons.cli.ParseException;
  */
 public class DbSetup {
 
-    private static final String CONF_FILE = "/etc/db5.conf";
+    private static final String CONF_FILE = "/etc/db.conf";
     private static final CommandLineUtils.CmdOptions CMD_OPTS = new CommandLineUtils.CmdOptions().add(RpcClient.class).add(DBConnectionSupplier.class);
 
     @SneakyThrows(ParseException.class)
