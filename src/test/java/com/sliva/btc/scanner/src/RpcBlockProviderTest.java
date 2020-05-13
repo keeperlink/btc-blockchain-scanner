@@ -15,10 +15,6 @@
  */
 package com.sliva.btc.scanner.src;
 
-import com.sliva.btc.scanner.Main;
-import com.sliva.btc.scanner.rpc.RpcClientDirect;
-import com.sliva.btc.scanner.util.CommandLineUtils.CmdOptions;
-import static com.sliva.btc.scanner.util.CommandLineUtils.buildCmdArguments;
 import java.util.Collection;
 import java.util.Optional;
 import org.junit.After;
@@ -34,8 +30,6 @@ import org.junit.Test;
  */
 public class RpcBlockProviderTest {
 
-    private static final String CONF_FILE = "/etc/rpc.conf";
-    private static final CmdOptions CMD_OPTS = new CmdOptions().add(RpcClientDirect.class);
     private final RpcBlockProvider instance = new RpcBlockProvider();
 
     public RpcBlockProviderTest() {
@@ -43,7 +37,7 @@ public class RpcBlockProviderTest {
 
     @BeforeClass
     public static void setUpClass() throws Exception {
-        buildCmdArguments(new String[]{"--rpc-config=" + CONF_FILE}, Main.Command.update_spent.name(), null, null, CMD_OPTS);
+        com.sliva.btc.scanner.rpc.RpcSetup.init();
     }
 
     @AfterClass

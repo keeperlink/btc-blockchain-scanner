@@ -23,10 +23,11 @@ import java.util.Map;
 import java.util.OptionalInt;
 import org.junit.After;
 import org.junit.AfterClass;
+import static org.junit.Assert.*;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
-import static org.junit.Assert.*;
 import org.neo4j.driver.v1.Session;
 import org.neo4j.driver.v1.StatementResult;
 import org.neo4j.driver.v1.Value;
@@ -36,7 +37,7 @@ import org.neo4j.driver.v1.Values;
  *
  * @author whost
  */
-//@Ignore
+@Ignore
 public class NeoQueriesTest {
 
     private static NeoConnection conn;

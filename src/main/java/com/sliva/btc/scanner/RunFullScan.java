@@ -29,6 +29,7 @@ import com.sliva.btc.scanner.db.DbUpdate;
 import com.sliva.btc.scanner.db.DbUpdateBlock;
 import com.sliva.btc.scanner.db.DbUpdateInput;
 import com.sliva.btc.scanner.db.DbUpdateInputSpecial;
+import com.sliva.btc.scanner.db.DbValidationUtils;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.db.model.BtcBlock;
 import com.sliva.btc.scanner.db.model.BtcTransaction;
@@ -149,9 +150,7 @@ public class RunFullScan {
             log.error(null, e);
         } finally {
             log.info("MAIN FINISHED");
-            if (shutdownHook != null) {
-                shutdownHook.finished();
-            }
+            shutdownHook.finished();
         }
     }
 
@@ -189,6 +188,9 @@ public class RunFullScan {
     }
 
     public void runProcess() throws Exception {
+        if (!safeRun) {
+            DbValidationUtils.checkAndFixDataTails(dbCon);
+        }
         log.info("Execution STARTED");
         try (DbUpdateBlock addBlock = new DbUpdateBlock(dbCon);
                 DbUpdateInput updateInput = new DbUpdateInput(dbCon);
@@ -236,7 +238,7 @@ public class RunFullScan {
         if (!queryBlock.findBlockByHash(blockHash).isPresent()) {
             db.addBlock.add(BtcBlock.builder()
                     .height(blockHeight)
-                    .hash(blockHash)
+                    .hash(Utils.id2bin(blockHash))
                     .txnCount(block.getTransactions().size())
                     .build());
         }
@@ -253,7 +255,7 @@ public class RunFullScan {
         BtcTransaction intx = db.cachedTxn.getTransaction(transactionId).orElseThrow(() -> new IllegalStateException("Transaction not found. transactionId=" + transactionId));
         log.debug("processTransaction({}): intx={}", transactionId, intx);
         List<BtcTransaction> listTxn = safeRun ? db.cachedTxn.getTransactionsInBlock(intx.getBlockHeight()) : null;
-        return processTransaction(findBJTransaction(intx.getBlockHeight(), intx.getTxid()), intx.getBlockHeight(), listTxn, db);
+        return processTransaction(findBJTransaction(intx.getBlockHeight(), intx.getTxid().toString()), intx.getBlockHeight(), listTxn, db);
     }
 
     private TxnProcessOutput processTransaction(
@@ -264,7 +266,7 @@ public class RunFullScan {
         BtcTransaction btcTx = findTx(listTxn, txid).orElse(null);
         if (btcTx == null) {
             btcTx = BtcTransaction.builder()
-                    .txid(txid)
+                    .txid(Utils.id2binNonNull(txid))
                     .blockHeight(blockHeight)
                     .nInputs(t.getInputs().size())
                     .nOutputs(t.getOutputs().size())
@@ -503,7 +505,7 @@ public class RunFullScan {
 
     @NonNull
     private static Optional<BtcTransaction> findTx(Collection<BtcTransaction> list, String hash) {
-        return list == null ? Optional.empty() : list.stream().filter(t -> t.getTxid().equalsIgnoreCase(hash)).peek(t -> list.remove(t)).findFirst();
+        return list == null ? Optional.empty() : list.stream().filter(t -> t.getTxid().toString().equalsIgnoreCase(hash)).peek(t -> list.remove(t)).findFirst();
     }
 
     @NonNull

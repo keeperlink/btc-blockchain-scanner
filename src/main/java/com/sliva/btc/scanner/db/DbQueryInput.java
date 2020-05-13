@@ -21,6 +21,7 @@ import com.sliva.btc.scanner.db.model.TxOutput;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
@@ -36,6 +37,7 @@ public class DbQueryInput {
 
     private static final int MAX_INS_IN_TXN = 99999;
     private static final String SQL_QUERY_INPUTS = "SELECT pos,in_transaction_id,in_pos FROM input WHERE transaction_id=? ORDER BY pos LIMIT " + MAX_INS_IN_TXN;
+    private static final String SQL_COUNT_INPUTS_IN_TX = "SELECT count(*) FROM input WHERE transaction_id=? LIMIT 1";
     private static final String SQL_FIND_INPUT_BY_OUT_TX = "SELECT transaction_id,pos FROM input WHERE in_transaction_id=? AND in_pos=? LIMIT 1";
     private static final String SQL_QUERY_INPUTS_WITH_OUTPUT = "SELECT"
             + " I.pos,I.in_transaction_id,I.in_pos"
@@ -52,16 +54,21 @@ public class DbQueryInput {
             + " LEFT JOIN address_p2wpkh P2WPKH ON P2WPKH.address_id=O.address_id"
             + " LEFT JOIN address_p2wsh P2WSH ON P2WSH.address_id=O.address_id"
             + " WHERE O.address_id>0 AND I.transaction_id=? LIMIT " + MAX_INS_IN_TXN;
+//    private static final String SQL_QUERY_TRANSACTION_IDS_ABOVE = "SELECT DISTINCT transaction_id FROM input WHERE transaction_id>? LIMIT " + MAX_INS_IN_TXN;
     private final DBPreparedStatement psQueryInputs;
+    private final DBPreparedStatement psCountInputsInTx;
     private final DBPreparedStatement psFindInputByOutTx;
     private final DBPreparedStatement psQueryInputsWithOutput;
     private final DBPreparedStatement psQueryInputAddresses;
+//    private final DBPreparedStatement psQueryTransactionIdsAbove;
 
     public DbQueryInput(DBConnectionSupplier conn) {
         this.psQueryInputs = conn.prepareStatement(SQL_QUERY_INPUTS);
+        this.psCountInputsInTx = conn.prepareStatement(SQL_COUNT_INPUTS_IN_TX);
         this.psFindInputByOutTx = conn.prepareStatement(SQL_FIND_INPUT_BY_OUT_TX);
         this.psQueryInputsWithOutput = conn.prepareStatement(SQL_QUERY_INPUTS_WITH_OUTPUT);
         this.psQueryInputAddresses = conn.prepareStatement(SQL_QUERY_INPUT_ADDRESSES);
+//        this.psQueryTransactionIdsAbove = conn.prepareStatement(SQL_QUERY_TRANSACTION_IDS_ABOVE);
     }
 
     @NonNull
@@ -75,6 +82,10 @@ public class DbQueryInput {
                                 .inTransactionId(rs.getInt(2))
                                 .inPos(rs.getShort(3))
                                 .build());
+    }
+
+    public int countInputsInTransaction(int transactionId) {
+        return DBUtils.readInteger(psCountInputsInTx.setParameters(ps -> ps.setInt(transactionId))).orElse(0);
     }
 
     @NonNull
@@ -125,6 +136,11 @@ public class DbQueryInput {
                                 .addressId(rs.getInt(1))
                                 .walletId(rs.getInt(2))
                                 .build());
+    }
+
+    @NonNull
+    public Set<Integer> getTransactionIdsAbove(int transactionId) {
+        return DBUtils.readIntegersToSet(psQueryInputs.setParameters(ps -> ps.setInt(transactionId)));
     }
 
     @Getter

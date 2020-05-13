@@ -58,8 +58,9 @@ public final class Utils {
     private static final String DUPE2_REPLACE = "d5d27987d2a3dfc724e359870c6644b40e497bdc0589a033220fe15429d88598";
     private static final int DUPE2_BLOCK = 91812;
 
-    @Nullable
+    @NonNull
     public static String fixDupeTxid(String txid, int blockHeight) {
+        checkArgument(txid != null, "Argument 'txid' is null");
         if (blockHeight == DUPE1_BLOCK && txid.equalsIgnoreCase(DUPE1)) {
             return DUPE1_REPLACE;
         } else if (blockHeight == DUPE2_BLOCK && txid.equalsIgnoreCase(DUPE2)) {
@@ -68,8 +69,9 @@ public final class Utils {
         return txid;
     }
 
-    @Nullable
+    @NonNull
     public static String unfixDupeTxid(String txid) {
+        checkArgument(txid != null, "Argument 'txid' is null");
         return DUPE1_REPLACE.equalsIgnoreCase(txid)
                 ? DUPE1
                 : DUPE2_REPLACE.equalsIgnoreCase(txid)
@@ -99,9 +101,22 @@ public final class Utils {
         return hexString == null ? null : Hex.decodeHex(hexString);
     }
 
+    @NonNull
+    @SneakyThrows(DecoderException.class)
+    public static byte[] decodeHexNonNull(String hexString) {
+        checkArgument(hexString != null, "Argument 'hexString' is null");
+        return Hex.decodeHex(hexString);
+    }
+
     @Nullable
     public static String encodeHex(byte[] hexBytes) {
         return hexBytes == null ? null : Hex.encodeHexString(hexBytes, true);
+    }
+
+    @NonNull
+    public static String encodeHexNonNull(byte[] hexBytes) {
+        checkArgument(hexBytes != null, "Argument 'hexBytes' is null");
+        return Hex.encodeHexString(hexBytes);
     }
 
     @Nullable
@@ -109,10 +124,15 @@ public final class Utils {
         if (data == null) {
             return null;
         }
-        if (data.length != 32) {
-            throw new IllegalArgumentException("Txid or blockid has to be 32 bytes long: " + Hex.encodeHexString(data));
-        }
+        checkArgument(data.length == 32, "Txid or blockid has to be 32 bytes long: %s", data.length);
         return encodeHex(data);
+    }
+
+    @NonNull
+    public static String id2hexNonNull(byte[] data) {
+        checkArgument(data != null, "Argument 'data' is null");
+        checkArgument(data.length == 32, "Txid or blockid has to be 32 bytes long: %s", data.length);
+        return encodeHexNonNull(data);
     }
 
     @Nullable
@@ -120,10 +140,15 @@ public final class Utils {
         if (txid == null) {
             return null;
         }
-        if (txid.length() != 64) {
-            throw new IllegalArgumentException("Txid or blockid has to be 32 bytes long: " + txid);
-        }
+        checkArgument(txid.length() == 64, "Txid or blockid has to be 32 bytes long: %s", txid);
         return decodeHex(txid);
+    }
+
+    @NonNull
+    public static byte[] id2binNonNull(String txid) {
+        checkArgument(txid != null, "Argument 'txid' is null");
+        checkArgument(txid.length() == 64, "Txid or blockid has to be 32 bytes long: %s", txid);
+        return decodeHexNonNull(txid);
     }
 
     @Nullable

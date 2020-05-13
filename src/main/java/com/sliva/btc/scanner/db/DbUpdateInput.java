@@ -43,12 +43,14 @@ public class DbUpdateInput extends DbUpdate {
     private static int MAX_INSERT_QUEUE_LENGTH = 120000;
     private static int MAX_UPDATE_QUEUE_LENGTH = 10000;
     private static final String TABLE_NAME = "input";
-    private static final String SQL_ADD = "INSERT INTO input(transaction_id,pos,in_transaction_id,in_pos)VALUES(?,?,?,?)";
-    private static final String SQL_DELETE = "DELETE FROM input WHERE transaction_id=? AND pos=?";
-    private static final String SQL_UPDATE = "UPDATE input SET in_transaction_id=?,in_pos=? WHERE transaction_id=? AND pos=?";
+    private static final String SQL_ADD = "INSERT INTO `input`(transaction_id,pos,in_transaction_id,in_pos)VALUES(?,?,?,?)";
+    private static final String SQL_UPDATE = "UPDATE `input` SET in_transaction_id=?,in_pos=? WHERE transaction_id=? AND pos=?";
+    private static final String SQL_DELETE = "DELETE FROM `input` WHERE transaction_id=? AND pos=?";
+    private static final String SQL_DELETE_ALL_ABOVE_TRANSACTION_ID = "DELETE FROM `input` WHERE transaction_id>?";
     private final DBPreparedStatement psAdd;
-    private final DBPreparedStatement psDelete;
     private final DBPreparedStatement psUpdate;
+    private final DBPreparedStatement psDelete;
+    private final DBPreparedStatement psDeleteAllAboveTransactionId;
     @Getter
     @NonNull
     private final CacheData cacheData;
@@ -61,8 +63,9 @@ public class DbUpdateInput extends DbUpdate {
         super(TABLE_NAME, conn);
         checkArgument(cacheData != null, "Argument 'cacheData' is null");
         this.psAdd = conn.prepareStatement(SQL_ADD);
-        this.psDelete = conn.prepareStatement(SQL_DELETE);
         this.psUpdate = conn.prepareStatement(SQL_UPDATE);
+        this.psDelete = conn.prepareStatement(SQL_DELETE);
+        this.psDeleteAllAboveTransactionId = conn.prepareStatement(SQL_DELETE_ALL_ABOVE_TRANSACTION_ID);
         this.cacheData = cacheData;
     }
 
@@ -88,23 +91,6 @@ public class DbUpdateInput extends DbUpdate {
         }
     }
 
-    public void delete(TxInput txInput) {
-        log.trace("delete(txInput:{})", txInput);
-        checkState(isActive(), "Instance has been closed");
-        synchronized (cacheData) {
-            psDelete.setParameters(p -> p.setInt(txInput.getTransactionId()).setInt(txInput.getPos())).execute();
-            cacheData.addQueue.remove(txInput);
-            cacheData.queueMap.remove(txInput);
-            List<TxInput> l = cacheData.queueMapTx.get(txInput.getTransactionId());
-            if (l != null) {
-                l.remove(txInput);
-                if (l.isEmpty()) {
-                    cacheData.queueMapTx.remove(txInput.getTransactionId());
-                }
-            }
-        }
-    }
-
     public void update(TxInput txInput) throws SQLException {
         log.trace("update(txInput:{})", txInput);
         checkState(isActive(), "Instance has been closed");
@@ -125,6 +111,36 @@ public class DbUpdateInput extends DbUpdate {
         }
         if (cacheData.queueUpdate.size() >= MAX_UPDATE_QUEUE_LENGTH) {
             executeUpdates();
+        }
+    }
+
+    public boolean delete(TxInput txInput) {
+        log.trace("delete(txInput:{})", txInput);
+        checkState(isActive(), "Instance has been closed");
+        synchronized (cacheData) {
+            boolean result = psDelete.setParameters(p -> p.setInt(txInput.getTransactionId()).setInt(txInput.getPos())).executeUpdate() == 1;
+            cacheData.addQueue.remove(txInput);
+            cacheData.queueMap.remove(txInput);
+            List<TxInput> l = cacheData.queueMapTx.get(txInput.getTransactionId());
+            if (l != null) {
+                l.remove(txInput);
+                if (l.isEmpty()) {
+                    cacheData.queueMapTx.remove(txInput.getTransactionId());
+                }
+            }
+            return result;
+        }
+    }
+
+    public int deleteAllAboveTransactionId(int transactionId) {
+        log.trace("deleteAllAboveTransactionId(transactionId:{})", transactionId);
+        checkState(isActive(), "Instance has been closed");
+        synchronized (cacheData) {
+            int result = psDeleteAllAboveTransactionId.setParameters(p -> p.setInt(transactionId)).executeUpdate();
+            cacheData.addQueue.removeIf(txInput -> txInput.getTransactionId() == transactionId);
+            cacheData.queueMap.entrySet().removeIf(e -> e.getKey().getTransactionId() == transactionId);
+            cacheData.queueMapTx.entrySet().removeIf(e -> e.getKey() == transactionId);
+            return result;
         }
     }
 

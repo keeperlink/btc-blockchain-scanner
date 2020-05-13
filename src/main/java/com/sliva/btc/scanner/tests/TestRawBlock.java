@@ -154,7 +154,7 @@ public class TestRawBlock {
 
     private static BtcTransaction findTx(List<BtcTransaction> list, String hash) {
         for (BtcTransaction t : list) {
-            if (t.getTxid().equalsIgnoreCase(hash)) {
+            if (t.getTxid().toString().equalsIgnoreCase(hash)) {
                 list.remove(t);
                 return t;
             }

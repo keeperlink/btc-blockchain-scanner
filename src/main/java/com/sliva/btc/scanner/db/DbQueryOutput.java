@@ -15,6 +15,7 @@
  */
 package com.sliva.btc.scanner.db;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import com.sliva.btc.scanner.db.model.InOutKey;
 import com.sliva.btc.scanner.db.model.TxInput;
 import com.sliva.btc.scanner.db.model.TxOutput;
@@ -24,7 +25,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import lombok.Builder;
 import lombok.Getter;
@@ -39,28 +39,35 @@ import lombok.experimental.SuperBuilder;
 public class DbQueryOutput {
 
     private static final int MAX_OUTS_IN_TXN = 999999;
-    private static final String SQL_QUERY_OUTPUTS = "SELECT pos,address_id,amount,spent FROM output WHERE transaction_id=? LIMIT " + MAX_OUTS_IN_TXN;
-    private static final String SQL_QUERY_OUTPUT = "SELECT address_id,amount,spent FROM output WHERE transaction_id=? AND pos=? LIMIT 1";
+    private static final String SQL_QUERY_OUTPUTS = "SELECT pos,address_id,amount,spent"
+            + " FROM `output` WHERE transaction_id=? LIMIT " + MAX_OUTS_IN_TXN;
+    private static final String SQL_COUNT_OUTPUTS_IN_TX = "SELECT count(*) FROM `output` WHERE transaction_id=? LIMIT 1";
+    private static final String SQL_QUERY_OUTPUT = "SELECT address_id,amount,spent"
+            + " FROM `output` WHERE transaction_id=? AND pos=? LIMIT 1";
     private static final String SQL_QUERY_OUTPUTS_WITH_INPUT = "SELECT O.pos,O.address_id,O.amount,O.spent"
             + ",I.transaction_id,I.pos"
-            + " FROM output O"
-            + " LEFT JOIN input I ON I.in_transaction_id=O.transaction_id AND I.in_pos=O.pos"
+            + " FROM `output` O"
+            + " LEFT JOIN `input` I ON I.in_transaction_id=O.transaction_id AND I.in_pos=O.pos"
             + " WHERE O.transaction_id=? LIMIT " + MAX_OUTS_IN_TXN;
-    private static final String SQL_QUERY_OUTPUTS_IN_TXN_RANGE = "SELECT O.transaction_id,O.pos,O.address_id,O.amount,O.spent,A.wallet_id,W.name"
-            + " FROM output O"
+    private static final String SQL_QUERY_OUTPUTS_IN_TXN_RANGE = "SELECT O.transaction_id,O.pos"
+            + ",O.address_id,O.amount,O.spent,A.wallet_id,W.name"
+            + " FROM `output` O"
             + " INNER JOIN address_table_name A ON A.address_id=O.address_id"
             + " INNER JOIN wallet W ON W.wallet_id=A.wallet_id"
             + " WHERE transaction_id BETWEEN ? AND ?";
     private final DBPreparedStatement psQueryOutputs;
+    private final DBPreparedStatement psCountOutputsInTx;
     private final DBPreparedStatement psQueryOutput;
     private final DBPreparedStatement psQueryOutputsWithInput;
     private final Map<SrcAddressType, DBPreparedStatement> psQueryOutputsInTxnRange = new HashMap<>();
 
     public DbQueryOutput(DBConnectionSupplier conn) {
         this.psQueryOutputs = conn.prepareStatement(SQL_QUERY_OUTPUTS);
+        this.psCountOutputsInTx = conn.prepareStatement(SQL_COUNT_OUTPUTS_IN_TX);
         this.psQueryOutput = conn.prepareStatement(SQL_QUERY_OUTPUT);
         this.psQueryOutputsWithInput = conn.prepareStatement(SQL_QUERY_OUTPUTS_WITH_INPUT);
-        Stream.of(SrcAddressType.values()).filter(SrcAddressType::isReal).forEach(t -> psQueryOutputsInTxnRange.put(t, conn.prepareStatement(DbQueryAddress.updateQueryTableName(SQL_QUERY_OUTPUTS_IN_TXN_RANGE, t))));
+        Stream.of(SrcAddressType.values()).filter(SrcAddressType::isReal).forEach(t -> psQueryOutputsInTxnRange.put(t,
+                conn.prepareStatement(DbQueryAddressOne.updateQueryTableName(SQL_QUERY_OUTPUTS_IN_TXN_RANGE, t))));
     }
 
     @NonNull
@@ -73,6 +80,10 @@ public class DbQueryOutput {
                         .amount(rs.getLong(3))
                         .status(rs.getByte(4))
                         .build());
+    }
+
+    public int countOutputsInTransaction(int transactionId) {
+        return DBUtils.readInteger(psCountOutputsInTx.setParameters(ps -> ps.setInt(transactionId))).orElse(0);
     }
 
     @NonNull
@@ -111,9 +122,7 @@ public class DbQueryOutput {
 
     @NonNull
     public Collection<OutputAddressWallet> queryOutputsInTxnRange(int startTxId, int endTxId, SrcAddressType addressType) {
-        if (!addressType.isReal()) {
-            throw new IllegalArgumentException("addressType=" + addressType + ", allowed only real types: " + Stream.of(SrcAddressType.values()).filter(SrcAddressType::isReal).collect(Collectors.toSet()));
-        }
+        checkArgument(addressType.isReal(), "Argument addressType=%s, allowed only real types.", addressType);
         return psQueryOutputsInTxnRange.get(addressType).setParameters(p -> p.setInt(startTxId).setInt(endTxId))
                 .executeQueryToList(rs
                         -> OutputAddressWallet.builder()

@@ -19,7 +19,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
 import static com.sliva.btc.scanner.db.DbUpdate.waitFullQueue;
 import com.sliva.btc.scanner.db.model.BtcTransaction;
-import com.sliva.btc.scanner.util.Utils;
+import com.sliva.btc.scanner.db.model.TXID;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -86,22 +86,27 @@ public class DbUpdateTransaction extends DbUpdate {
         }
     }
 
-    public void delete(BtcTransaction tx) {
+    public boolean delete(BtcTransaction tx) {
         log.trace("delete(tx:{})", tx);
         checkState(isActive(), "Instance has been closed");
         synchronized (cacheData) {
-            psDelete.setParameters(p -> p.setInt(tx.getTransactionId())).execute();
+            boolean result = psDelete.setParameters(p -> p.setInt(tx.getTransactionId())).executeUpdate() == 1;
             cacheData.addQueue.remove(tx);
             cacheData.addMap.remove(tx.getTxid());
             cacheData.addMapId.remove(tx.getTransactionId());
+            return result;
         }
+    }
+
+    public boolean delete(int transactionId) {
+        return delete(BtcTransaction.builder().transactionId(transactionId).txid(BtcTransaction.ZERO_TXID).build());
     }
 
     @SuppressWarnings({"UseSpecificCatch", "CallToPrintStackTrace"})
     @Override
     public int executeInserts() {
         return executeBatch(cacheData, cacheData.addQueue, psAdd, MAX_BATCH_SIZE,
-                (t, p) -> p.setInt(t.getTransactionId()).setBytes(Utils.id2bin(t.getTxid())).setInt(t.getBlockHeight()).setInt(t.getNInputs()).setInt(t.getNOutputs()),
+                (t, p) -> p.setInt(t.getTransactionId()).setBytes(t.getTxid().getData()).setInt(t.getBlockHeight()).setInt(t.getNInputs()).setInt(t.getNOutputs()),
                 executed -> {
                     synchronized (cacheData) {
                         executed.stream().peek(t -> cacheData.addMap.remove(t.getTxid())).map(BtcTransaction::getTransactionId).forEach(cacheData.addMapId::remove);
@@ -124,7 +129,7 @@ public class DbUpdateTransaction extends DbUpdate {
     public static class CacheData {
 
         private final Collection<BtcTransaction> addQueue = new LinkedHashSet<>();
-        private final Map<String, BtcTransaction> addMap = new HashMap<>();
+        private final Map<TXID, BtcTransaction> addMap = new HashMap<>();
         private final Map<Integer, BtcTransaction> addMapId = new HashMap<>();
         private final Set<BtcTransaction> updateInOutQueue = new HashSet<>();
     }

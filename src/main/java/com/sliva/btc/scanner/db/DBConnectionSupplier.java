@@ -39,7 +39,7 @@ import org.apache.commons.cli.Options;
  * @author Sliva Co
  */
 @Slf4j
-public class DBConnectionSupplier implements Supplier<Connection> {
+public class DBConnectionSupplier implements Supplier<Connection>, AutoCloseable {
 
     private static String DEFAULT_CONN_URL = "jdbc:mysql://localhost:3306/btc_default_db"
             + "?verifyServerCertificate=false&useSSL=true"
@@ -98,6 +98,7 @@ public class DBConnectionSupplier implements Supplier<Connection> {
     }
 
     @SneakyThrows(SQLException.class)
+    @Override
     public void close() {
         get().close();
         conn.remove();

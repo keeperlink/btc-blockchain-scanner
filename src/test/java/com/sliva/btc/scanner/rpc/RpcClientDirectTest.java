@@ -20,10 +20,6 @@ import static com.sliva.btc.scanner.rpc.RpcMethod.getblock;
 import com.sliva.btc.scanner.util.BJBlockHandler;
 import java.util.ArrayList;
 import java.util.List;
-import org.apache.commons.cli.CommandLine;
-import org.apache.commons.cli.DefaultParser;
-import org.apache.commons.cli.Options;
-import org.apache.commons.cli.ParseException;
 import org.bitcoinj.core.Block;
 import org.bitcoinj.core.Transaction;
 import org.bitcoinj.core.TransactionInput;
@@ -43,15 +39,14 @@ import org.spongycastle.util.encoders.Hex;
  */
 public class RpcClientDirectTest {
 
-    private static final String CONF_FILE = "/etc/rpc.conf";
     private final RpcClientDirect instance = new RpcClientDirect();
 
     public RpcClientDirectTest() {
     }
 
     @BeforeClass
-    public static void setUpClass() {
-        init();
+    public static void setUpClass() throws Exception {
+        RpcSetup.init();
     }
 
     @AfterClass
@@ -64,38 +59,6 @@ public class RpcClientDirectTest {
 
     @After
     public void tearDown() {
-    }
-
-    public static void init() {
-        try {
-            CommandLine cmd = new DefaultParser().parse(RpcClientDirect.addOptions(new Options()), new String[]{"--rpc-config=" + CONF_FILE});
-            RpcClientDirect.applyArguments(cmd);
-        } catch (ParseException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    /**
-     * Test of applyArguments method, of class RpcClientDirect.
-     *
-     * @throws java.lang.Exception
-     */
-    @Test
-    public void testApplyArguments() throws Exception {
-        System.out.println("applyArguments");
-        CommandLine cmd = new DefaultParser().parse(RpcClientDirect.addOptions(new Options()), new String[]{});
-        RpcClientDirect.applyArguments(cmd);
-    }
-
-    /**
-     * Test of addOptions method, of class RpcClientDirect.
-     */
-    @Test
-    public void testAddOptions() {
-        System.out.println("addOptions");
-        Options options = new Options();
-        Options result = RpcClientDirect.addOptions(options);
-        assertTrue(result.hasOption("rpc-config"));
     }
 
     /**
@@ -164,7 +127,7 @@ public class RpcClientDirectTest {
         printTx(tran);
 //        printTx(block.getTransactions().get(1));
 //        printTx(block.getTransactions().get(2));
-        block.getTransactions().forEach(t -> printTx(t));
+        block.getTransactions().forEach(this::printTx);
     }
 
     private void printTx(Transaction tran) {
@@ -186,10 +149,10 @@ public class RpcClientDirectTest {
                 System.out.println("sighashType=" + SighashType.toHexString(hashsig[hashsig.length - 1]));
             } else {
                 System.out.println("scriptSig.chunks=" + scriptSig.getChunks());
-                for (byte[] hashsig : findHashsig(scriptSig)) {
+                findHashsig(scriptSig).forEach(hashsig -> {
                     System.out.println("witness.hashsig=" + Hex.toHexString(hashsig));
                     System.out.println("sighashType=" + SighashType.toHexString(hashsig[hashsig.length - 1]));
-                }
+                });
             }
         }
     }

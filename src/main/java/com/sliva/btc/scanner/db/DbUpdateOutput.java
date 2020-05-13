@@ -41,13 +41,15 @@ public class DbUpdateOutput extends DbUpdate {
     private static int MAX_INSERT_QUEUE_LENGTH = 120000;
     private static int MAX_UPDATE_QUEUE_LENGTH = 100000;
     private static final String TABLE_NAME = "output";
-    private static final String SQL_ADD = "INSERT INTO output(transaction_id,pos,address_id,amount,spent)VALUES(?,?,?,?,?)";
-    private static final String SQL_DELETE = "DELETE FROM output WHERE transaction_id=? AND pos=?";
-    private static final String SQL_UPDATE_SPENT = "UPDATE output SET spent=? WHERE transaction_id=? AND pos=?";
-    private static final String SQL_UPDATE_ADDRESS = "UPDATE output SET address_id=? WHERE transaction_id=? AND pos=?";
-    private static final String SQL_UPDATE_AMOUNT = "UPDATE output SET amount=? WHERE transaction_id=? AND pos=?";
+    private static final String SQL_ADD = "INSERT INTO `output`(transaction_id,pos,address_id,amount,spent)VALUES(?,?,?,?,?)";
+    private static final String SQL_DELETE = "DELETE FROM `output` WHERE transaction_id=? AND pos=?";
+    private static final String SQL_DELETE_ALL_ABOVE_TRANSACTION_ID = "DELETE FROM `output` WHERE transaction_id>?";
+    private static final String SQL_UPDATE_SPENT = "UPDATE `output` SET spent=? WHERE transaction_id=? AND pos=?";
+    private static final String SQL_UPDATE_ADDRESS = "UPDATE `output` SET address_id=? WHERE transaction_id=? AND pos=?";
+    private static final String SQL_UPDATE_AMOUNT = "UPDATE `output` SET amount=? WHERE transaction_id=? AND pos=?";
     private final DBPreparedStatement psAdd;
     private final DBPreparedStatement psDelete;
+    private final DBPreparedStatement psDeleteAllAboveTransactionId;
     private final DBPreparedStatement psUpdateSpent;
     private final DBPreparedStatement psUpdateAddress;
     private final DBPreparedStatement psUpdateAmount;
@@ -64,6 +66,7 @@ public class DbUpdateOutput extends DbUpdate {
         checkArgument(cacheData != null, "Argument 'cacheData' is null");
         this.psAdd = conn.prepareStatement(SQL_ADD);
         this.psDelete = conn.prepareStatement(SQL_DELETE);
+        this.psDeleteAllAboveTransactionId = conn.prepareStatement(SQL_DELETE_ALL_ABOVE_TRANSACTION_ID);
         this.psUpdateSpent = conn.prepareStatement(SQL_UPDATE_SPENT);
         this.psUpdateAddress = conn.prepareStatement(SQL_UPDATE_ADDRESS);
         this.psUpdateAmount = conn.prepareStatement(SQL_UPDATE_AMOUNT);
@@ -95,11 +98,11 @@ public class DbUpdateOutput extends DbUpdate {
         }
     }
 
-    public void delete(TxOutput txOutput) {
+    public boolean delete(TxOutput txOutput) {
         log.trace("delete(txOutput:{})", txOutput);
         checkState(isActive(), "Instance has been closed");
         synchronized (cacheData) {
-            psDelete.setParameters(p -> p.setInt(txOutput.getTransactionId()).setInt(txOutput.getPos())).execute();
+            boolean result = psDelete.setParameters(p -> p.setInt(txOutput.getTransactionId()).setInt(txOutput.getPos())).executeUpdate() == 1;
             cacheData.addQueue.remove(txOutput);
             cacheData.queueMap.remove(txOutput);
             List<TxOutput> l = cacheData.queueMapTx.get(txOutput.getTransactionId());
@@ -109,6 +112,19 @@ public class DbUpdateOutput extends DbUpdate {
                     cacheData.queueMapTx.remove(txOutput.getTransactionId());
                 }
             }
+            return result;
+        }
+    }
+
+    public int deleteAllAboveTransactionId(int transactionId) {
+        log.trace("deleteAllAboveTransactionId(transactionId:{})", transactionId);
+        checkState(isActive(), "Instance has been closed");
+        synchronized (cacheData) {
+            int result = psDeleteAllAboveTransactionId.setParameters(p -> p.setInt(transactionId)).executeUpdate();
+            cacheData.addQueue.removeIf(txInput -> txInput.getTransactionId() == transactionId);
+            cacheData.queueMap.entrySet().removeIf(e -> e.getKey().getTransactionId() == transactionId);
+            cacheData.queueMapTx.entrySet().removeIf(e -> e.getKey() == transactionId);
+            return result;
         }
     }
 

@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,6 +18,7 @@ package com.sliva.btc.scanner.db.model;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.ToString;
 
 /**
@@ -30,9 +31,16 @@ import lombok.ToString;
 @EqualsAndHashCode(of = {"transactionId"})
 public class BtcTransaction {
 
+    public static byte[] ZERO_TXID = new byte[20];
     private final int transactionId;
-    private final String txid;
+    @NonNull
+    private final byte[] txid;
     private final int blockHeight;
     private final int nInputs;
     private final int nOutputs;
+
+    @NonNull
+    public TXID getTxid() {
+        return new TXID(txid);
+    }
 }

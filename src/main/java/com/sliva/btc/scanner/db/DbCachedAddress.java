@@ -40,7 +40,7 @@ public class DbCachedAddress implements AutoCloseable {
 
     private final Map<SrcAddressType, DbCachedAddressOne> updaters = new HashMap<>();
 
-    public DbCachedAddress(DBConnectionSupplier conn) throws SQLException {
+    public DbCachedAddress(DBConnectionSupplier conn) {
         this(conn, new CacheData());
     }
 

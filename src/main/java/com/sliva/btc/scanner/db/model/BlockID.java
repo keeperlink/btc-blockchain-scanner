@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 Sliva Co.
+ * Copyright 2020 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,28 +15,22 @@
  */
 package com.sliva.btc.scanner.db.model;
 
-import lombok.Builder;
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
-import lombok.ToString;
+import static com.google.common.base.Preconditions.checkArgument;
+import com.sliva.btc.scanner.util.Utils;
 
 /**
  *
  * @author Sliva Co
  */
-@Getter
-@ToString
-@EqualsAndHashCode(of = {"height"})
-public class BtcBlock {
+public class BlockID extends Binary32 {
 
-    private final int height;
-    private final BlockID hash;
-    private final int txnCount;
-
-    @Builder
-    public BtcBlock(int height, byte[] hash, int txnCount) {
-        this.height = height;
-        this.hash = hash == null ? null : new BlockID(hash);
-        this.txnCount = txnCount;
+    public static BlockID build(String hex) {
+        checkArgument(hex != null && hex.length() == 64, "Argument 'hex' should be non-null string 64 characters long");
+        return new BlockID(Utils.decodeHex(hex));
     }
+
+    public BlockID(byte[] data) {
+        super(data);
+    }
+
 }

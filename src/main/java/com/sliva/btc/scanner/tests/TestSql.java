@@ -43,7 +43,7 @@ public class TestSql {
         long s = System.currentTimeMillis();
         try (DbUpdateBlock addBlock = new DbUpdateBlock(conn)) {
             for (int i = 0; i < 10000; i++) {
-                addBlock.add(BtcBlock.builder().height(i).hash("000000000000000000119bbdfa591d9a3e932c2e0a8168eecc9fc1e0c8e11d1d").txnCount(1).build());
+                addBlock.add(BtcBlock.builder().height(i).hash(Utils.id2bin("000000000000000000119bbdfa591d9a3e932c2e0a8168eecc9fc1e0c8e11d1d")).txnCount(1).build());
             }
         }
         log.info("main(): runtime=" + (System.currentTimeMillis() - s) + " ms.");

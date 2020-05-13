@@ -33,7 +33,7 @@ public class DbQueryTransaction {
     private static final String SQL_QUERY_TXNS_RANGE = "SELECT transaction_id,txid,block_height,nInputs,nOutputs"
             + " FROM `transaction` WHERE transaction_id BETWEEN ? AND ?";
     private static final String SQL_QUERY_TXNS_IN_BLOCK = "SELECT txid FROM `transaction` WHERE block_height=?";
-    private static final String SQL_COUNT_TXNS_IN_BLOCK = "SELECT count(*) FROM `transaction` WHERE block_height=?";
+    private static final String SQL_COUNT_TXNS_IN_BLOCK = "SELECT count(*) FROM `transaction` WHERE block_height=? LIMIT 1";
     private static final String SQL_FIND_TRANSACTION_BY_TXID = "SELECT transaction_id,block_height,nInputs,nOutputs FROM `transaction` WHERE txid=? LIMIT 1";
     private static final String SQL_FIND_TRANSACTION_ID_BY_TXID = "SELECT transaction_id FROM `transaction` WHERE txid=? LIMIT 1";
     private static final String SQL_FIND_TRANSACTION_BY_ID = "SELECT txid,block_height,nInputs,nOutputs FROM `transaction` WHERE transaction_id=? LIMIT 1";
@@ -69,12 +69,13 @@ public class DbQueryTransaction {
 
     @NonNull
     public Optional<BtcTransaction> findTransaction(String txid) {
+        byte[] binTxid = Utils.id2bin(txid);
         return psFindTransactionByTxid
-                .setParameters(ps -> ps.setBytes(Utils.id2bin(txid)))
+                .setParameters(ps -> ps.setBytes(binTxid))
                 .querySingleRow(
                         rs -> BtcTransaction.builder()
                                 .transactionId(rs.getInt(1))
-                                .txid(txid)
+                                .txid(binTxid)
                                 .blockHeight(rs.getInt(2))
                                 .nInputs(rs.getInt(3))
                                 .nOutputs(rs.getInt(4))
@@ -93,7 +94,7 @@ public class DbQueryTransaction {
                 .querySingleRow(
                         rs -> BtcTransaction.builder()
                                 .transactionId(transactionId)
-                                .txid(Utils.id2hex(rs.getBytes(1)))
+                                .txid(rs.getBytes(1))
                                 .blockHeight(rs.getInt(2))
                                 .nInputs(rs.getInt(3))
                                 .nOutputs(rs.getInt(4))
@@ -105,7 +106,7 @@ public class DbQueryTransaction {
         return psQueryTxnsNoOutputs.setMaxRows(limit).executeQueryToList(
                 rs -> BtcTransaction.builder()
                         .transactionId(rs.getInt(1))
-                        .txid(Utils.id2hex(rs.getBytes(2)))
+                        .txid(rs.getBytes(2))
                         .blockHeight(rs.getInt(3))
                         .nInputs(rs.getInt(4))
                         .nOutputs(rs.getInt(5))
@@ -119,7 +120,7 @@ public class DbQueryTransaction {
                 .executeQueryToList(
                         rs -> BtcTransaction.builder()
                                 .transactionId(rs.getInt(1))
-                                .txid(Utils.id2hex(rs.getBytes(2)))
+                                .txid(rs.getBytes(2))
                                 .blockHeight(rs.getInt(3))
                                 .nInputs(rs.getInt(4))
                                 .nOutputs(rs.getInt(5))
@@ -144,7 +145,7 @@ public class DbQueryTransaction {
                 .executeQueryToList(
                         rs -> BtcTransaction.builder()
                                 .transactionId(rs.getInt(1))
-                                .txid(Utils.id2hex(rs.getBytes(2)))
+                                .txid(rs.getBytes(2))
                                 .blockHeight(blockHeight)
                                 .nInputs(rs.getInt(3))
                                 .nOutputs(rs.getInt(4))
@@ -156,7 +157,7 @@ public class DbQueryTransaction {
         return psFindLastTransaction.querySingleRow(
                 rs -> BtcTransaction.builder()
                         .transactionId(rs.getInt(1))
-                        .txid(Utils.id2hex(rs.getBytes(2)))
+                        .txid(rs.getBytes(2))
                         .blockHeight(rs.getInt(3))
                         .nInputs(rs.getInt(4))
                         .nOutputs(rs.getInt(5))

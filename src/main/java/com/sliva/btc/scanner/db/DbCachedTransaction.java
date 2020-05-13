@@ -18,6 +18,7 @@ package com.sliva.btc.scanner.db;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
 import com.sliva.btc.scanner.db.model.BtcTransaction;
+import com.sliva.btc.scanner.db.model.TXID;
 import static com.sliva.btc.scanner.util.Utils.optionalBuilder;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -100,9 +101,10 @@ public class DbCachedTransaction implements AutoCloseable {
     @NonNull
     public Optional<BtcTransaction> getTransaction(String txid) {
         checkArgument(txid != null, "Argument 'txid' is null");
+        TXID ttxid = TXID.build(txid);
         Optional<BtcTransaction> result = optionalBuilder(
-                cacheData.cacheMap.get(txid),
-                () -> updateTransaction.getCacheData().getAddMap().get(txid),
+                cacheData.cacheMap.get(ttxid),
+                () -> updateTransaction.getCacheData().getAddMap().get(ttxid),
                 () -> queryTransaction.findTransaction(txid));
         result.ifPresent(this::updateCache);
         return result;
@@ -119,10 +121,11 @@ public class DbCachedTransaction implements AutoCloseable {
     @NonNull
     public Optional<BtcTransaction> getTransactionSimple(String txid) {
         checkArgument(txid != null, "Argument 'txid' is null");
+        TXID ttxid = TXID.build(txid);
         Optional<BtcTransaction> result = optionalBuilder(
-                cacheData.cacheMap.get(txid),
-                () -> updateTransaction.getCacheData().getAddMap().get(txid),
-                () -> queryTransaction.findTransactionId(txid).map(id -> BtcTransaction.builder().transactionId(id).txid(txid).build()));
+                cacheData.cacheMap.get(ttxid),
+                () -> updateTransaction.getCacheData().getAddMap().get(ttxid),
+                () -> queryTransaction.findTransactionId(txid).map(id -> BtcTransaction.builder().transactionId(id).txid(ttxid.getData()).build()));
         result.ifPresent(this::updateCache);
         return result;
     }
@@ -175,7 +178,7 @@ public class DbCachedTransaction implements AutoCloseable {
     @Getter
     public static class CacheData {
 
-        private final Map<String, BtcTransaction> cacheMap = new LinkedHashMap<>();
+        private final Map<TXID, BtcTransaction> cacheMap = new LinkedHashMap<>();
         private final Map<Integer, BtcTransaction> cacheMapId = new HashMap<>();
         private final AtomicInteger lastTransactionId = new AtomicInteger(-1);
         private final DbUpdateTransaction.CacheData updateCachedData = new DbUpdateTransaction.CacheData();

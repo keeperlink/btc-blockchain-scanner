@@ -40,7 +40,6 @@ public class DBPreparedStatement {
 
     @Getter
     private final String query;
-    private final Supplier<Connection> conn;
     private final int paramsCount;
     private final ThreadLocal<PreparedStatement> psPool;
 
@@ -48,9 +47,8 @@ public class DBPreparedStatement {
         checkArgument(query != null, "Argument 'query' is null");
         checkArgument(conn != null, "Argument 'conn' is null");
         this.query = query;
-        this.conn = conn;
         this.paramsCount = StringUtils.countMatches(query, '?');
-        this.psPool = ThreadLocal.withInitial(this::buildPreparedStatement);
+        this.psPool = ThreadLocal.withInitial(() -> buildPreparedStatement(conn));
     }
 
     public ParamSetter getParamSetter() {
@@ -163,7 +161,7 @@ public class DBPreparedStatement {
     }
 
     @SneakyThrows(SQLException.class)
-    private PreparedStatement buildPreparedStatement() {
+    private PreparedStatement buildPreparedStatement(Supplier<Connection> conn) {
         return conn.get().prepareStatement(query, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
     }
 
@@ -180,11 +178,11 @@ public class DBPreparedStatement {
         }
 
         public void checkStateReady() {
-            checkState(isReady());
+            checkState(isReady(), "Missing parameters. Defined: %s out of %s. Statement: \"%s\"", paramCounter.get(), paramsCount, query);
         }
 
         public void checkStateNotReady() {
-            checkState(!isReady());
+            checkState(!isReady(), "No more statement parameters to set. Number of parameters: %s. Statement: \"%s\"", paramsCount, query);
         }
 
         @SneakyThrows(SQLException.class)

@@ -16,12 +16,7 @@
 package com.sliva.btc.scanner.src;
 
 import com.sliva.btc.scanner.db.model.SighashType;
-import com.sliva.btc.scanner.rpc.RpcClientDirect;
 import java.util.Collection;
-import org.apache.commons.cli.CommandLine;
-import org.apache.commons.cli.DefaultParser;
-import org.apache.commons.cli.Options;
-import org.apache.commons.cli.ParseException;
 import org.junit.After;
 import org.junit.AfterClass;
 import static org.junit.Assert.*;
@@ -35,15 +30,14 @@ import org.junit.Test;
  */
 public class RpcBlockTest {
 
-    private static final String CONF_FILE = "/etc/rpc.conf";
     private final RpcBlock<?> instance = new RpcBlock<>("00000000000001991b57a7f352ebc922fce2f6874a97e43b30fce9f21a6d925f");
 
     public RpcBlockTest() {
     }
 
     @BeforeClass
-    public static void setUpClass() {
-        init();
+    public static void setUpClass() throws Exception {
+        com.sliva.btc.scanner.rpc.RpcSetup.init();
     }
 
     @AfterClass
@@ -56,15 +50,6 @@ public class RpcBlockTest {
 
     @After
     public void tearDown() {
-    }
-
-    public static void init() {
-        try {
-            CommandLine cmd = new DefaultParser().parse(RpcClientDirect.addOptions(new Options()), new String[]{"--rpc-config=" + CONF_FILE});
-            RpcClientDirect.applyArguments(cmd);
-        } catch (ParseException e) {
-            throw new RuntimeException(e);
-        }
     }
 
     /**
