@@ -27,13 +27,13 @@ import lombok.NonNull;
  *
  * @author whost
  */
-public class DbQueryAddressCombo extends DbQueryAddressOne {
+public class DbQueryAddressCombo extends DbQueryAddress {
 
-    private final Map<SrcAddressType, DbQueryAddressOne> queryAddressMap = new HashMap<>();
+    private final Map<SrcAddressType, DbQueryAddress> queryAddressMap = new HashMap<>();
 
     public DbQueryAddressCombo(DBConnectionSupplier conn) {
         super();
-        Stream.of(SrcAddressType.values()).filter(SrcAddressType::isReal).forEach(t -> queryAddressMap.put(t, new DbQueryAddressOne(conn, t)));
+        Stream.of(SrcAddressType.values()).filter(SrcAddressType::isReal).forEach(t -> queryAddressMap.put(t, new DbQueryAddress(conn, t)));
     }
 
     @Override

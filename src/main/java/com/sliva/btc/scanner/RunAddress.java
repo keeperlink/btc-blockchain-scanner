@@ -16,7 +16,7 @@
 package com.sliva.btc.scanner;
 
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
-import com.sliva.btc.scanner.db.DbQueryAddressOne;
+import com.sliva.btc.scanner.db.DbQueryAddress;
 import com.sliva.btc.scanner.db.DbQueryAddressCombo;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.src.SrcAddressType;
@@ -38,7 +38,7 @@ public class RunAddress {
 
     private static final CommandLineUtils.CmdOptions CMD_OPTS = new CommandLineUtils.CmdOptions().add(DBConnectionSupplier.class);
 
-    private final DbQueryAddressOne queryAddress;
+    private final DbQueryAddress queryAddress;
 
     /**
      * @param args the command line arguments

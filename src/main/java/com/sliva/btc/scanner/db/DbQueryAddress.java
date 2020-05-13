@@ -26,7 +26,7 @@ import lombok.NonNull;
  *
  * @author Sliva Co
  */
-public class DbQueryAddressOne {
+public class DbQueryAddress {
 
     private static final String ADDRESS_TABLE_NAME = "address_table_name";
     private static final String SQL_FIND_BY_ADDRESS_ID = "SELECT `address`,wallet_id FROM `address_table_name` WHERE address_id=? LIMIT 1";
@@ -39,7 +39,7 @@ public class DbQueryAddressOne {
     private final DBPreparedStatement psQueryWalletId;
     private final DBPreparedStatement psQueryLastAddressId;
 
-    public DbQueryAddressOne() {
+    public DbQueryAddress() {
         this.addressType = null;
         this.psFindByAddressId = null;
         this.psFindByAddress = null;
@@ -47,7 +47,7 @@ public class DbQueryAddressOne {
         this.psQueryLastAddressId = null;
     }
 
-    public DbQueryAddressOne(DBConnectionSupplier conn, SrcAddressType addressType) {
+    public DbQueryAddress(DBConnectionSupplier conn, SrcAddressType addressType) {
         checkArgument(conn != null, "Argument 'conn' is null");
         checkArgument(addressType != null, "Argument 'addressType' is null");
         this.addressType = addressType;

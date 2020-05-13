@@ -40,7 +40,7 @@ public class DbCachedAddressOne implements AutoCloseable {
     private static final int MAX_CACHE_SIZE = 300000;
     private final SrcAddressType addressType;
     private final DbUpdateAddressOne updateAddress;
-    private final DbQueryAddressOne queryAddress;
+    private final DbQueryAddress queryAddress;
     @Getter
     @NonNull
     private final CacheData cacheData;
@@ -55,7 +55,7 @@ public class DbCachedAddressOne implements AutoCloseable {
         checkArgument(cacheData != null, "Argument 'cacheData' is null");
         this.addressType = addressType;
         updateAddress = new DbUpdateAddressOne(conn, addressType, cacheData.updateCachedData);
-        queryAddress = new DbQueryAddressOne(conn, addressType);
+        queryAddress = new DbQueryAddress(conn, addressType);
         this.cacheData = cacheData;
     }
 

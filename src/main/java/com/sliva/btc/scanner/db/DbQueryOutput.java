@@ -67,7 +67,7 @@ public class DbQueryOutput {
         this.psQueryOutput = conn.prepareStatement(SQL_QUERY_OUTPUT);
         this.psQueryOutputsWithInput = conn.prepareStatement(SQL_QUERY_OUTPUTS_WITH_INPUT);
         Stream.of(SrcAddressType.values()).filter(SrcAddressType::isReal).forEach(t -> psQueryOutputsInTxnRange.put(t,
-                conn.prepareStatement(DbQueryAddressOne.updateQueryTableName(SQL_QUERY_OUTPUTS_IN_TXN_RANGE, t))));
+                conn.prepareStatement(DbQueryAddress.updateQueryTableName(SQL_QUERY_OUTPUTS_IN_TXN_RANGE, t))));
     }
 
     @NonNull
