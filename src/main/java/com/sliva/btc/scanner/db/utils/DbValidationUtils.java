@@ -13,8 +13,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.sliva.btc.scanner.db;
+package com.sliva.btc.scanner.db.utils;
 
+import com.sliva.btc.scanner.db.DBConnectionSupplier;
+import com.sliva.btc.scanner.db.fasade.DbQueryAddress;
+import com.sliva.btc.scanner.db.fasade.DbQueryBlock;
+import com.sliva.btc.scanner.db.fasade.DbQueryInput;
+import com.sliva.btc.scanner.db.fasade.DbQueryOutput;
+import com.sliva.btc.scanner.db.fasade.DbQueryTransaction;
+import com.sliva.btc.scanner.db.fasade.DbUpdateBlock;
+import com.sliva.btc.scanner.db.fasade.DbUpdateInput;
+import com.sliva.btc.scanner.db.fasade.DbUpdateInputSpecial;
+import com.sliva.btc.scanner.db.fasade.DbUpdateOutput;
+import com.sliva.btc.scanner.db.fasade.DbUpdateTransaction;
 import static com.google.common.base.Preconditions.checkArgument;
 import com.sliva.btc.scanner.db.model.BtcBlock;
 import com.sliva.btc.scanner.db.model.BtcTransaction;

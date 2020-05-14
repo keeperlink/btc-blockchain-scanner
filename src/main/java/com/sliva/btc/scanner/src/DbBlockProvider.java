@@ -17,12 +17,12 @@ package com.sliva.btc.scanner.src;
 
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import com.sliva.btc.scanner.db.DBPreparedStatement;
-import static com.sliva.btc.scanner.db.DbQueryAddressOne.updateQueryTableName;
+import static com.sliva.btc.scanner.db.fasade.DbQueryAddressOne.updateQueryTableName;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Stream;
 import lombok.NonNull;
-import static com.sliva.btc.scanner.db.DbQueryAddressOne.getAddressTableName;
+import static com.sliva.btc.scanner.db.fasade.DbQueryAddressOne.getAddressTableName;
 
 /**
  *

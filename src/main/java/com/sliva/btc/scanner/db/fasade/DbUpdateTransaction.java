@@ -13,11 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.sliva.btc.scanner.db;
+package com.sliva.btc.scanner.db.fasade;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
-import static com.sliva.btc.scanner.db.DbUpdate.waitFullQueue;
+import com.sliva.btc.scanner.db.DBConnectionSupplier;
+import com.sliva.btc.scanner.db.DBPreparedStatement;
+import com.sliva.btc.scanner.db.DbUpdate;
 import com.sliva.btc.scanner.db.model.BtcTransaction;
 import com.sliva.btc.scanner.db.model.TXID;
 import java.util.Collection;

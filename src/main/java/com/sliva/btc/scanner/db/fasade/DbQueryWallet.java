@@ -13,9 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.sliva.btc.scanner.db;
+package com.sliva.btc.scanner.db.fasade;
 
+import com.sliva.btc.scanner.db.DBConnectionSupplier;
+import com.sliva.btc.scanner.db.DBPreparedStatement;
 import com.sliva.btc.scanner.db.DBPreparedStatement.ParamSetter;
+import com.sliva.btc.scanner.db.utils.DBUtils;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.db.model.BtcWallet;
 import java.util.Collection;

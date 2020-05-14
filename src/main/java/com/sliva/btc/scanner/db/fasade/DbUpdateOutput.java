@@ -13,8 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.sliva.btc.scanner.db;
+package com.sliva.btc.scanner.db.fasade;
 
+import com.sliva.btc.scanner.db.DBConnectionSupplier;
+import com.sliva.btc.scanner.db.DBPreparedStatement;
+import com.sliva.btc.scanner.db.DbUpdate;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
 import com.sliva.btc.scanner.db.model.InOutKey;
@@ -37,14 +40,15 @@ import lombok.extern.slf4j.Slf4j;
 public class DbUpdateOutput extends DbUpdate {
 
     private static int MIN_BATCH_SIZE = 1000;
-    private static int MAX_BATCH_SIZE = 60000;
+    private static int MAX_BATCH_SIZE = 40000;
     private static int MAX_INSERT_QUEUE_LENGTH = 120000;
     private static int MAX_UPDATE_QUEUE_LENGTH = 100000;
     private static final String TABLE_NAME = "output";
     private static final String SQL_ADD = "INSERT INTO `output`(transaction_id,pos,address_id,amount,spent)VALUES(?,?,?,?,?)";
     private static final String SQL_DELETE = "DELETE FROM `output` WHERE transaction_id=? AND pos=?";
     private static final String SQL_DELETE_ALL_ABOVE_TRANSACTION_ID = "DELETE FROM `output` WHERE transaction_id>?";
-    private static final String SQL_UPDATE_SPENT = "UPDATE `output` SET spent=? WHERE transaction_id=? AND pos=?";
+//    private static final String SQL_UPDATE_SPENT = "UPDATE `output` SET spent=? WHERE transaction_id=? AND pos=?";
+    private static final String SQL_UPDATE_SPENT = "INSERT into `output`(spent,transaction_id,pos,address_id,amount)VALUES(?,?,?,0,0) ON DUPLICATE KEY UPDATE spent=VALUES(spent)";
     private static final String SQL_UPDATE_ADDRESS = "UPDATE `output` SET address_id=? WHERE transaction_id=? AND pos=?";
     private static final String SQL_UPDATE_AMOUNT = "UPDATE `output` SET amount=? WHERE transaction_id=? AND pos=?";
     private final DBPreparedStatement psAdd;
@@ -131,6 +135,7 @@ public class DbUpdateOutput extends DbUpdate {
     public void updateSpent(int transactionId, short pos, byte status) {
         log.trace("updateSpent(transactionId:{},pos:{},status:{})", transactionId, pos, status);
         checkState(isActive(), "Instance has been closed");
+        waitFullQueue(cacheData.queueUpdateSpent, MAX_UPDATE_QUEUE_LENGTH);
         synchronized (cacheData) {
             InOutKey pk = new InOutKey(transactionId, pos);
             TxOutput txOutput = cacheData.queueMap.get(pk);
@@ -152,14 +157,12 @@ public class DbUpdateOutput extends DbUpdate {
                 cacheData.queueUpdateSpent.add(TxOutput.builder().transactionId(transactionId).pos(pos).status(status).build());
             }
         }
-        if (cacheData.queueUpdateSpent.size() >= MAX_UPDATE_QUEUE_LENGTH) {
-            _executeUpdateSpent();
-        }
     }
 
     public void updateAddress(int transactionId, short pos, int addressId) {
         log.trace("updateAddress(transactionId:{},pos:{},addressId:{})", transactionId, pos, addressId);
         checkState(isActive(), "Instance has been closed");
+        waitFullQueue(cacheData.queueUpdateAddress, MAX_UPDATE_QUEUE_LENGTH);
         synchronized (cacheData) {
             InOutKey pk = new InOutKey(transactionId, pos);
             TxOutput txOutput = cacheData.queueMap.get(pk);
@@ -181,14 +184,12 @@ public class DbUpdateOutput extends DbUpdate {
                 cacheData.queueUpdateAddress.add(TxOutput.builder().transactionId(transactionId).pos(pos).addressId(addressId).build());
             }
         }
-        if (cacheData.queueUpdateAddress.size() >= MAX_UPDATE_QUEUE_LENGTH) {
-            _executeUpdateAddress();
-        }
     }
 
     public void updateAmount(int transactionId, short pos, long amount) {
         log.trace("updateAmount(transactionId:{},pos:{},amount:{})", transactionId, pos, amount);
         checkState(isActive(), "Instance has been closed");
+        waitFullQueue(cacheData.queueUpdateAmount, MAX_UPDATE_QUEUE_LENGTH);
         synchronized (cacheData) {
             InOutKey pk = new InOutKey(transactionId, pos);
             TxOutput txOutput = cacheData.queueMap.get(pk);
@@ -209,9 +210,6 @@ public class DbUpdateOutput extends DbUpdate {
             if (!updatedInQueue) {
                 cacheData.queueUpdateAmount.add(TxOutput.builder().transactionId(transactionId).pos(pos).amount(amount).build());
             }
-        }
-        if (cacheData.queueUpdateAmount.size() >= MAX_UPDATE_QUEUE_LENGTH) {
-            _executeUpdateAmount();
         }
     }
 
@@ -254,8 +252,8 @@ public class DbUpdateOutput extends DbUpdate {
         private final Collection<TxOutput> addQueue = new LinkedHashSet<>();
         private final Map<InOutKey, TxOutput> queueMap = new HashMap<>();
         private final Map<Integer, List<TxOutput>> queueMapTx = new HashMap<>();
-        private final Collection<TxOutput> queueUpdateSpent = new ArrayList<>();
-        private final Collection<TxOutput> queueUpdateAddress = new ArrayList<>();
-        private final Collection<TxOutput> queueUpdateAmount = new ArrayList<>();
+        private final Collection<TxOutput> queueUpdateSpent = new LinkedHashSet<>();
+        private final Collection<TxOutput> queueUpdateAddress = new LinkedHashSet<>();
+        private final Collection<TxOutput> queueUpdateAmount = new LinkedHashSet<>();
     }
 }

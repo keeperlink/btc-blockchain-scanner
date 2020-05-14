@@ -51,7 +51,7 @@ public class BtcAddress {
 
     @Getter
     private final int addressId;
-    @Getter
+    @NonNull
     private final byte[] address;
     @Getter
     private final int walletId;
@@ -67,6 +67,10 @@ public class BtcAddress {
         this.walletId = walletId;
         this.type = type != null && type.isReal() ? type : getTypeFromId(addressId);
         this.bjAddress = new LazyInitializer<>(() -> this.type.isReal() ? Optional.of(BJBlockHandler.getAddress(this.type, address)) : Optional.empty());
+    }
+
+    public BinaryAddress getAddress() {
+        return new BinaryAddress(address);
     }
 
     @NonNull

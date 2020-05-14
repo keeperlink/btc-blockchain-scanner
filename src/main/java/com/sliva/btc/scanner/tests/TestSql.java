@@ -17,7 +17,7 @@ package com.sliva.btc.scanner.tests;
 
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import com.sliva.btc.scanner.db.DBPreparedStatement;
-import com.sliva.btc.scanner.db.DbUpdateBlock;
+import com.sliva.btc.scanner.db.fasade.DbUpdateBlock;
 import com.sliva.btc.scanner.db.model.BtcBlock;
 import com.sliva.btc.scanner.util.Utils;
 import java.sql.Connection;

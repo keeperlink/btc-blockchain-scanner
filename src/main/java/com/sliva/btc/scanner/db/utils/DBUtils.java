@@ -13,8 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.sliva.btc.scanner.db;
+package com.sliva.btc.scanner.db.utils;
 
+import com.sliva.btc.scanner.db.DBConnectionSupplier;
+import com.sliva.btc.scanner.db.DBPreparedStatement;
+import com.sliva.btc.scanner.db.DbUpdate;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;

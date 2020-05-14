@@ -15,6 +15,8 @@
  */
 package com.sliva.btc.scanner.db;
 
+import com.sliva.btc.scanner.db.utils.DBMetaData;
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
 import com.sliva.btc.scanner.util.CommandLineUtils.CmdArguments;
 import com.sliva.btc.scanner.util.CommandLineUtils.CmdOption;
@@ -67,6 +69,14 @@ public class DBConnectionSupplier implements Supplier<Connection>, DataSource, A
     private final ThreadLocal<Connection> conn;
     private final LazyInitializer<String> dbname;
     private final LazyInitializer<DBMetaData> dbMetaData;
+
+    public static void applyArguments(CmdArguments cmdArguments) {
+        checkArgument(cmdArguments != null, "Argument 'cmdArguments' is null");
+        Properties prop = Utils.loadProperties(cmdArguments.getOption(dbConfigOpt).orElse(null));
+        DEFAULT_CONN_URL = cmdArguments.getOption(dbUrlOpt).orElseGet(() -> prop.getProperty(dbUrlOpt.getLongOpt(), DEFAULT_CONN_URL));
+        DEFAULT_DB_USER = cmdArguments.getOption(dbUserOpt).orElseGet(() -> prop.getProperty(dbUserOpt.getLongOpt(), DEFAULT_DB_USER));
+        DEFAULT_DB_PASSWORD = cmdArguments.getOption(dbPasswordOpt).orElseGet(() -> prop.getProperty(dbPasswordOpt.getLongOpt(), DEFAULT_DB_PASSWORD));
+    }
 
     public DBConnectionSupplier() {
         this(DEFAULT_CONN_URL, DEFAULT_DB_USER, DEFAULT_DB_PASSWORD);
@@ -147,15 +157,23 @@ public class DBConnectionSupplier implements Supplier<Connection>, DataSource, A
      */
     @NonNull
     public DBPreparedStatement prepareStatement(String query, String... requiredIndexes) {
+        checkArgument(query != null, "Argument 'query' is null");
         String reason = Stream.of(requiredIndexes).filter(idxField -> !getDBMetaData().isIndexed(idxField)).map(r -> "Missing index on field \"" + r + '"').findFirst().orElse(null);
         return new DBPreparedStatement(query, this, reason);
     }
 
-    public static void applyArguments(CmdArguments cmdArguments) {
-        Properties prop = Utils.loadProperties(cmdArguments.getOption(dbConfigOpt).orElse(null));
-        DEFAULT_CONN_URL = cmdArguments.getOption(dbUrlOpt).orElseGet(() -> prop.getProperty(dbUrlOpt.getLongOpt(), DEFAULT_CONN_URL));
-        DEFAULT_DB_USER = cmdArguments.getOption(dbUserOpt).orElseGet(() -> prop.getProperty(dbUserOpt.getLongOpt(), DEFAULT_DB_USER));
-        DEFAULT_DB_PASSWORD = cmdArguments.getOption(dbPasswordOpt).orElseGet(() -> prop.getProperty(dbPasswordOpt.getLongOpt(), DEFAULT_DB_PASSWORD));
+    /**
+     * Prepare SQL statement that cannot be executed.
+     *
+     * @param query Query string
+     * @param reason reason why this statement cannot be executed.
+     * @return DBPreparedStatement instance
+     */
+    @NonNull
+    public DBPreparedStatement prepareNonExecutableStatement(String query, String reason) {
+        checkArgument(query != null, "Argument 'query' is null");
+        checkArgument(reason != null, "Argument 'reason' is null");
+        return new DBPreparedStatement(query, this, reason);
     }
 
     @Deprecated

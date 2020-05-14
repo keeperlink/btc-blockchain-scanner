@@ -24,7 +24,8 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
-import java.text.DecimalFormat;
+import java.text.NumberFormat;
+import java.text.ParseException;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Properties;
@@ -243,15 +244,17 @@ public final class Utils {
 
         private final File file;
         private final Long number;
+        private final NumberFormat nf = NumberFormat.getIntegerInstance();
 
         @SuppressWarnings("UseSpecificCatch")
+        @SneakyThrows(ParseException.class)
         public NumberFile(String param) {
             if (StringUtils.isBlank(param)) {
                 file = null;
                 number = 0L;
-            } else if (StringUtils.isNumeric(param)) {
+            } else if (StringUtils.isNumeric(param.replace(",", "").replace(".", ""))) {
                 file = null;
-                number = Long.valueOf(param);
+                number = nf.parse(param).longValue();
             } else {
                 file = new File(param);
                 if (file.exists()) {
@@ -269,7 +272,7 @@ public final class Utils {
         public void updateNumber(long n) {
             if (file != null) {
                 try {
-                    FileUtils.writeStringToFile(file, new DecimalFormat("#,###").format(n), StandardCharsets.ISO_8859_1);
+                    FileUtils.writeStringToFile(file, nf.format(n), StandardCharsets.ISO_8859_1);
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }

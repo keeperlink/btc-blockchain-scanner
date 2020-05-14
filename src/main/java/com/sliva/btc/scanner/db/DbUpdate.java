@@ -15,9 +15,9 @@
  */
 package com.sliva.btc.scanner.db;
 
+import com.sliva.btc.scanner.db.utils.BatchExecutor;
 import static com.google.common.base.Preconditions.checkArgument;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import static com.sliva.btc.scanner.db.DBConnectionSupplier.dbConfigOpt;
 import com.sliva.btc.scanner.db.DBPreparedStatement.ParamSetter;
 import com.sliva.btc.scanner.util.BatchUtils;
 import com.sliva.btc.scanner.util.CommandLineUtils;
@@ -29,6 +29,7 @@ import static com.sliva.btc.scanner.util.Utils.synchronize;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.SQLException;
+import java.text.NumberFormat;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -37,8 +38,8 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Properties;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
@@ -65,16 +66,19 @@ public abstract class DbUpdate implements AutoCloseable {
     private static final Duration PRINT_STATS_PERIOD = Duration.ofSeconds(30);
     private static final int MYSQL_BULK_INSERT_BUFFER_SIZE = 256 * 1024 * 1024;
     private static final int DEFAULT_DB_WRITE_THREADS = 4;
+    private static final boolean DEFAULT_ALLOW_PARALLEL_WRITES = false;
 
     public static final CommandLineUtils.CmdOptions CMD_OPTS = new CommandLineUtils.CmdOptions();
     public static final CommandLineUtils.CmdOption dbWriteThreadsOpt = buildOption(CMD_OPTS, null, "db-write-threads", true, "Number of DB write threads. Default: " + DEFAULT_DB_WRITE_THREADS);
+    public static final CommandLineUtils.CmdOption allowParallelWritesOpt = buildOption(CMD_OPTS, null, "allow-parallel-writes", true, "Allow parallel writes to the same table. Default: " + DEFAULT_ALLOW_PARALLEL_WRITES);
 
     private static volatile ExecuteDbUpdate executeDbUpdateThread;
     private static final Collection<DbUpdate> dbUpdateInstances = new ArrayList<>();
-    private static final Set<DbUpdate> executingInstances = new HashSet<>();
+    private static final Set<String> executingInstances = new HashSet<>();
     private static final Map<String, ExecStats> execStats = new HashMap<>();
     private static final StopWatch lastPrintedTime = StopWatch.createStarted();
-    private static int DB_WRITE_THREADS = DEFAULT_DB_WRITE_THREADS;
+    private static int dbWriteThreads = DEFAULT_DB_WRITE_THREADS;
+    private static boolean allowParallelWrites = DEFAULT_ALLOW_PARALLEL_WRITES;
     private static LazyInitializer<ExecutorService> executor;
 
     @Getter
@@ -82,7 +86,11 @@ public abstract class DbUpdate implements AutoCloseable {
     private final String tableName;
     @Getter
     private boolean isActive = true;
-    protected final Object execSync = new Object();
+
+    public static void applyArguments(CommandLineUtils.CmdArguments cmdArguments) {
+        dbWriteThreads = cmdArguments.getOption(dbWriteThreadsOpt).map(Integer::valueOf).orElse(DEFAULT_DB_WRITE_THREADS);
+        allowParallelWrites = cmdArguments.getOption(allowParallelWritesOpt).map(Boolean::valueOf).orElse(DEFAULT_ALLOW_PARALLEL_WRITES);
+    }
 
     @SuppressWarnings({"LeakingThisInConstructor", "CallToThreadStartDuringObjectConstruction"})
     public DbUpdate(String tableName, DBConnectionSupplier conn) {
@@ -103,7 +111,7 @@ public abstract class DbUpdate implements AutoCloseable {
     private static void staticInit() {
         synchronized (ExecuteDbUpdate.class) {
             if (executeDbUpdateThread == null) {
-                executor = new LazyInitializer<>(() -> new ThreadPoolExecutor(DB_WRITE_THREADS, DB_WRITE_THREADS,
+                executor = new LazyInitializer<>(() -> new ThreadPoolExecutor(dbWriteThreads, dbWriteThreads,
                         0L, TimeUnit.MILLISECONDS,
                         new LinkedBlockingQueue<>(1),
                         new ThreadFactoryBuilder().setDaemon(true).setNameFormat("DBWriteThread-%d").build()));
@@ -116,7 +124,10 @@ public abstract class DbUpdate implements AutoCloseable {
 
     public void flushCache() {
         log.trace("flushCache() Called");
-        while (executeSync() != 0) {
+        while (executingInstances.contains(getTableName())) {
+            Utils.sleep(10);
+        }
+        while (executeSync(getTableName()) != 0) {
         }
     }
 
@@ -167,53 +178,51 @@ public abstract class DbUpdate implements AutoCloseable {
         checkArgument(batchMaxSize > 0, "Argument 'batchMaxSize' (%s) must be a positive number", batchMaxSize);
         checkArgument(ps != null, "Argument 'ps' is null");
         checkArgument(fillCallback != null, "Argument 'fillCallback' is null");
-        Collection<T> batchToRun = synchronize(syncObject, () -> BatchUtils.pullData(source, batchMaxSize));
-        if (batchToRun != null) {
-            synchronized (execSync) {
-                BatchExecutor.executeBatch(batchToRun, ps, fillCallback);
-                if (postExecutor != null) {
-                    postExecutor.accept(batchToRun);
-                }
+        Optional<Collection<T>> batchToRun = synchronize(syncObject, () -> BatchUtils.pullData(source, batchMaxSize));
+        batchToRun.ifPresent(batch -> {
+            BatchExecutor.executeBatch(batch, ps, fillCallback);
+            if (postExecutor != null) {
+                postExecutor.accept(batch);
             }
-        }
-        return batchToRun == null ? 0 : batchToRun.size();
+        });
+        return batchToRun.map(Collection::size).orElse(0);
     }
 
-    private int executeSync() {
+    private int executeSync(String execId) {
         int nRecs = 0;
         try {
-            log.trace("{}.executeSync(): STARTED", tableName);
-            long s = System.nanoTime();
+            StopWatch start = StopWatch.createStarted();
+            log.trace("{}.executeSync(): STARTED.", execId);
             try {
                 nRecs = executeInserts();
                 nRecs += executeUpdates();
             } catch (Exception e) {
                 log.error(e.getMessage(), e);
             } finally {
-                long runtimeNanos = System.nanoTime() - s;
                 if (nRecs > 0) {
-                    updateRuntimeMap(tableName, nRecs, runtimeNanos);
+                    updateRuntimeMap(tableName, nRecs, start.getNanoTime());
                     if (log.isTraceEnabled()) {
                         log.trace("{}.executeSync(): insert/update queries executed: {}. Runtime {} ms.",
-                                tableName, nRecs, BigDecimal.valueOf(runtimeNanos).movePointLeft(6).setScale(3, RoundingMode.HALF_DOWN));
+                                execId, nRecs, BigDecimal.valueOf(start.getNanoTime()).movePointLeft(6).setScale(3, RoundingMode.HALF_DOWN));
                     }
                 }
             }
         } finally {
             synchronized (executingInstances) {
-                executingInstances.remove(this);
+                executingInstances.remove(execId);
             }
         }
         return nRecs;
     }
 
     private void executeAsync() {
+        String execId = getTableName() + (allowParallelWrites ? "." + UUID.randomUUID().toString() : "");
         for (;;) {
             try {
                 log.trace("{}.executeAsync(): Submitting ", tableName);
                 synchronized (executingInstances) {
-                    executor.get().submit(this::executeSync);
-                    executingInstances.add(this);
+                    executor.get().submit(() -> executeSync(execId));
+                    executingInstances.add(execId);
                 }
                 log.trace("{}.executeAsync(): Submitted ", tableName);
                 break;
@@ -233,26 +242,22 @@ public abstract class DbUpdate implements AutoCloseable {
 
     public static void printStats() {
         if (log.isDebugEnabled() && executeDbUpdateThread != null) {
+            NumberFormat nf = NumberFormat.getIntegerInstance();
             long runtimeInSec = Math.max(TimeUnit.NANOSECONDS.toSeconds(executeDbUpdateThread.startTime.getNanoTime()), 1);
             synchronized (execStats) {
                 execStats.entrySet().forEach((e) -> {
                     ExecStats s = e.getValue();
                     log.debug("{}\t Executions: {},\t Records: {},\t speed: {} rec/sec,\t runtime: {}\t ({}%)",
                             StringUtils.rightPad(e.getKey(), 16),
-                            s.getExecutions(),
-                            s.getTotalRecords(),
-                            s.getTotalRecords() / runtimeInSec,
+                            nf.format(s.getExecutions()),
+                            nf.format(s.getTotalRecords()),
+                            nf.format(s.getTotalRecords() / runtimeInSec),
                             Duration.ofMillis(TimeUnit.NANOSECONDS.toMillis(s.getTotalRuntimeNanos())),
-                            getPercentage(TimeUnit.NANOSECONDS.toSeconds(s.getTotalRuntimeNanos()), runtimeInSec * DB_WRITE_THREADS)
+                            getPercentage(TimeUnit.NANOSECONDS.toSeconds(s.getTotalRuntimeNanos()), runtimeInSec * dbWriteThreads)
                     );
                 });
             }
         }
-    }
-
-    public static void applyArguments(CommandLineUtils.CmdArguments cmdArguments) {
-        Properties prop = Utils.loadProperties(cmdArguments.getOption(dbConfigOpt).orElse(null));
-        DB_WRITE_THREADS = cmdArguments.getOption(dbWriteThreadsOpt).map(Integer::valueOf).orElse(DEFAULT_DB_WRITE_THREADS);
     }
 
     private static final class ExecuteDbUpdate extends Thread {
@@ -279,10 +284,10 @@ public abstract class DbUpdate implements AutoCloseable {
                             dbUpdateMaxFilled = dbUpdateInstances.stream()
                                     .filter(DbUpdate::isActive)
                                     .peek(d -> liveUpdatersCount.incrementAndGet())
-                                    .filter(d -> !executingInstances.contains(d) && d.isExecuteNeeded())
+                                    .filter(d -> (allowParallelWrites || !executingInstances.contains(d.getTableName())) && d.isExecuteNeeded())
                                     .max(Comparator.comparingInt(DbUpdate::getCacheFillPercent));
                         }
-                        if (liveUpdatersCount.get() == 0 && !dbUpdateMaxFilled.isPresent() && executingInstances.isEmpty()) {
+                        if (liveUpdatersCount.get() == 0 && executingInstances.isEmpty()) {
                             log.info("ExecuteDbUpdate: All updaters are closed - exiting this thread");
                             break;
                         }

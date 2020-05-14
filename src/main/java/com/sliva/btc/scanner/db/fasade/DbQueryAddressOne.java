@@ -13,8 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.sliva.btc.scanner.db;
+package com.sliva.btc.scanner.db.fasade;
 
+import com.sliva.btc.scanner.db.DBConnectionSupplier;
+import com.sliva.btc.scanner.db.DBPreparedStatement;
+import com.sliva.btc.scanner.db.utils.DBUtils;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
 import com.sliva.btc.scanner.db.model.BtcAddress;
@@ -31,6 +34,7 @@ public class DbQueryAddressOne {
 
     private static final String ADDRESS_TABLE_NAME = "address_table_name";
     private static final String SQL_FIND_BY_ADDRESS_ID = "SELECT `address`,wallet_id FROM `address_table_name` WHERE address_id=? LIMIT 1";
+    private static final String SQL_FIND_BY_ADDRESS_ID_NO_WALLET_ID = "SELECT `address` FROM `address_table_name` WHERE address_id=? LIMIT 1";
     private static final String SQL_FIND_BY_ADDRESS = "SELECT address_id FROM `address_table_name` WHERE `address`=? LIMIT 1";
     private static final String SQL_QUERY_WALLET_ID = "SELECT wallet_id FROM `address_table_name` WHERE address_id=? LIMIT 1";
     private static final String SQL_QUERY_LAST_ADDRESS_ID = "SELECT address_id FROM `address_table_name` ORDER BY address_id DESC LIMIT 1";
@@ -41,6 +45,7 @@ public class DbQueryAddressOne {
     private final DBPreparedStatement psQueryLastAddressId;
     @Getter
     private final String tableName;
+    private final boolean hasWalletIdField;
 
     public DbQueryAddressOne() {
         this.addressType = null;
@@ -49,6 +54,7 @@ public class DbQueryAddressOne {
         this.psQueryWalletId = null;
         this.psQueryLastAddressId = null;
         this.tableName = null;
+        this.hasWalletIdField = false;
     }
 
     public DbQueryAddressOne(DBConnectionSupplier conn, SrcAddressType addressType) {
@@ -56,10 +62,13 @@ public class DbQueryAddressOne {
         checkArgument(addressType != null, "Argument 'addressType' is null");
         this.addressType = addressType;
         this.tableName = getAddressTableName(addressType);
-        this.psFindByAddressId = conn == null ? null : conn.prepareStatement(fixTableName(SQL_FIND_BY_ADDRESS_ID), tableName + ".address_id");
-        this.psFindByAddress = conn == null ? null : conn.prepareStatement(fixTableName(SQL_FIND_BY_ADDRESS), tableName + ".address");
-        this.psQueryWalletId = conn == null ? null : conn.prepareStatement(fixTableName(SQL_QUERY_WALLET_ID), tableName + ".address_id");
-        this.psQueryLastAddressId = conn == null ? null : conn.prepareStatement(fixTableName(SQL_QUERY_LAST_ADDRESS_ID), tableName + ".address_id");
+        this.hasWalletIdField = conn.getDBMetaData().hasField(tableName + ".wallet_id");
+        this.psFindByAddressId = conn.prepareStatement(fixTableName(hasWalletIdField ? SQL_FIND_BY_ADDRESS_ID : SQL_FIND_BY_ADDRESS_ID_NO_WALLET_ID), tableName + ".address_id");
+        this.psFindByAddress = conn.prepareStatement(fixTableName(SQL_FIND_BY_ADDRESS), tableName + ".address");
+        this.psQueryWalletId = hasWalletIdField
+                ? conn.prepareStatement(fixTableName(SQL_QUERY_WALLET_ID), tableName + ".address_id")
+                : conn.prepareNonExecutableStatement(fixTableName(SQL_QUERY_WALLET_ID), "Table " + tableName + " does not have field \"wallet_id\"");
+        this.psQueryLastAddressId = conn.prepareStatement(fixTableName(SQL_QUERY_LAST_ADDRESS_ID), tableName + ".address_id");
     }
 
     @NonNull
@@ -69,7 +78,7 @@ public class DbQueryAddressOne {
                 .type(addressType)
                 .addressId(addressId)
                 .address(rs.getBytes(1))
-                .walletId(rs.getInt(2))
+                .walletId(hasWalletIdField ? rs.getInt(2) : 0)
                 .build());
     }
 
@@ -107,11 +116,14 @@ public class DbQueryAddressOne {
 
     @NonNull
     public static String getAddressTableName(SrcAddressType addressType) {
+        checkArgument(addressType != null, "Argument 'addressType' is null");
         return "address_" + addressType.name().toLowerCase();
     }
 
     @NonNull
     public static String updateQueryTableName(String query, SrcAddressType addressType) {
+        checkArgument(query != null, "Argument 'query' is null");
+        checkArgument(addressType != null, "Argument 'addressType' is null");
         return query.replaceAll(ADDRESS_TABLE_NAME, getAddressTableName(addressType));
     }
 }

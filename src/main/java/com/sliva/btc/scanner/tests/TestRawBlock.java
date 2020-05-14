@@ -16,11 +16,11 @@
 package com.sliva.btc.scanner.tests;
 
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
-import com.sliva.btc.scanner.db.DbCachedAddress;
-import com.sliva.btc.scanner.db.DbQueryBlock;
-import com.sliva.btc.scanner.db.DbQueryInput;
-import com.sliva.btc.scanner.db.DbQueryOutput;
-import com.sliva.btc.scanner.db.DbQueryTransaction;
+import com.sliva.btc.scanner.db.fasade.DbCachedAddress;
+import com.sliva.btc.scanner.db.fasade.DbQueryBlock;
+import com.sliva.btc.scanner.db.fasade.DbQueryInput;
+import com.sliva.btc.scanner.db.fasade.DbQueryOutput;
+import com.sliva.btc.scanner.db.fasade.DbQueryTransaction;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.db.model.BtcBlock;
 import com.sliva.btc.scanner.db.model.BtcTransaction;

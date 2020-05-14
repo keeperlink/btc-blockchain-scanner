@@ -18,9 +18,9 @@ package com.sliva.btc.scanner;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import com.sliva.btc.scanner.db.DBPreparedStatement;
-import com.sliva.btc.scanner.db.DbQueryTransaction;
+import com.sliva.btc.scanner.db.fasade.DbQueryTransaction;
 import com.sliva.btc.scanner.db.DbUpdate;
-import com.sliva.btc.scanner.db.DbUpdateOutput;
+import com.sliva.btc.scanner.db.fasade.DbUpdateOutput;
 import com.sliva.btc.scanner.db.model.OutputStatus;
 import com.sliva.btc.scanner.util.BufferingAheadSupplier;
 import com.sliva.btc.scanner.util.CommandLineUtils.CmdArguments;
@@ -57,7 +57,7 @@ public class RunUpdateSpent {
     private static final int DEFAULT_BATCH_SIZE = 200_000;
     private static final int DEFAULT_THREADS = 3;
 
-    private static final CmdOptions CMD_OPTS = new CmdOptions().add(DBConnectionSupplier.class);
+    private static final CmdOptions CMD_OPTS = new CmdOptions().add(DBConnectionSupplier.class).add(DbUpdate.class);
     private static final CmdOption batchSizeOpt = buildOption(CMD_OPTS, null, "batch-size", true, "Number or transactions to process in a batch. Default: " + DEFAULT_BATCH_SIZE);
     private static final CmdOption startFromOpt = buildOption(CMD_OPTS, null, "start-from", true, "Start process from this transaction ID. Beside a number this parameter can be set to a file name that stores the numeric value updated on every batch");
     private static final CmdOption threadsOpt = buildOption(CMD_OPTS, null, "threads", true, "Number of threads. Default: " + DEFAULT_THREADS);
@@ -68,7 +68,6 @@ public class RunUpdateSpent {
             + " WHERE (O.address_id <> 0 OR O.spent <> " + OutputStatus.UNSPENDABLE + ") AND O.transaction_id BETWEEN ? AND ?";
 
     private static ShutdownHook shutdownHook;
-    private static final NumberFormat nf = NumberFormat.getInstance();
 
     private final DBConnectionSupplier dbCon;
     private final DBPreparedStatement psQueryOutputs;
@@ -106,6 +105,7 @@ public class RunUpdateSpent {
     }
 
     private void runProcess() throws SQLException {
+        NumberFormat nf = NumberFormat.getIntegerInstance();
         int lastTxnId = dbQueryTransaction.getLastTransactionId().orElse(0);
         log.info("Run transactions from {} to {}", nf.format(startTransactionId), nf.format(lastTxnId));
         Supplier<Integer> batchNumberSupplier = getNumberSupplier(startTransactionId, batchSize, n -> n <= lastTxnId && !shutdownHook.isInterrupted());

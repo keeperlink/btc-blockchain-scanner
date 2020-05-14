@@ -19,11 +19,13 @@ import com.sliva.btc.scanner.util.CommandLineUtils;
 import com.sliva.btc.scanner.util.CommandLineUtils.CmdArguments;
 import static com.sliva.btc.scanner.util.CommandLineUtils.buildCmdArguments;
 import java.util.Arrays;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  *
  * @author Sliva Co
  */
+@Slf4j
 public class Main {
 
     private static final CommandLineUtils.CmdOptions CMD_OPTS = new CommandLineUtils.CmdOptions();
@@ -63,10 +65,14 @@ public class Main {
                 case update_neo_wallets:
                     RunNeoUpdateWallets.main(removeCmd(args));
                     return;
+                case schema:
+                    RunSchema.main(removeCmd(args));
+                    return;
+                default:
+                    throw new IllegalArgumentException();
             }
         } catch (IllegalArgumentException e) {
-            System.out.println("Unknown command: " + args[0]);
-            e.printStackTrace();
+            log.error("Unknown command: {}", args[0]);
             cmdArguments.printHelpAndExit();
         }
     }
@@ -82,6 +88,7 @@ public class Main {
         prepare_blocks,
         address,
         load_neo4j,
-        update_neo_wallets
+        update_neo_wallets,
+        schema
     }
 }

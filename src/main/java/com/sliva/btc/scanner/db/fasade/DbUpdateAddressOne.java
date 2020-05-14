@@ -13,13 +13,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.sliva.btc.scanner.db;
+package com.sliva.btc.scanner.db.fasade;
 
+import com.sliva.btc.scanner.db.DBConnectionSupplier;
+import com.sliva.btc.scanner.db.DBPreparedStatement;
+import com.sliva.btc.scanner.db.DbUpdate;
 import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
-import static com.sliva.btc.scanner.db.DbQueryAddressOne.getAddressTableName;
-import static com.sliva.btc.scanner.db.DbQueryAddressOne.updateQueryTableName;
+import static com.sliva.btc.scanner.db.fasade.DbQueryAddressOne.getAddressTableName;
+import static com.sliva.btc.scanner.db.fasade.DbQueryAddressOne.updateQueryTableName;
+import com.sliva.btc.scanner.db.model.BinaryAddress;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.src.SrcAddressType;
 import java.util.ArrayList;
@@ -30,7 +33,6 @@ import java.util.Map;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.spongycastle.util.encoders.Hex;
 
 /**
  * Updater for one specific address table.
@@ -45,23 +47,28 @@ public class DbUpdateAddressOne extends DbUpdate {
     private static int MAX_INSERT_QUEUE_LENGTH = 120000;
     private static int MAX_UPDATE_QUEUE_LENGTH = 10000;
     private static final String SQL_ADD = "INSERT INTO `address_table_name`(address_id,`address`,wallet_id)VALUES(?,?,?)";
+    private static final String SQL_ADD_NO_WALLET_ID = "INSERT INTO `address_table_name`(address_id,`address`)VALUES(?,?)";
     private static final String SQL_UPDATE_WALLET = "UPDATE `address_table_name` SET wallet_id=? WHERE address_id=?";
     private final DBPreparedStatement psAdd;
     private final DBPreparedStatement psUpdateWallet;
     @Getter
     @NonNull
     private final CacheData cacheData;
+    private final boolean hasWalletIdField;
 
     public DbUpdateAddressOne(DBConnectionSupplier conn, SrcAddressType addressType) {
         this(conn, addressType, new CacheData());
     }
 
     public DbUpdateAddressOne(DBConnectionSupplier conn, SrcAddressType addressType, CacheData cacheData) {
-        super("address_" + checkNotNull(addressType, "Argument 'addressType' is null").name().toLowerCase(), conn);
+        super(getAddressTableName(addressType), conn);
         checkArgument(addressType.isReal(), "Argument 'addressType' is not a real type: %s", addressType);
         checkArgument(cacheData != null, "Argument 'cacheData' is null");
-        this.psAdd = conn.prepareStatement(updateQueryTableName(SQL_ADD, addressType));
-        this.psUpdateWallet = conn.prepareStatement(updateQueryTableName(SQL_UPDATE_WALLET, addressType), getAddressTableName(addressType) + ".address_id");
+        this.hasWalletIdField = conn.getDBMetaData().hasField(getTableName() + ".wallet_id");
+        this.psAdd = conn.prepareStatement(updateQueryTableName(hasWalletIdField ? SQL_ADD : SQL_ADD_NO_WALLET_ID, addressType));
+        this.psUpdateWallet = hasWalletIdField
+                ? conn.prepareStatement(updateQueryTableName(SQL_UPDATE_WALLET, addressType), getTableName() + ".address_id")
+                : conn.prepareNonExecutableStatement(updateQueryTableName(SQL_UPDATE_WALLET, addressType), "Table " + getTableName() + " does not have field \"wallet_id\"");
         this.cacheData = cacheData;
     }
 
@@ -80,14 +87,13 @@ public class DbUpdateAddressOne extends DbUpdate {
         checkState(isActive(), "Instance has been closed");
         waitFullQueue(cacheData.addQueue, MAX_INSERT_QUEUE_LENGTH);
         synchronized (cacheData) {
-            String hexAddr = Hex.toHexString(addr.getAddress());
-            if (!cacheData.addMap.containsKey(hexAddr) && !cacheData.addMapId.containsKey(addr.getAddressId())) {
-                cacheData.addMap.put(hexAddr, addr);
+            if (!cacheData.addMap.containsKey(addr.getAddress()) && !cacheData.addMapId.containsKey(addr.getAddressId())) {
+                cacheData.addMap.put(addr.getAddress(), addr);
                 cacheData.addMapId.put(addr.getAddressId(), addr);
                 cacheData.addQueue.add(addr);
             } else {
                 log.debug("add(): Address already in the queue: addr={} addMap={}, addMapId={}",
-                        addr, cacheData.addMap.get(hexAddr), cacheData.addMapId.get(addr.getAddressId()));
+                        addr, cacheData.addMap.get(addr.getAddress()), cacheData.addMapId.get(addr.getAddressId()));
             }
         }
     }
@@ -120,11 +126,11 @@ public class DbUpdateAddressOne extends DbUpdate {
     @Override
     public int executeInserts() {
         return executeBatch(cacheData, cacheData.addQueue, psAdd, MAX_BATCH_SIZE,
-                (t, p) -> p.setInt(t.getAddressId()).setBytes(t.getAddress()).setInt(t.getWalletId()),
+                (t, p) -> p.setInt(t.getAddressId()).setBytes(t.getAddress().getData()).ignoreExtraParam().setInt(t.getWalletId()),
                 executed -> {
                     synchronized (cacheData) {
                         executed.stream()
-                                .peek(t -> cacheData.addMap.remove(Hex.toHexString(t.getAddress())))
+                                .peek(t -> cacheData.addMap.remove(t.getAddress()))
                                 .map(BtcAddress::getAddressId).forEach(cacheData.addMapId::remove);
                     }
                 });
@@ -144,7 +150,7 @@ public class DbUpdateAddressOne extends DbUpdate {
     public static class CacheData {
 
         private final Collection<BtcAddress> addQueue = new LinkedHashSet<>();
-        private final Map<String, BtcAddress> addMap = new HashMap<>();
+        private final Map<BinaryAddress, BtcAddress> addMap = new HashMap<>();
         private final Map<Integer, BtcAddress> addMapId = new HashMap<>();
         private final Collection<BtcAddress> updateWalletQueue = new ArrayList<>();
     }

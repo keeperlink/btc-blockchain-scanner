@@ -1,7 +1,6 @@
 CREATE TABLE IF NOT EXISTS `address_p2pkh` (
   `address_id` int(10) unsigned NOT NULL,
   `address` binary(20) NOT NULL,
-  `wallet_id` int(10) unsigned NOT NULL DEFAULT '0',
   PRIMARY KEY (`address_id`),
   UNIQUE KEY `ix_address_p2pkh_address` (`address`)
 ) ENGINE=MyISAM;
@@ -9,7 +8,6 @@ CREATE TABLE IF NOT EXISTS `address_p2pkh` (
 CREATE TABLE IF NOT EXISTS `address_p2sh` (
   `address_id` int(10) unsigned NOT NULL,
   `address` binary(20) NOT NULL,
-  `wallet_id` int(10) unsigned NOT NULL DEFAULT '0',
   PRIMARY KEY (`address_id`),
   UNIQUE KEY `ix_address_p2sh_address` (`address`)
 ) ENGINE=MyISAM;
@@ -17,7 +15,6 @@ CREATE TABLE IF NOT EXISTS `address_p2sh` (
 CREATE TABLE IF NOT EXISTS `address_p2wpkh` (
   `address_id` int(10) unsigned NOT NULL,
   `address` binary(20) NOT NULL,
-  `wallet_id` int(10) unsigned NOT NULL DEFAULT '0',
   PRIMARY KEY (`address_id`),
   UNIQUE KEY `ix_address_p2wpkh_address` (`address`)
 ) ENGINE=MyISAM;
@@ -25,7 +22,6 @@ CREATE TABLE IF NOT EXISTS `address_p2wpkh` (
 CREATE TABLE IF NOT EXISTS `address_p2wsh` (
   `address_id` int(10) unsigned NOT NULL,
   `address` binary(32) NOT NULL,
-  `wallet_id` int(10) unsigned NOT NULL DEFAULT '0',
   PRIMARY KEY (`address_id`),
   UNIQUE KEY `ix_address_p2wsh_address` (`address`)
 ) ENGINE=MyISAM;

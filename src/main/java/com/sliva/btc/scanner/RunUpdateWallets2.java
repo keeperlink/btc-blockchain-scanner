@@ -17,12 +17,12 @@ package com.sliva.btc.scanner;
 
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import com.sliva.btc.scanner.db.DBPreparedStatement;
-import com.sliva.btc.scanner.db.DbUpdateWallet;
+import com.sliva.btc.scanner.db.fasade.DbUpdateWallet;
 import com.sliva.btc.scanner.db.DbQueries;
-import com.sliva.btc.scanner.db.DbQueryInput;
-import com.sliva.btc.scanner.db.DbQueryTransaction;
-import com.sliva.btc.scanner.db.DbQueryWallet;
-import com.sliva.btc.scanner.db.DbUpdateAddress;
+import com.sliva.btc.scanner.db.fasade.DbQueryInput;
+import com.sliva.btc.scanner.db.fasade.DbQueryTransaction;
+import com.sliva.btc.scanner.db.fasade.DbQueryWallet;
+import com.sliva.btc.scanner.db.fasade.DbUpdateAddress;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.src.SrcAddressType;
 import com.sliva.btc.scanner.util.Utils;

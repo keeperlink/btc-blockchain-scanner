@@ -13,8 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.sliva.btc.scanner.db;
+package com.sliva.btc.scanner.db.utils;
 
+import com.sliva.btc.scanner.db.DBConnectionSupplier;
+import com.sliva.btc.scanner.db.DBPreparedStatement;
 import static com.google.common.base.Preconditions.checkArgument;
 import com.sliva.btc.scanner.db.DBPreparedStatement.ParamSetter;
 import java.io.File;

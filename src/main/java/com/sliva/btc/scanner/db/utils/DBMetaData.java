@@ -13,9 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.sliva.btc.scanner.db;
+package com.sliva.btc.scanner.db.utils;
 
-import static com.sliva.btc.scanner.db.DbResultSetUtils.executeQueryToList;
+import com.sliva.btc.scanner.db.DBConnectionSupplier;
+import static com.sliva.btc.scanner.db.utils.DbResultSetUtils.executeQueryToList;
 import java.sql.DatabaseMetaData;
 import java.sql.SQLException;
 import java.util.Collections;
@@ -25,6 +26,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.SneakyThrows;
@@ -37,16 +39,38 @@ import lombok.ToString;
 @ToString
 public class DBMetaData {
 
+    @Getter
     private final Map<String, Table> tables;
+    private final Set<String> allFields;
     private final Set<String> indexedFields;
 
     public DBMetaData(DBConnectionSupplier con) {
         this.tables = Collections.unmodifiableMap(_collect(con));
+        allFields = tables.values().stream().flatMap(t -> t.fieldNames.stream().map(fn -> t.name + '.' + fn)).collect(Collectors.toSet());
         indexedFields = tables.values().stream().flatMap(t -> t.indexes.stream().map(i -> t.name + '.' + i.fields.get(0).name)).collect(Collectors.toSet());
     }
 
     public boolean hasTable(String tableName) {
         return tables.containsKey(tableName);
+    }
+
+    public boolean hasAllTables(String... tableNames) {
+        return Stream.of(tableNames).allMatch(tables::containsKey);
+    }
+
+    public boolean hasField(String tableName, String fieldName) {
+        return hasField(tableName + '.' + fieldName);
+    }
+
+    /**
+     * Check if field exists.
+     *
+     * @param fullFieldName field name prefixed with table name, separated by
+     * dot ("."), i.e. table_name.field_name
+     * @return true if table exists and has the field
+     */
+    public boolean hasField(String fullFieldName) {
+        return allFields.contains(fullFieldName);
     }
 
     public boolean isIndexed(String tableName, String fieldName) {
@@ -57,8 +81,8 @@ public class DBMetaData {
      * Check if field is indexed. (DB has an index with this field included as
      * first in the list)
      *
-     * @param tableFieldName field name prefixed with table name i.e.
-     * table_name.field_name
+     * @param tableFieldName field name prefixed with table name, separated by
+     * dot ("."), i.e. table_name.field_name
      * @return true if DB has an index on the field
      */
     public boolean isIndexed(String tableFieldName) {

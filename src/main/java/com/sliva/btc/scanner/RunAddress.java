@@ -16,8 +16,8 @@
 package com.sliva.btc.scanner;
 
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
-import com.sliva.btc.scanner.db.DbQueryAddressOne;
-import com.sliva.btc.scanner.db.DbQueryAddress;
+import com.sliva.btc.scanner.db.fasade.DbQueryAddress;
+import com.sliva.btc.scanner.db.fasade.DbQueryAddressOne;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.src.SrcAddressType;
 import com.sliva.btc.scanner.util.BJBlockHandler;
@@ -66,7 +66,7 @@ public class RunAddress {
             try {
                 BtcAddress btcAddress = queryAddress.findByAddressId(Integer.parseInt(a)).orElseThrow(() -> new IllegalArgumentException("Address not found: " + a));
                 System.out.println("Address for DB ID " + a + " is: " + btcAddress.getBjAddress()
-                        + ", type: " + btcAddress.getType() + ", hash: " + Hex.encodeHexString(btcAddress.getAddress(), true));
+                        + ", type: " + btcAddress.getType() + ", hash: " + btcAddress.getAddress().toString());
             } catch (Exception e) {
                 System.out.println("Error processing " + a + ": " + e.getMessage());
             }
