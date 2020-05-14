@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.sliva.btc.scanner.db.fasade;
+package com.sliva.btc.scanner.db.facade;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
@@ -21,8 +21,7 @@ import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import com.sliva.btc.scanner.db.DBPreparedStatement;
 import com.sliva.btc.scanner.db.DbUpdate;
 import com.sliva.btc.scanner.db.model.InOutKey;
-import com.sliva.btc.scanner.db.model.TxInput;
-import java.sql.SQLException;
+import com.sliva.btc.scanner.db.model.TxInputSpecial;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -38,17 +37,17 @@ import lombok.extern.slf4j.Slf4j;
  * @author Sliva Co
  */
 @Slf4j
-public class DbUpdateInput extends DbUpdate {
+public class DbUpdateInputSpecial extends DbUpdate {
 
-    private static int MIN_BATCH_SIZE = 1000;
-    private static int MAX_BATCH_SIZE = 60000;
-    private static int MAX_INSERT_QUEUE_LENGTH = 120000;
+    private static int MIN_BATCH_SIZE = 1;
+    private static int MAX_BATCH_SIZE = 40000;
+    private static int MAX_INSERT_QUEUE_LENGTH = 10000;
     private static int MAX_UPDATE_QUEUE_LENGTH = 10000;
     private static final String TABLE_NAME = "input";
-    private static final String SQL_ADD = "INSERT INTO `input`(transaction_id,pos,in_transaction_id,in_pos)VALUES(?,?,?,?)";
-    private static final String SQL_UPDATE = "UPDATE `input` SET in_transaction_id=?,in_pos=? WHERE transaction_id=? AND pos=?";
-    private static final String SQL_DELETE = "DELETE FROM `input` WHERE transaction_id=? AND pos=?";
-    private static final String SQL_DELETE_ALL_ABOVE_TRANSACTION_ID = "DELETE FROM `input` WHERE transaction_id>?";
+    private static final String SQL_ADD = "INSERT INTO input_special(transaction_id,pos,sighash_type,segwit,multisig)VALUES(?,?,?,?,?)";
+    private static final String SQL_UPDATE = "UPDATE input_special SET sighash_type=?,segwit=?,multisig=? WHERE transaction_id=? AND pos=?";
+    private static final String SQL_DELETE = "DELETE FROM input_special WHERE transaction_id=? AND pos=?";
+    private static final String SQL_DELETE_ALL_ABOVE_TRANSACTION_ID = "DELETE FROM input_special WHERE transaction_id>?";
     private final DBPreparedStatement psAdd;
     private final DBPreparedStatement psUpdate;
     private final DBPreparedStatement psDelete;
@@ -57,17 +56,17 @@ public class DbUpdateInput extends DbUpdate {
     @NonNull
     private final CacheData cacheData;
 
-    public DbUpdateInput(DBConnectionSupplier conn) {
+    public DbUpdateInputSpecial(DBConnectionSupplier conn) {
         this(conn, new CacheData());
     }
 
-    public DbUpdateInput(DBConnectionSupplier conn, CacheData cacheData) {
+    public DbUpdateInputSpecial(DBConnectionSupplier conn, CacheData cacheData) {
         super(TABLE_NAME, conn);
         checkArgument(cacheData != null, "Argument 'cacheData' is null");
         this.psAdd = conn.prepareStatement(SQL_ADD);
-        this.psUpdate = conn.prepareStatement(SQL_UPDATE, "input.transaction_id");
-        this.psDelete = conn.prepareStatement(SQL_DELETE, "input.transaction_id");
-        this.psDeleteAllAboveTransactionId = conn.prepareStatement(SQL_DELETE_ALL_ABOVE_TRANSACTION_ID, "input.transaction_id");
+        this.psDelete = conn.prepareStatement(SQL_DELETE, "input_special.transaction_id");
+        this.psUpdate = conn.prepareStatement(SQL_UPDATE, "input_special.transaction_id");
+        this.psDeleteAllAboveTransactionId = conn.prepareStatement(SQL_DELETE_ALL_ABOVE_TRANSACTION_ID, "input_special.transaction_id");
         this.cacheData = cacheData;
     }
 
@@ -81,24 +80,23 @@ public class DbUpdateInput extends DbUpdate {
         return cacheData.addQueue.size() >= MIN_BATCH_SIZE || cacheData.queueUpdate.size() >= MIN_BATCH_SIZE;
     }
 
-    public void add(TxInput txInput) throws SQLException {
+    public void add(TxInputSpecial txInput) {
         log.trace("add(txInput:{})", txInput);
         checkState(isActive(), "Instance has been closed");
         waitFullQueue(cacheData.addQueue, MAX_INSERT_QUEUE_LENGTH);
         synchronized (cacheData) {
             cacheData.addQueue.add(txInput);
             cacheData.queueMap.put(txInput, txInput);
-            List<TxInput> list = cacheData.queueMapTx.computeIfAbsent(txInput.getTransactionId(), id -> new ArrayList<>(1));
+            List<TxInputSpecial> list = cacheData.queueMapTx.computeIfAbsent(txInput.getTransactionId(), k -> new ArrayList<>());
             list.add(txInput);
         }
     }
 
-    public void update(TxInput txInput) throws SQLException {
+    public void update(TxInputSpecial txInput) {
         log.trace("update(txInput:{})", txInput);
         checkState(isActive(), "Instance has been closed");
-        waitFullQueue(cacheData.queueUpdate, MAX_UPDATE_QUEUE_LENGTH);
         synchronized (cacheData) {
-            TxInput txInput2 = cacheData.queueMap.get(txInput);
+            TxInputSpecial txInput2 = cacheData.queueMap.get(txInput);
             boolean updatedInQueue = false;
             if (txInput2 != null) {
                 if (cacheData.addQueue.remove(txInput2)) {
@@ -112,16 +110,19 @@ public class DbUpdateInput extends DbUpdate {
                 cacheData.queueUpdate.add(txInput);
             }
         }
+        if (cacheData.queueUpdate.size() >= MAX_UPDATE_QUEUE_LENGTH) {
+            executeUpdates();
+        }
     }
 
-    public boolean delete(TxInput txInput) {
+    public boolean delete(TxInputSpecial txInput) {
         log.trace("delete(txInput:{})", txInput);
         checkState(isActive(), "Instance has been closed");
         synchronized (cacheData) {
             boolean result = psDelete.setParameters(p -> p.setInt(txInput.getTransactionId()).setInt(txInput.getPos())).executeUpdate() == 1;
             cacheData.addQueue.remove(txInput);
             cacheData.queueMap.remove(txInput);
-            List<TxInput> l = cacheData.queueMapTx.get(txInput.getTransactionId());
+            List<TxInputSpecial> l = cacheData.queueMapTx.get(txInput.getTransactionId());
             if (l != null) {
                 l.remove(txInput);
                 if (l.isEmpty()) {
@@ -148,7 +149,7 @@ public class DbUpdateInput extends DbUpdate {
     @Override
     public int executeInserts() {
         return executeBatch(cacheData, cacheData.addQueue, psAdd, MAX_BATCH_SIZE,
-                (t, p) -> p.setInt(t.getTransactionId()).setInt(t.getPos()).setInt(t.getInTransactionId()).setInt(t.getInPos()),
+                (t, p) -> p.setInt(t.getTransactionId()).setInt(t.getPos()).setInt(Byte.toUnsignedInt(t.getSighashType())).setBoolean(t.isSegwit()).setBoolean(t.isMultisig()),
                 executed -> {
                     synchronized (cacheData) {
                         executed.stream().peek(cacheData.queueMap::remove).map(InOutKey::getTransactionId).forEach(cacheData.queueMapTx::remove);
@@ -159,15 +160,15 @@ public class DbUpdateInput extends DbUpdate {
     @Override
     public int executeUpdates() {
         return executeBatch(cacheData, cacheData.queueUpdate, psUpdate, MAX_BATCH_SIZE,
-                (t, p) -> p.setInt(t.getInTransactionId()).setInt(t.getInPos()).setInt(t.getTransactionId()).setInt(t.getPos()), null);
+                (t, p) -> p.setInt(Byte.toUnsignedInt(t.getSighashType())).setBoolean(t.isSegwit()).setBoolean(t.isMultisig()).setInt(t.getTransactionId()).setInt(t.getPos()), null);
     }
 
     @Getter
     public static class CacheData {
 
-        private final Collection<TxInput> addQueue = new LinkedHashSet<>();
-        private final Map<InOutKey, TxInput> queueMap = new HashMap<>();
-        private final Map<Integer, List<TxInput>> queueMapTx = new HashMap<>();
-        private final Collection<TxInput> queueUpdate = new ArrayList<>();
+        private final Collection<TxInputSpecial> addQueue = new LinkedHashSet<>();
+        private final Map<InOutKey, TxInputSpecial> queueMap = new HashMap<>();
+        private final Map<Integer, List<TxInputSpecial>> queueMapTx = new HashMap<>();
+        private final Collection<TxInputSpecial> queueUpdate = new ArrayList<>();
     }
 }

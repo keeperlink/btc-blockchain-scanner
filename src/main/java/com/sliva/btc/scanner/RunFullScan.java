@@ -19,17 +19,16 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.LoadingCache;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
-import com.sliva.btc.scanner.db.fasade.DbCachedAddress;
-import com.sliva.btc.scanner.db.fasade.DbCachedOutput;
-import com.sliva.btc.scanner.db.fasade.DbCachedTransaction;
-import com.sliva.btc.scanner.db.fasade.DbQueryBlock;
-import com.sliva.btc.scanner.db.fasade.DbQueryInput;
-import com.sliva.btc.scanner.db.fasade.DbQueryInputSpecial;
 import com.sliva.btc.scanner.db.DbUpdate;
-import com.sliva.btc.scanner.db.fasade.DbUpdateBlock;
-import com.sliva.btc.scanner.db.fasade.DbUpdateInput;
-import com.sliva.btc.scanner.db.fasade.DbUpdateInputSpecial;
-import com.sliva.btc.scanner.db.utils.DbValidationUtils;
+import com.sliva.btc.scanner.db.facade.DbCachedAddress;
+import com.sliva.btc.scanner.db.facade.DbCachedOutput;
+import com.sliva.btc.scanner.db.facade.DbCachedTransaction;
+import com.sliva.btc.scanner.db.facade.DbQueryBlock;
+import com.sliva.btc.scanner.db.facade.DbQueryInput;
+import com.sliva.btc.scanner.db.facade.DbQueryInputSpecial;
+import com.sliva.btc.scanner.db.facade.DbUpdateBlock;
+import com.sliva.btc.scanner.db.facade.DbUpdateInput;
+import com.sliva.btc.scanner.db.facade.DbUpdateInputSpecial;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.db.model.BtcBlock;
 import com.sliva.btc.scanner.db.model.BtcTransaction;
@@ -38,6 +37,7 @@ import com.sliva.btc.scanner.db.model.SighashType;
 import com.sliva.btc.scanner.db.model.TxInput;
 import com.sliva.btc.scanner.db.model.TxInputSpecial;
 import com.sliva.btc.scanner.db.model.TxOutput;
+import com.sliva.btc.scanner.db.utils.DbValidationUtils;
 import com.sliva.btc.scanner.rpc.RpcClient;
 import com.sliva.btc.scanner.rpc.RpcClientDirect;
 import com.sliva.btc.scanner.src.BJBlockProvider;
@@ -57,6 +57,7 @@ import com.sliva.btc.scanner.util.Utils;
 import static com.sliva.btc.scanner.util.Utils.getNumberSupplier;
 import java.io.File;
 import java.sql.SQLException;
+import java.text.NumberFormat;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -139,6 +140,7 @@ public class RunFullScan {
         log.info("MAIN STARTED");
         ShutdownHook shutdownHook = new ShutdownHook(() -> terminateLoop.set(true));
         try {
+            Thread.currentThread().setName("MAIN__________");
             Integer loopTime = cmd.getOption(loopOpt).map(Integer::parseInt).orElse(null);
             do {
                 new RunFullScan(cmd).runProcess();
@@ -236,7 +238,8 @@ public class RunFullScan {
     private void processBlock(SrcBlock<?> block, DbAccess db) {
         int blockHeight = block.getHeight();
         String blockHash = block.getHash();
-        log.info("Block({}).hash: {}, nTxns={}", blockHeight, blockHash, block.getTransactions().size());
+        NumberFormat nf = NumberFormat.getIntegerInstance();
+        log.info("Block({}).hash: {}, nTxns={}", nf.format(blockHeight), blockHash, nf.format(block.getTransactions().size()));
         if (!queryBlock.findBlockByHash(blockHash).isPresent()) {
             db.addBlock.add(BtcBlock.builder()
                     .height(blockHeight)

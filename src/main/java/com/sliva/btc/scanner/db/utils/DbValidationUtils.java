@@ -16,16 +16,16 @@
 package com.sliva.btc.scanner.db.utils;
 
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
-import com.sliva.btc.scanner.db.fasade.DbQueryAddress;
-import com.sliva.btc.scanner.db.fasade.DbQueryBlock;
-import com.sliva.btc.scanner.db.fasade.DbQueryInput;
-import com.sliva.btc.scanner.db.fasade.DbQueryOutput;
-import com.sliva.btc.scanner.db.fasade.DbQueryTransaction;
-import com.sliva.btc.scanner.db.fasade.DbUpdateBlock;
-import com.sliva.btc.scanner.db.fasade.DbUpdateInput;
-import com.sliva.btc.scanner.db.fasade.DbUpdateInputSpecial;
-import com.sliva.btc.scanner.db.fasade.DbUpdateOutput;
-import com.sliva.btc.scanner.db.fasade.DbUpdateTransaction;
+import com.sliva.btc.scanner.db.facade.DbQueryAddress;
+import com.sliva.btc.scanner.db.facade.DbQueryBlock;
+import com.sliva.btc.scanner.db.facade.DbQueryInput;
+import com.sliva.btc.scanner.db.facade.DbQueryOutput;
+import com.sliva.btc.scanner.db.facade.DbQueryTransaction;
+import com.sliva.btc.scanner.db.facade.DbUpdateBlock;
+import com.sliva.btc.scanner.db.facade.DbUpdateInput;
+import com.sliva.btc.scanner.db.facade.DbUpdateInputSpecial;
+import com.sliva.btc.scanner.db.facade.DbUpdateOutput;
+import com.sliva.btc.scanner.db.facade.DbUpdateTransaction;
 import static com.google.common.base.Preconditions.checkArgument;
 import com.sliva.btc.scanner.db.model.BtcBlock;
 import com.sliva.btc.scanner.db.model.BtcTransaction;

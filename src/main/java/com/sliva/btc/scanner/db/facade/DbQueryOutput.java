@@ -13,13 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.sliva.btc.scanner.db.fasade;
+package com.sliva.btc.scanner.db.facade;
 
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import com.sliva.btc.scanner.db.DBPreparedStatement;
 import com.sliva.btc.scanner.db.utils.DBUtils;
 import static com.google.common.base.Preconditions.checkArgument;
-import static com.sliva.btc.scanner.db.fasade.DbQueryAddressOne.updateQueryTableName;
+import static com.sliva.btc.scanner.db.facade.DbQueryAddressOne.updateQueryTableName;
 import com.sliva.btc.scanner.db.model.InOutKey;
 import com.sliva.btc.scanner.db.model.TxInput;
 import com.sliva.btc.scanner.db.model.TxOutput;
@@ -35,7 +35,7 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.ToString;
 import lombok.experimental.SuperBuilder;
-import static com.sliva.btc.scanner.db.fasade.DbQueryAddressOne.getAddressTableName;
+import static com.sliva.btc.scanner.db.facade.DbQueryAddressOne.getAddressTableName;
 
 /**
  *

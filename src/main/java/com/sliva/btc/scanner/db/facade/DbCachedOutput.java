@@ -13,11 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.sliva.btc.scanner.db.fasade;
+package com.sliva.btc.scanner.db.facade;
 
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
-import com.sliva.btc.scanner.db.fasade.DbQueryOutput;
-import com.sliva.btc.scanner.db.fasade.DbUpdateOutput;
+import com.sliva.btc.scanner.db.facade.DbQueryOutput;
+import com.sliva.btc.scanner.db.facade.DbUpdateOutput;
 import static com.google.common.base.Preconditions.checkArgument;
 import com.sliva.btc.scanner.db.model.InOutKey;
 import com.sliva.btc.scanner.db.model.TxOutput;

@@ -13,25 +13,13 @@
         <level value="DEBUG"/>
     </logger>
 
-    <logger name="com.sliva.btc.scanner.RunUpdateWallt" additivity="true">
-        <level value="DEBUG"/>
-    </logger>
-    <logger name="com.sliva.btc.scanner.db.BatchExecutor" additivity="true">
+    <logger name="com.sliva.btc.scanner.db.utils.BatchExecutor" additivity="true">
         <level value="INFO"/>
     </logger>
     <logger name="com.sliva.btc.scanner.db.DbUpdate" additivity="true">
         <level value="DEBUG"/>
     </logger>
-    <logger name="com.sliva.btc.scanner.db.DbUpdate$DBUpdateCall" additivity="true">
-        <level value="DEBUG"/>
-    </logger>
-    <logger name="com.sliva.btc.scanner.db.DbQueryInput" additivity="true">
-        <level value="DEBUG"/>
-    </logger>
-    <logger name="com.sliva.btc.scanner.db.DbUpdateInput" additivity="true">
-        <level value="DEBUG"/>
-    </logger>
-    <logger name="com.sliva.btc.scanner.db.DbUpdateOutput" additivity="true">
+    <logger name="com.sliva.btc.scanner.db.facade.DbUpdateOutput" additivity="true">
         <level value="DEBUG"/>
     </logger>
     <logger name="org.bitcoinj.core.Context" additivity="true">

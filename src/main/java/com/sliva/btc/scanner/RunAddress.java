@@ -16,8 +16,8 @@
 package com.sliva.btc.scanner;
 
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
-import com.sliva.btc.scanner.db.fasade.DbQueryAddress;
-import com.sliva.btc.scanner.db.fasade.DbQueryAddressOne;
+import com.sliva.btc.scanner.db.facade.DbQueryAddress;
+import com.sliva.btc.scanner.db.facade.DbQueryAddressOne;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.src.SrcAddressType;
 import com.sliva.btc.scanner.util.BJBlockHandler;

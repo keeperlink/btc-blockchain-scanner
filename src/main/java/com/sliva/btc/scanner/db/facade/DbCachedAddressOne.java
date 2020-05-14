@@ -13,11 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.sliva.btc.scanner.db.fasade;
+package com.sliva.btc.scanner.db.facade;
 
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
-import com.sliva.btc.scanner.db.fasade.DbQueryAddressOne;
-import com.sliva.btc.scanner.db.fasade.DbUpdateAddressOne;
+import com.sliva.btc.scanner.db.facade.DbQueryAddressOne;
+import com.sliva.btc.scanner.db.facade.DbUpdateAddressOne;
 import static com.google.common.base.Preconditions.checkArgument;
 import com.sliva.btc.scanner.db.model.BinaryAddress;
 import com.sliva.btc.scanner.db.model.BtcAddress;

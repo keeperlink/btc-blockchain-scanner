@@ -13,16 +13,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.sliva.btc.scanner.db.fasade;
+package com.sliva.btc.scanner.db.facade;
 
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import com.sliva.btc.scanner.db.DBPreparedStatement;
 import com.sliva.btc.scanner.db.DbUpdate;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
-import com.sliva.btc.scanner.db.model.BtcBlock;
+import com.sliva.btc.scanner.db.model.BtcWallet;
+import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Collection;
-import java.util.LinkedHashSet;
+import java.util.concurrent.atomic.AtomicInteger;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -32,30 +34,29 @@ import lombok.extern.slf4j.Slf4j;
  * @author Sliva Co
  */
 @Slf4j
-public class DbUpdateBlock extends DbUpdate {
+public class DbUpdateWallet extends DbUpdate {
 
     private static int MIN_BATCH_SIZE = 1;
-    private static int MAX_BATCH_SIZE = 10000;
-    private static int MAX_INSERT_QUEUE_LENGTH = 30000;
-    private static final String TABLE_NAME = "block";
-    private static final String SQL_ADD = "INSERT INTO `block`(`height`,`hash`,txn_count)VALUES(?,?,?)";
-    private static final String SQL_DELETE = "DELETE FROM `block` WHERE height=?";
+    private static int MAX_BATCH_SIZE = 5000;
+    private static int MAX_INSERT_QUEUE_LENGTH = 2000;
+    private static final String TABLE_NAME = "wallet";
+    private static final String SQL_ADD = "INSERT INTO wallet(wallet_id,name,details)VALUES(?,?,?)";
     private final DBPreparedStatement psAdd;
-    private final DBPreparedStatement psDelete;
     @Getter
     @NonNull
     private final CacheData cacheData;
+    private final DbQueryWallet dbQueryWallet;
 
-    public DbUpdateBlock(DBConnectionSupplier conn) {
+    public DbUpdateWallet(DBConnectionSupplier conn) {
         this(conn, new CacheData());
     }
 
-    public DbUpdateBlock(DBConnectionSupplier conn, CacheData cacheData) {
+    public DbUpdateWallet(DBConnectionSupplier conn, CacheData cacheData) {
         super(TABLE_NAME, conn);
         checkArgument(cacheData != null, "Argument 'cacheData' is null");
         this.psAdd = conn.prepareStatement(SQL_ADD);
-        this.psDelete = conn.prepareStatement(SQL_DELETE, "block.height");
         this.cacheData = cacheData;
+        this.dbQueryWallet = new DbQueryWallet(conn);
     }
 
     @Override
@@ -68,32 +69,37 @@ public class DbUpdateBlock extends DbUpdate {
         return cacheData.addQueue.size() >= MIN_BATCH_SIZE;
     }
 
-    public void add(BtcBlock btcBlock) {
-        log.trace("add(btcBlock:{})", btcBlock);
+    @NonNull
+    public BtcWallet add() throws SQLException {
+        checkState(isActive(), "Instance has been closed");
+        return add(getNextWalletId());
+    }
+
+    @NonNull
+    public BtcWallet add(int walletId) {
+        return add(BtcWallet.builder().walletId(walletId).build());
+    }
+
+    @NonNull
+    public BtcWallet add(BtcWallet wallet) {
+        checkArgument(wallet != null, "Argument 'wallet' is null");
+        log.trace("add(wallet:{})", wallet);
         checkState(isActive(), "Instance has been closed");
         waitFullQueue(cacheData.addQueue, MAX_INSERT_QUEUE_LENGTH);
-        synchronized (cacheData) {
-            cacheData.addQueue.add(btcBlock);
+        BtcWallet wallet2 = wallet;
+        if (wallet2.getWalletId() == 0) {
+            wallet2 = wallet2.toBuilder().walletId(getNextWalletId()).build();
         }
-    }
-
-    public boolean delete(BtcBlock btcBlock) {
-        log.trace("delete(btcBlock:{})", btcBlock);
-        checkState(isActive(), "Instance has been closed");
         synchronized (cacheData) {
-            cacheData.addQueue.remove(btcBlock);
+            cacheData.addQueue.add(wallet2);
         }
-        return psDelete.setParameters(p -> p.setInt(btcBlock.getHeight())).executeUpdate() == 1;
-    }
-
-    public boolean delete(int blockHeight) {
-        return delete(BtcBlock.builder().height(blockHeight).build());
+        return wallet;
     }
 
     @Override
     public int executeInserts() {
         return executeBatch(cacheData, cacheData.addQueue, psAdd, MAX_BATCH_SIZE,
-                (t, ps) -> ps.setInt(t.getHeight()).setBytes(t.getHash().getData()).setInt(t.getTxnCount()), null);
+                (t, ps) -> ps.setInt(t.getWalletId()).setString(t.getName()).setString(t.getDescription()), null);
     }
 
     @Override
@@ -101,9 +107,19 @@ public class DbUpdateBlock extends DbUpdate {
         return 0;
     }
 
+    private int getNextWalletId() {
+        synchronized (cacheData.lastWalletId) {
+            if (cacheData.lastWalletId.get() == -1) {
+                cacheData.lastWalletId.set(dbQueryWallet.getMaxId().orElse(0));
+            }
+            return cacheData.lastWalletId.incrementAndGet();
+        }
+    }
+
     @Getter
     public static class CacheData {
 
-        private final Collection<BtcBlock> addQueue = new LinkedHashSet<>();
+        private final Collection<BtcWallet> addQueue = new ArrayList<>();
+        private final AtomicInteger lastWalletId = new AtomicInteger(-1);
     }
 }
