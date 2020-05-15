@@ -15,11 +15,9 @@
  */
 package com.sliva.btc.scanner.db.facade;
 
-import com.sliva.btc.scanner.db.DBConnectionSupplier;
-import com.sliva.btc.scanner.db.facade.DbQueryTransaction;
-import com.sliva.btc.scanner.db.facade.DbUpdateTransaction;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
+import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import com.sliva.btc.scanner.db.model.BtcTransaction;
 import com.sliva.btc.scanner.db.model.TXID;
 import static com.sliva.btc.scanner.util.Utils.optionalBuilder;

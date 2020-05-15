@@ -15,14 +15,15 @@
  */
 package com.sliva.btc.scanner.db.facade;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import com.sliva.btc.scanner.db.DBPreparedStatement;
-import com.sliva.btc.scanner.db.utils.DBUtils;
-import static com.google.common.base.Preconditions.checkArgument;
+import static com.sliva.btc.scanner.db.facade.DbQueryAddressOne.getAddressTableName;
 import static com.sliva.btc.scanner.db.facade.DbQueryAddressOne.updateQueryTableName;
 import com.sliva.btc.scanner.db.model.InOutKey;
 import com.sliva.btc.scanner.db.model.TxInput;
 import com.sliva.btc.scanner.db.model.TxOutput;
+import com.sliva.btc.scanner.db.utils.DBUtils;
 import com.sliva.btc.scanner.src.SrcAddressType;
 import java.util.Collection;
 import java.util.HashMap;
@@ -35,7 +36,6 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.ToString;
 import lombok.experimental.SuperBuilder;
-import static com.sliva.btc.scanner.db.facade.DbQueryAddressOne.getAddressTableName;
 
 /**
  *
@@ -89,6 +89,11 @@ public class DbQueryOutput {
 
     public int countOutputsByTransactionId(int transactionId) {
         return DBUtils.readInteger(psCountOutputsInTx.setParameters(ps -> ps.setInt(transactionId))).orElse(0);
+    }
+
+    @NonNull
+    public Optional<TxOutput> getOutput(InOutKey key) {
+        return getOutput(key.getTransactionId(), key.getPos());
     }
 
     @NonNull

@@ -187,7 +187,7 @@ public class RunFullScan {
                 .concurrencyLevel(Runtime.getRuntime().availableProcessors())
                 .maximumSize(200_000)
                 .recordStats()
-                .build(Utils.getCacheLoader(key -> queryInput.findInputsByTransactionId(key)));
+                .build(Utils.getCacheLoader(queryInput::findInputsByTransactionId));
     }
 
     public void runProcess() throws Exception {
@@ -403,12 +403,13 @@ public class RunFullScan {
     private Collection<TxOutput> processTransactionOutputs(SrcTransaction<?, ?> t, BtcTransaction tx, DbAccess db) {
         final Collection<TxOutput> txOutputs;
         if (safeRun) {
-            txOutputs = new ArrayList<>(db.cachedOutput.getOutputs(tx.getTransactionId()));
+            //txOutputs = new ArrayList<>(db.cachedOutput.getOutputs(tx.getTransactionId()));
+            txOutputs = t.getOutputs().stream().map(to -> db.cachedOutput.getOutput(tx.getTransactionId(), to.getPos())).filter(Optional::isPresent).map(Optional::get).collect(Collectors.toSet());
         } else {
             txOutputs = null;
         }
         t.getOutputs().forEach(to -> {
-            int addressId = to.getAddress().map(addr -> db.cachedAddress.getOrAdd(addr, false)).orElse(0);
+            int addressId = to.getAddress().map(db.cachedAddress::getOrAdd).orElse(0);
             TxOutput txOutputToAdd = TxOutput.builder()
                     .transactionId(tx.getTransactionId())
                     .pos(to.getPos())
@@ -466,7 +467,8 @@ public class RunFullScan {
             if (safeRun) {
                 String txid = Utils.fixDupeTxid(t.getTxid(), blockHeight);
                 db.cachedTxn.getTransactionSimple(txid).ifPresent(tx -> {
-                    db.cachedOutput.getOutputs(tx.getTransactionId());
+                    //db.cachedOutput.getOutputs(tx.getTransactionId());
+                    t.getOutputs().forEach(to -> db.cachedOutput.getOutput(tx.getTransactionId(), to.getPos()));
                     inputsCache.getUnchecked(tx.getTransactionId());
                 });
             }
@@ -475,7 +477,7 @@ public class RunFullScan {
                     .map(tr -> updateSpent ? db.cachedOutput.getOutput(tr.getTransactionId(), ti.getInPos()) : Optional.empty()), execInsOuts))
                     .collect(Collectors.toList());
             List<CompletableFuture<Void>> outFutures = t.getOutputs().stream()
-                    .map(to -> CompletableFuture.runAsync(() -> to.getAddress().map(adr -> db.cachedAddress.getOrAdd(adr, true)), execInsOuts))
+                    .map(to -> CompletableFuture.runAsync(() -> to.getAddress().map(db.cachedAddress::getOrAdd), execInsOuts))
                     .collect(Collectors.toList());
             inFutures.forEach(CompletableFuture::join);
             outFutures.forEach(CompletableFuture::join);
@@ -499,7 +501,7 @@ public class RunFullScan {
         Optional<BtcTransaction> tx = db.cachedTxn.getTransaction(in.getTransactionId());
         Optional<BtcTransaction> intx = db.cachedTxn.getTransaction(in.getInTransactionId());
         Optional<TxOutput> out = db.cachedOutput.getOutput(in.getInTransactionId(), in.getInPos());
-        BtcAddress adr = out.flatMap(o -> db.cachedAddress.getAddress(o.getAddressId(), true)).orElse(null);
+        BtcAddress adr = out.flatMap(o -> db.cachedAddress.getAddress(o.getAddressId())).orElse(null);
         return "Input#" + in.getPos() + " in tx " + tx.map(BtcTransaction::getTxid).orElse(null)
                 + " (" + tx.map(BtcTransaction::getBlockHeight).orElse(null) + "." + in.getTransactionId() + ")"
                 + " pointing to output " + intx.map(BtcTransaction::getTxid).orElse(null) + ":" + in.getInPos()

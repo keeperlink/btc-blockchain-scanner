@@ -15,11 +15,11 @@
  */
 package com.sliva.btc.scanner.db.facade;
 
+import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkState;
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import com.sliva.btc.scanner.db.DBPreparedStatement;
 import com.sliva.btc.scanner.db.DbUpdate;
-import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Preconditions.checkState;
 import com.sliva.btc.scanner.db.model.InOutKey;
 import com.sliva.btc.scanner.db.model.TxOutput;
 import java.util.ArrayList;
@@ -249,11 +249,40 @@ public class DbUpdateOutput extends DbUpdate {
     @Getter
     public static class CacheData {
 
+        /**
+         * List of elements queued for insertion into DB. DB Updater will pull
+         * and immediately remove elements from this collection in batches, then
+         * execute DB "INSERT" statements for pulled batch.
+         */
         private final Collection<TxOutput> addQueue = new LinkedHashSet<>();
+        /**
+         * Map of elements queued for insertion into DB including those that are
+         * in processing state (vs. addQueue with do not include in processing
+         * elements).
+         */
         private final Map<InOutKey, TxOutput> queueMap = new HashMap<>();
+        /**
+         * Same elements as in queueMap, but differently organized for faster
+         * retrieval of all elements with matching transactionId.
+         */
         private final Map<Integer, List<TxOutput>> queueMapTx = new HashMap<>();
+        /**
+         * List of elements queued for update of "spent" flag. DB Updater will
+         * pull and immediately remove elements from this collection in batches,
+         * then execute DB "UPDATE" statements for pulled batch.
+         */
         private final Collection<TxOutput> queueUpdateSpent = new LinkedHashSet<>();
+        /**
+         * List of elements queued for update of "addressId" value. DB Updater
+         * will pull and immediately remove elements from this collection in
+         * batches, then execute DB "UPDATE" statements for pulled batch.
+         */
         private final Collection<TxOutput> queueUpdateAddress = new LinkedHashSet<>();
+        /**
+         * List of elements queued for update of "amount" value. DB Updater will
+         * pull and immediately remove elements from this collection in batches,
+         * then execute DB "UPDATE" statements for pulled batch.
+         */
         private final Collection<TxOutput> queueUpdateAmount = new LinkedHashSet<>();
     }
 }

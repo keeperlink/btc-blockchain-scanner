@@ -120,7 +120,7 @@ public class TestRawBlock {
                             if (txOutput.getAmount() != to.getValue().longValue()) {
                                 throw new IllegalStateException("Value doesn't match with DB: " + to.getValue().longValue() + " <> " + txOutput.getAmount());
                             }
-                            BtcAddress btcAddress = queryAddress.getAddress(txOutput.getAddressId(), true).orElseThrow(() -> new IllegalStateException("Address not found in DB: " + txOutput.getAddressId()));
+                            BtcAddress btcAddress = queryAddress.getAddress(txOutput.getAddressId()).orElseThrow(() -> new IllegalStateException("Address not found in DB: " + txOutput.getAddressId()));
                             if (!btcAddress.getAddress().equals(addrStr)) { //TODO wrong comare
                                 throw new IllegalStateException("Address doesn't match with DB: " + addrStr + " <> " + btcAddress.getAddress());
                             }
