@@ -40,7 +40,7 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class DbCachedAddressOne implements AutoCloseable {
 
-    private static final int MAX_CACHE_SIZE = 300000;
+    private static final int MAX_CACHE_SIZE = 600_000;
     private final SrcAddressType addressType;
     private final DbUpdateAddressOne updateAddress;
     private final DbQueryAddressOne queryAddress;
@@ -59,47 +59,50 @@ public class DbCachedAddressOne implements AutoCloseable {
         checkArgument(addressType.isReal(), "Argument 'addressType' is not a real type: %s", addressType);
         checkArgument(cacheData != null, "Argument 'cacheData' is null");
         this.addressType = addressType;
+        this.cacheData = cacheData;
         updateAddress = new DbUpdateAddressOne(conn, addressType, cacheData.updateCachedData);
         queryAddress = new DbQueryAddressOne(conn, addressType);
         lastAddressId = new LazyInitializer<>(() -> new AtomicInteger(queryAddress.getLastAddressId()));
-        this.cacheData = cacheData;
     }
 
     public int getOrAdd(byte[] address) {
+        checkArgument(address != null, "Argument 'address' is null");
         return getAddress(address).orElseGet(() -> add(BtcAddress.builder().type(addressType).addressId(getNextAddressId()).address(address).build())).getAddressId();
     }
 
     @NonNull
     public BtcAddress add(BtcAddress btcAddress) {
-        BtcAddress a = btcAddress;
+        checkArgument(btcAddress != null, "Argument 'btcAddress' is null");
+        checkArgument(btcAddress.getAddress() != null, "Argument 'btcAddress.address' is null");
+        BtcAddress result = btcAddress;
         boolean addressExist;
         synchronized (syncAdd) {
             addressExist = getIfPresentInCache(btcAddress.getAddress()).isPresent();
             if (!addressExist) {
-                if (a.getAddressId() == 0) {
-                    a = a.toBuilder().addressId(getNextAddressId()).build();
+                if (result.getAddressId() == 0) {
+                    result = result.toBuilder().addressId(getNextAddressId()).build();
                 }
-                cacheData.cacheMap.put(a.getAddress(), Optional.of(a));
-                cacheData.cacheMapId.put(a.getAddressId(), Optional.of(a));
+                updateCache(result);
             }
         }
         if (!addressExist) {
-            updateAddress.add(a);
+            updateAddress.add(result);
         }
-        return a;
+        return result;
     }
 
     @NonNull
     @SneakyThrows(ExecutionException.class)
     public Optional<BtcAddress> getAddress(int addressId) {
-        return cacheData.cacheMapId.get(addressId, () -> optionalBuilder2o(cacheData.updateCachedData.getAddMapId().get(addressId), () -> updateMap(queryAddress.findByAddressId(addressId))));
+        return cacheData.cacheMapId.get(addressId, () -> updateMap(optionalBuilder2o(cacheData.updateCachedData.getAddMapId().get(addressId), () -> queryAddress.findByAddressId(addressId))));
     }
 
     @NonNull
     @SneakyThrows(ExecutionException.class)
     public Optional<BtcAddress> getAddress(byte[] address) {
+        checkArgument(address != null, "Argument 'address' is null");
         BinaryAddress binAddr = new BinaryAddress(address);
-        return cacheData.cacheMap.get(binAddr, () -> optionalBuilder2o(cacheData.updateCachedData.getAddMap().get(binAddr), () -> updateMapId(queryAddress.findByAddress(address))));
+        return cacheData.cacheMap.get(binAddr, () -> updateMapId(optionalBuilder2o(cacheData.updateCachedData.getAddMap().get(binAddr), () -> queryAddress.findByAddress(address))));
     }
 
     @NonNull
@@ -109,16 +112,23 @@ public class DbCachedAddressOne implements AutoCloseable {
 
     @NonNull
     public Optional<BtcAddress> getIfPresentInCache(BinaryAddress address) {
+        checkArgument(address != null, "Argument 'address' is null");
         return Optional.ofNullable(cacheData.cacheMap.getIfPresent(address)).filter(Optional::isPresent).map(Optional::get);
     }
 
     @NonNull
     public Optional<BtcAddress> getIfPresentInCache(byte[] address) {
+        checkArgument(address != null, "Argument 'address' is null");
         return getIfPresentInCache(new BinaryAddress(address));
     }
 
     private int getNextAddressId() {
         return lastAddressId.get().incrementAndGet();
+    }
+
+    private void updateCache(BtcAddress address) {
+        cacheData.cacheMap.put(address.getAddress(), Optional.of(address));
+        cacheData.cacheMapId.put(address.getAddressId(), Optional.of(address));
     }
 
     private Optional<BtcAddress> updateMap(Optional<BtcAddress> oa) {
@@ -134,42 +144,38 @@ public class DbCachedAddressOne implements AutoCloseable {
     @Override
     public void close() {
         log.debug("DbCachedAddressOne-{}.close()", addressType);
-        synchronized (cacheData) {
-            updateAddress.close();
-        }
+        updateAddress.close();
+        cacheData.reset();
     }
 
     @Getter
-    public static class CacheData {
+    private static class CacheData {
 
-        private final Cache<BinaryAddress, Optional<BtcAddress>> cacheMap;
-        private final Cache<Integer, Optional<BtcAddress>> cacheMapId;
-
-        private CacheData() {
-            cacheMap = CacheBuilder.newBuilder()
-                    .concurrencyLevel(Runtime.getRuntime().availableProcessors())
-                    .maximumSize(MAX_CACHE_SIZE)
-                    .removalListener((RemovalNotification<BinaryAddress, Optional<BtcAddress>> notification)
-                            -> notification.getValue().map(BtcAddress::getAddressId).ifPresent(this::remove)
-                    ).recordStats()
-                    .build();
-            cacheMapId = CacheBuilder.newBuilder()
-                    .concurrencyLevel(Runtime.getRuntime().availableProcessors())
-                    .maximumSize(MAX_CACHE_SIZE)
-                    .removalListener((RemovalNotification<Integer, Optional<BtcAddress>> notification)
-                            -> notification.getValue().map(BtcAddress::getAddress).ifPresent(this::remove)
-                    ).recordStats()
-                    .build();
-        }
-
-        private void remove(BinaryAddress key) {
-            cacheMap.invalidate(key);
-        }
+        private boolean active = true;
+        private final Cache<BinaryAddress, Optional<BtcAddress>> cacheMap = CacheBuilder.newBuilder()
+                .concurrencyLevel(Runtime.getRuntime().availableProcessors())
+                .maximumSize(MAX_CACHE_SIZE)
+                .removalListener((RemovalNotification<BinaryAddress, Optional<BtcAddress>> notification)
+                        -> notification.getValue().filter(a -> active).map(BtcAddress::getAddressId).ifPresent(this::remove)
+                ).recordStats()
+                .build();
+        private final Cache<Integer, Optional<BtcAddress>> cacheMapId = CacheBuilder.newBuilder()
+                .concurrencyLevel(Runtime.getRuntime().availableProcessors())
+                .maximumSize(MAX_CACHE_SIZE)
+                .removalListener((RemovalNotification<Integer, Optional<BtcAddress>> notification)
+                        -> notification.getValue().filter(a -> active).map(BtcAddress::getAddress).ifPresent(cacheMap::invalidate)
+                ).recordStats()
+                .build();
+        private final DbUpdateAddressOne.CacheData updateCachedData = new DbUpdateAddressOne.CacheData();
 
         private void remove(Integer key) {
             cacheMapId.invalidate(key);
         }
-        //private final Map<BinaryAddress, BtcAddress> cacheMap = new LinkedHashMap<>();
-        private final DbUpdateAddressOne.CacheData updateCachedData = new DbUpdateAddressOne.CacheData();
+
+        private void reset() {
+            active = false;
+            cacheMap.invalidateAll();
+            cacheMapId.invalidateAll();
+        }
     }
 }

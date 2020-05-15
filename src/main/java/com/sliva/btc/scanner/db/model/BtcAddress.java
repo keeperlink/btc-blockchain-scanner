@@ -20,6 +20,7 @@ import com.sliva.btc.scanner.util.BJBlockHandler;
 import com.sliva.btc.scanner.util.LazyInitializer;
 import com.sliva.btc.scanner.util.Utils;
 import java.util.Optional;
+import javax.annotation.Nullable;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -93,7 +94,7 @@ public class BtcAddress {
                                                         : SrcAddressType.UNKNOWN;
     }
 
-    @NonNull
+    @Nullable
     public static SrcAddressType getTypeFromAddress(String address) {
         Address a = BJBlockHandler.getAddress(address);
         return Utils.getBtcAddressType(a.getOutputScriptType());

@@ -67,6 +67,7 @@ public class DbCachedAddress implements AutoCloseable {
 
     @NonNull
     private DbCachedAddressOne getOne(SrcAddressType addrType) {
+        checkArgument(addrType != null, "Argument 'address' is null");
         checkArgument(addrType.isReal(), "Bad address type: %s", addrType);
         return updaters.get(addrType);
     }

@@ -164,7 +164,7 @@ public final class Utils {
             case P2WSH:
                 return SrcAddressType.P2WSH;
         }
-        return null;
+        return SrcAddressType.UNKNOWN;
     }
 
     public static void logRuntime(String name, Runnable r) {
