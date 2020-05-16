@@ -60,6 +60,7 @@ public class DbUpdateOutput extends DbUpdate {
     @Getter
     @NonNull
     private final CacheData cacheData;
+    private final boolean hasSpentField;
 
     public DbUpdateOutput(DBConnectionSupplier conn) {
         this(conn, new CacheData());
@@ -68,10 +69,13 @@ public class DbUpdateOutput extends DbUpdate {
     public DbUpdateOutput(DBConnectionSupplier conn, CacheData cacheData) {
         super(TABLE_NAME, conn);
         checkArgument(cacheData != null, "Argument 'cacheData' is null");
-        this.psAdd = conn.prepareStatement(SQL_ADD);
+        this.hasSpentField = conn.getDBMetaData().hasField(TABLE_NAME + ".spent");
+        this.psAdd = conn.prepareStatement(hasSpentField ? SQL_ADD : SQL_ADD.replace(",spent", "").replace(",?)", ")"));
         this.psDelete = conn.prepareStatement(SQL_DELETE, "output.transaction_id");
         this.psDeleteAllAboveTransactionId = conn.prepareStatement(SQL_DELETE_ALL_ABOVE_TRANSACTION_ID, "output.transaction_id");
-        this.psUpdateSpent = conn.prepareStatement(SQL_UPDATE_SPENT, "output.transaction_id");
+        this.psUpdateSpent = hasSpentField
+                ? conn.prepareStatement(SQL_UPDATE_SPENT, "output.transaction_id")
+                : conn.prepareNonExecutableStatement(SQL_UPDATE_SPENT, "No 'spent' field in table 'output'");
         this.psUpdateAddress = conn.prepareStatement(SQL_UPDATE_ADDRESS, "output.transaction_id");
         this.psUpdateAmount = conn.prepareStatement(SQL_UPDATE_AMOUNT, "output.transaction_id");
         this.cacheData = cacheData;
@@ -216,7 +220,7 @@ public class DbUpdateOutput extends DbUpdate {
     @Override
     public int executeInserts() {
         return executeBatch(cacheData, cacheData.addQueue, psAdd, MAX_BATCH_SIZE,
-                (t, p) -> p.setInt(t.getTransactionId()).setInt(t.getPos()).setInt(t.getAddressId()).setLong(t.getAmount()).setInt(t.getStatus()),
+                (t, p) -> p.setInt(t.getTransactionId()).setInt(t.getPos()).setInt(t.getAddressId()).setLong(t.getAmount()).ignoreExtraParam().setInt(t.getStatus()),
                 executed -> {
                     synchronized (cacheData) {
                         executed.stream().peek(cacheData.queueMap::remove).map(InOutKey::getTransactionId).forEach(cacheData.queueMapTx::remove);

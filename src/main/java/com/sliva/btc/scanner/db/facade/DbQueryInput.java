@@ -17,10 +17,10 @@ package com.sliva.btc.scanner.db.facade;
 
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import com.sliva.btc.scanner.db.DBPreparedStatement;
-import com.sliva.btc.scanner.db.utils.DBUtils;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.db.model.TxInput;
 import com.sliva.btc.scanner.db.model.TxOutput;
+import com.sliva.btc.scanner.db.utils.DBUtils;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -44,7 +44,7 @@ public class DbQueryInput {
     private static final String SQL_FIND_INPUT_BY_OUT_TX = "SELECT transaction_id,pos FROM input WHERE in_transaction_id=? AND in_pos=? LIMIT 1";
     private static final String SQL_QUERY_INPUTS_WITH_OUTPUT = "SELECT"
             + " I.pos,I.in_transaction_id,I.in_pos"
-            + ",O.address_id,O.amount,O.spent"
+            + ",O.address_id,O.amount,spent"
             + " FROM input I"
             + " INNER JOIN output O ON O.transaction_id=I.in_transaction_id AND O.pos = I.in_pos"
             + " WHERE I.transaction_id=? ORDER BY I.pos LIMIT " + MAX_INS_IN_TXN;
@@ -64,13 +64,18 @@ public class DbQueryInput {
     private final DBPreparedStatement psQueryInputsWithOutput;
     private final DBPreparedStatement psQueryInputAddresses;
 //    private final DBPreparedStatement psQueryTransactionIdsAbove;
+    private final boolean hasSpentField;
 
     public DbQueryInput(DBConnectionSupplier conn) {
+        this.hasSpentField = conn.getDBMetaData().hasField("output.spent");
         this.psQueryInputs = conn.prepareStatement(SQL_QUERY_INPUTS, "input.transaction_id");
         this.psCountInputsInTx = conn.prepareStatement(SQL_COUNT_INPUTS_IN_TX, "input.transaction_id");
         this.psFindInputByOutTx = conn.prepareStatement(SQL_FIND_INPUT_BY_OUT_TX, "input.in_transaction_id");
-        this.psQueryInputsWithOutput = conn.prepareStatement(SQL_QUERY_INPUTS_WITH_OUTPUT, "input.transaction_id", "output.transaction_id");
-        this.psQueryInputAddresses = conn.prepareStatement(SQL_QUERY_INPUT_ADDRESSES, "input.transaction_id", "output.transaction_id", "address_p2pkh.address_id", "address_p2sh.address_id", "address_p2wpkh.address_id", "address_p2wsh.address_id");
+        this.psQueryInputsWithOutput = conn.prepareStatement(hasSpentField ? SQL_QUERY_INPUTS_WITH_OUTPUT : SQL_QUERY_INPUTS_WITH_OUTPUT.replace(",spent", ""),
+                "input.transaction_id", "output.transaction_id");
+        this.psQueryInputAddresses = conn.prepareStatement(SQL_QUERY_INPUT_ADDRESSES,
+                "input.transaction_id", "output.transaction_id",
+                "address_p2pkh.address_id", "address_p2sh.address_id", "address_p2wpkh.address_id", "address_p2wsh.address_id");
 //        this.psQueryTransactionIdsAbove = conn.prepareStatement(SQL_QUERY_TRANSACTION_IDS_ABOVE);
     }
 
@@ -123,7 +128,7 @@ public class DbQueryInput {
                                         .pos(rs.getShort(3))
                                         .addressId(rs.getInt(4))
                                         .amount(rs.getLong(5))
-                                        .status(rs.getByte(6))
+                                        .status(hasSpentField ? rs.getByte(6) : 0)
                                         .build());
                             }
                             return builder.build();

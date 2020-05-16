@@ -158,12 +158,13 @@ public class RunFullScan {
     }
 
     public RunFullScan(CmdArguments cmd) throws Exception {
+        dbCon = new DBConnectionSupplier().checkTablesExist("block", "transaction", "input", "input_special", "output", "address_p2pkh", "address_p2sh", "address_p2wpkh", "address_p2wsh");
         safeRun = cmd.getOption(safeRunOpt).map(Boolean::valueOf)
                 .orElse(cmd.hasOption(startFromBlockOpt) || cmd.hasOption(blocksBackOpt) || DEFAULT_SAFE_RUN);
         startBlock = cmd.getOption(startFromBlockOpt).map(Integer::valueOf);
         lastBlock = cmd.getOption(runToBlockOpt).map(Integer::valueOf);
         blocksBack = cmd.getOption(blocksBackOpt).map(Integer::parseInt);
-        updateSpent = cmd.getOption(updateSpentOpt).map(Boolean::valueOf).orElse(DEFAULT_UPDATE_SPENT);
+        updateSpent = dbCon.getDBMetaData().hasField("output.spent") && cmd.getOption(updateSpentOpt).map(Boolean::valueOf).orElse(DEFAULT_UPDATE_SPENT);
         stopFile = new File(cmd.getOption(stopFileOpt).orElse(DEFAULT_STOP_FILE_NAME));
         nExecTxnThreads = cmd.getOption(threadsOpt).map(Integer::parseInt).orElse(DEFAULT_TXN_THREADS);
         runParallel = nExecTxnThreads != 0;
@@ -174,7 +175,6 @@ public class RunFullScan {
                 new ThreadFactoryBuilder().setDaemon(true).setNameFormat("ExecTxn-%02d").build()) : null;
         execInsOuts = runParallel ? Executors.newFixedThreadPool(Math.max(1, nExecTxnThreads * 2 / 3),
                 new ThreadFactoryBuilder().setDaemon(true).setNameFormat("execInsOuts-%02d").build()) : null;
-        dbCon = new DBConnectionSupplier().checkTablesExist("block", "transaction", "input", "input_special", "output", "address_p2pkh", "address_p2sh", "address_p2wpkh", "address_p2wsh");
         queryBlock = new DbQueryBlock(dbCon);
         queryInput = new DbQueryInput(dbCon);
         queryInputSpecial = new DbQueryInputSpecial(dbCon);

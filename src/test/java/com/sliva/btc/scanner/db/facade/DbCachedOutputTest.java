@@ -19,20 +19,24 @@ import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import com.sliva.btc.scanner.db.DBPreparedStatement;
 import com.sliva.btc.scanner.db.model.InOutKey;
 import com.sliva.btc.scanner.db.model.TxOutput;
+import com.sliva.btc.scanner.db.utils.DBMetaData;
 import java.sql.Connection;
 import java.sql.Statement;
 import java.util.Optional;
 import org.junit.After;
 import org.junit.AfterClass;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import static org.mockito.Mockito.*;
 import org.mockito.internal.util.reflection.FieldSetter;
 import org.mockito.junit.MockitoJUnitRunner;
 
@@ -52,11 +56,21 @@ public class DbCachedOutputTest {
     @Mock
     private DBConnectionSupplier dbConn;
     @Mock
+    private DBMetaData dbMetaData;
+    @Mock
     private Connection connection;
     @Mock
     private Statement statement;
     //@Spy
     private DbCachedOutput instance;
+
+    private final int transactionId = 1;
+    private final short pos = 2;
+    private final InOutKey key = new InOutKey(transactionId, pos);
+    private final TxOutput txOutput = TxOutput.builder().transactionId(transactionId).pos(pos).build();
+    private final int addressId = 3;
+    private final long amount = 3L;
+    private final byte status = 3;
 
     public DbCachedOutputTest() {
     }
@@ -74,13 +88,15 @@ public class DbCachedOutputTest {
         //when(preparedStatement.getParamSetter(any())).thenReturn(new DBPreparedStatement.ParamSetter());
         //when(preparedStatement.setParameters(any())).thenReturn(preparedStatement);
         //when(preparedStatement.setParameters(any(), any())).thenReturn(preparedStatement);
-        when(statement.execute(any(String.class))).thenReturn(Boolean.TRUE);
+        given(statement.execute(any(String.class))).willReturn(Boolean.TRUE);
         //when(statement.executeUpdate(any(String.class))).thenReturn(1);
-        when(connection.createStatement()).thenReturn(statement);
-        when(dbConn.get()).thenReturn(connection);
+        given(connection.createStatement()).willReturn(statement);
+        given(dbConn.get()).willReturn(connection);
+        given(dbMetaData.hasField(any())).willReturn(Boolean.TRUE);
+        given(dbConn.getDBMetaData()).willReturn(dbMetaData);
         //when(dbConn.prepareStatement(any(String.class))).thenReturn(preparedStatement);
-        when(dbConn.prepareStatement(any(String.class), any(String.class))).thenReturn(preparedStatement);
-        when(dbConn.prepareStatement(any(String.class), any(String.class), any(String.class))).thenReturn(preparedStatement);
+        given(dbConn.prepareStatement(any(String.class), any(String.class))).willReturn(preparedStatement);
+        given(dbConn.prepareStatement(any(String.class), any(String.class), any(String.class))).willReturn(preparedStatement);
         instance = Mockito.spy(new DbCachedOutput(dbConn));
         FieldSetter.setField(instance, DbCachedOutput.class.getDeclaredField("queryOutput"), queryOutput);
         FieldSetter.setField(instance, DbCachedOutput.class.getDeclaredField("updateOutput"), updateOutput);
@@ -92,152 +108,140 @@ public class DbCachedOutputTest {
 
     @Test
     public void testAdd() {
-        TxOutput txOutput = TxOutput.builder().transactionId(1).pos((short) 2).build();
         instance.add(txOutput);
-        verify(updateOutput, only()).add(any());
-        Optional<TxOutput> expected = Optional.of(txOutput);
-        Optional<TxOutput> result = instance.getIfPresentInCache(txOutput);
-        System.out.println("result=" + result);
-        verify(queryOutput, never()).getOutput(any());
-        assertEquals(expected, result);
+        then(updateOutput).should().add(txOutput);
+        assertInCache(txOutput, txOutput);
+        then(queryOutput).shouldHaveNoMoreInteractions();
     }
 
     @Test
     public void testDelete() {
-        TxOutput txOutput = TxOutput.builder().transactionId(1).pos((short) 2).build();
-        when(updateOutput.delete(any(TxOutput.class))).thenReturn(Boolean.TRUE);
+        given(updateOutput.delete(any())).willReturn(Boolean.TRUE);
         instance.delete(txOutput);
-        verify(updateOutput, only()).delete(any());
-        assertEquals(Optional.empty(), instance.getIfPresentInCache(txOutput));
+        then(updateOutput).should().delete(txOutput);
+        assertNotInCache(txOutput);
+
         instance.add(txOutput);
-        Optional<TxOutput> expected = Optional.of(txOutput);
-        Optional<TxOutput> result = instance.getIfPresentInCache(txOutput);
-        System.out.println("result=" + result);
-        assertEquals(expected, result);
+        assertInCache(txOutput, txOutput);
         instance.delete(txOutput);
-        assertEquals(Optional.empty(), instance.getIfPresentInCache(txOutput));
+        assertNotInCache(key);
+    }
+
+    @Test
+    public void testDelete_removed_from_cache() {
+        given(updateOutput.delete(any())).willReturn(Boolean.TRUE);
+        instance.add(txOutput);
+        instance.delete(txOutput);
+        assertNotInCache(key);
     }
 
     @Test
     public void testUpdateStatus() {
-        int transactionId = 1;
-        short pos = 2;
-        byte status = 3;
-        TxOutput txOutput = TxOutput.builder().transactionId(transactionId).pos(pos).build();
+        instance.updateStatus(transactionId, pos, status);
+        then(updateOutput).should().updateSpent(transactionId, pos, status);
+        assertNotInCache(txOutput);
+    }
+
+    @Test
+    public void testUpdateStatus_cached() {
         instance.add(txOutput);
         instance.updateStatus(transactionId, pos, status);
-        verify(updateOutput, times(1)).updateSpent(transactionId, pos, status);
-        Optional<TxOutput> expected = Optional.of(txOutput.toBuilder().status(status).build());
-        Optional<TxOutput> result = instance.getIfPresentInCache(txOutput);
-        System.out.println("result=" + result);
-        assertEquals(expected, result);
+        assertInCache(key, txOutput.toBuilder().status(status).build());
+        then(updateOutput).should().updateSpent(transactionId, pos, status);
     }
 
     @Test
     public void testUpdateAddress() {
-        int transactionId = 1;
-        short pos = 2;
-        int addressId = 3;
-        TxOutput txOutput = TxOutput.builder().transactionId(transactionId).pos(pos).build();
+        instance.updateAddress(transactionId, pos, addressId);
+        then(updateOutput).should().updateAddress(transactionId, pos, addressId);
+        assertNotInCache(txOutput);
+    }
+
+    @Test
+    public void testUpdateAddress_cached() {
         instance.add(txOutput);
         instance.updateAddress(transactionId, pos, addressId);
-        verify(updateOutput, times(1)).updateAddress(transactionId, pos, addressId);
-        Optional<TxOutput> expected = Optional.of(txOutput.toBuilder().addressId(addressId).build());
-        Optional<TxOutput> result = instance.getIfPresentInCache(txOutput);
-        System.out.println("result=" + result);
-        assertEquals(expected, result);
+        assertInCache(txOutput, txOutput.toBuilder().addressId(addressId).build());
+        then(updateOutput).should().updateAddress(transactionId, pos, addressId);
     }
 
     @Test
     public void testUpdateAmount() {
-        int transactionId = 1;
-        short pos = 2;
-        long amount = 3L;
-        TxOutput txOutput = TxOutput.builder().transactionId(transactionId).pos(pos).build();
+        instance.updateAmount(transactionId, pos, amount);
+        then(updateOutput).should().updateAmount(transactionId, pos, amount);
+        assertNotInCache(txOutput);
+    }
+
+    @Test
+    public void testUpdateAmount_cached() {
         instance.add(txOutput);
         instance.updateAmount(transactionId, pos, amount);
-        verify(updateOutput, times(1)).updateAmount(transactionId, pos, amount);
-        Optional<TxOutput> expected = Optional.of(txOutput.toBuilder().amount(amount).build());
-        Optional<TxOutput> result = instance.getIfPresentInCache(txOutput);
-        System.out.println("result=" + result);
-        assertEquals(expected, result);
+        assertInCache(txOutput, txOutput.toBuilder().amount(amount).build());
+        then(updateOutput).should().updateAmount(transactionId, pos, amount);
     }
 
     @Test
     public void testGetOutput_int_short() {
-        int transactionId = 1;
-        short pos = 2;
-        TxOutput txOutput = TxOutput.builder().transactionId(transactionId).pos(pos).build();
         instance.add(txOutput);
         Optional<TxOutput> expResult = Optional.of(txOutput);
         Optional<TxOutput> result = instance.getOutput(transactionId, pos);
-        verify(queryOutput, never()).getOutput(any());
-        System.out.println("result=" + result);
         assertEquals(expResult, result);
+        then(queryOutput).shouldHaveNoInteractions();
     }
 
     @Test
     public void testGetOutput_InOutKey() {
-        int transactionId = 1;
-        short pos = 2;
-        TxOutput txOutput = TxOutput.builder().transactionId(transactionId).pos(pos).build();
-        InOutKey key = new InOutKey(transactionId, pos);
         instance.add(txOutput);
         Optional<TxOutput> expResult = Optional.of(txOutput);
         Optional<TxOutput> result = instance.getOutput(key);
-        verify(queryOutput, never()).getOutput(any());
-        System.out.println("result=" + result);
         assertEquals(expResult, result);
+        then(queryOutput).shouldHaveNoInteractions();
     }
 
     @Test
     public void testGetOutput_InOutKey_load() {
-        int transactionId = 1;
-        short pos = 2;
-        TxOutput txOutput = TxOutput.builder().transactionId(transactionId).pos(pos).build();
-        InOutKey key = new InOutKey(transactionId, pos);
-        when(queryOutput.getOutput(key)).thenReturn(Optional.of(txOutput));
+        given(queryOutput.getOutput(key)).willReturn(Optional.of(txOutput));
         Optional<TxOutput> expResult = Optional.of(txOutput);
         Optional<TxOutput> result = instance.getOutput(key);
-        verify(queryOutput, times(1)).getOutput(key);
-        System.out.println("result=" + result);
         assertEquals(expResult, result);
+        assertInCache(key, txOutput);
+        then(queryOutput).should().getOutput(key);
 
         //second call must be cached
         result = instance.getOutput(key);
-        verify(queryOutput, times(1)).getOutput(key);
-        System.out.println("result=" + result);
         assertEquals(expResult, result);
+        then(queryOutput).shouldHaveNoMoreInteractions();
     }
 
     @Test
     public void testGetOutput_InOutKey_not_found() {
-        int transactionId = 1;
-        short pos = 2;
-        InOutKey key = new InOutKey(transactionId, pos);
-        when(queryOutput.getOutput(key)).thenReturn(Optional.empty());
+        given(queryOutput.getOutput(key)).willReturn(Optional.empty());
         Optional<TxOutput> expResult = Optional.empty();
         Optional<TxOutput> result = instance.getOutput(key);
-        verify(queryOutput, times(1)).getOutput(key);
-        System.out.println("result=" + result);
         assertEquals(expResult, result);
+        assertInCache(key, null);
+        then(queryOutput).should().getOutput(key);
 
         //second call - cached .empty
         result = instance.getOutput(key);
-        verify(queryOutput, times(1)).getOutput(key);
-        System.out.println("result=" + result);
         assertEquals(expResult, result);
+        then(queryOutput).shouldHaveNoMoreInteractions();
 
         //third call with diff key
-        result = instance.getOutput(new InOutKey(transactionId + 1, pos));
-        verify(queryOutput, times(2)).getOutput(any());
-        System.out.println("result=" + result);
+        InOutKey key2 = new InOutKey(transactionId + 1, pos);
+        given(queryOutput.getOutput(key2)).willReturn(Optional.empty());
+        result = instance.getOutput(key2);
         assertEquals(expResult, result);
+        then(queryOutput).should().getOutput(key2);
+        then(queryOutput).shouldHaveNoMoreInteractions();
     }
 
     @Test
     public void testClose() {
+        instance.add(txOutput);
         instance.close();
+        assertNotInCache(key);
+        then(updateOutput).should().close();
     }
 
     /**
@@ -245,16 +249,10 @@ public class DbCachedOutputTest {
      */
     @Test
     public void testGetIfPresentInCache() {
-        System.out.println("getIfPresentInCache");
-        int transactionId = 1;
-        short pos = 2;
-        InOutKey key = new InOutKey(transactionId, pos);
-
         Optional<TxOutput> expResult = Optional.empty();
         Optional<TxOutput> result = instance.getIfPresentInCache(key);
-        System.out.println("result=" + result);
         assertEquals(expResult, result);
-        verify(queryOutput, never()).getOutput(any());
+        then(queryOutput).shouldHaveNoInteractions();
     }
 
     /**
@@ -262,18 +260,13 @@ public class DbCachedOutputTest {
      */
     @Test
     public void testGetIfPresentInCache_afterGet() {
-        System.out.println("getIfPresentInCache");
-        int transactionId = 1;
-        short pos = 2;
-        TxOutput txOutput = TxOutput.builder().transactionId(transactionId).pos(pos).build();
-        InOutKey key = new InOutKey(transactionId, pos);
-        when(queryOutput.getOutput(key)).thenReturn(Optional.of(txOutput));
+        given(queryOutput.getOutput(key)).willReturn(Optional.of(txOutput));
         instance.getOutput(key);
-        verify(queryOutput, times(1)).getOutput(any());
+        then(queryOutput).should().getOutput(key);
         Optional<TxOutput> expResult = Optional.of(txOutput);
         Optional<TxOutput> result = instance.getIfPresentInCache(key);
         assertEquals(expResult, result);
-        verify(queryOutput, times(1)).getOutput(any());
+        then(queryOutput).shouldHaveNoMoreInteractions();
     }
 
     /**
@@ -281,17 +274,69 @@ public class DbCachedOutputTest {
      */
     @Test
     public void testGetIfPresentInCache_afterGet_empty() {
-        System.out.println("getIfPresentInCache");
-        int transactionId = 1;
-        short pos = 2;
-        InOutKey key = new InOutKey(transactionId, pos);
-        when(queryOutput.getOutput(key)).thenReturn(Optional.empty());
+        given(queryOutput.getOutput(key)).willReturn(Optional.empty());
         instance.getOutput(key);
-        verify(queryOutput, times(1)).getOutput(any());
+        then(queryOutput).should().getOutput(key);
         Optional<TxOutput> expResult = Optional.empty();
         Optional<TxOutput> result = instance.getIfPresentInCache(key);
         assertEquals(expResult, result);
-        verify(queryOutput, times(1)).getOutput(any());
+        then(queryOutput).shouldHaveNoMoreInteractions();
     }
 
+    /**
+     * Test of isPresentInCache method, of class DbCachedOutput.
+     */
+    @Test
+    public void testIsPresentInCache() {
+        boolean result = instance.isPresentInCache(key);
+        assertFalse(result);
+    }
+
+    /**
+     * Test of isPresentInCache method, of class DbCachedOutput.
+     */
+    @Test
+    public void testIsPresentInCache_true_after_add() {
+        instance.add(txOutput);
+        boolean result = instance.isPresentInCache(key);
+        assertTrue(result);
+    }
+
+    /**
+     * Test of isPresentInCache method, of class DbCachedOutput.
+     */
+    @Test
+    public void testIsPresentInCache_true_after_get() {
+        given(queryOutput.getOutput(key)).willReturn(Optional.of(txOutput));
+        instance.getOutput(key);
+        boolean result = instance.isPresentInCache(key);
+        assertTrue(result);
+    }
+
+    /**
+     * Test of isPresentInCache method, of class DbCachedOutput.
+     */
+    @Test
+    public void testIsPresentInCache_true_after_get_empty() {
+        given(queryOutput.getOutput(key)).willReturn(Optional.empty());
+        instance.getOutput(key);
+        boolean result = instance.isPresentInCache(key);
+        assertTrue(result);
+    }
+
+    /**
+     * Validate that value with provided key is present in cache.
+     *
+     * @param key Key
+     * @param expected Expected value to be retrieved from cache, or null if
+     * empty() value expected.
+     */
+    private void assertInCache(InOutKey key, TxOutput expected) {
+        assertTrue(instance.isPresentInCache(key));
+        assertEquals(Optional.ofNullable(expected), instance.getIfPresentInCache(key));
+    }
+
+    private void assertNotInCache(InOutKey key) {
+        assertFalse(instance.isPresentInCache(key));
+    }
 }

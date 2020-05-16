@@ -16,12 +16,12 @@
 package com.sliva.btc.scanner.db.facade;
 
 import static com.google.common.base.Preconditions.checkArgument;
-import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import com.sliva.btc.scanner.db.model.InOutKey;
 import com.sliva.btc.scanner.db.model.TxOutput;
 import com.sliva.btc.scanner.db.model.TxOutput.TxOutputBuilder;
+import com.sliva.btc.scanner.util.CacheNullableWrapper;
 import static com.sliva.btc.scanner.util.Utils.optionalBuilder2o;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
@@ -52,14 +52,14 @@ public class DbCachedOutput implements AutoCloseable {
 
     public void add(TxOutput txOutput) {
         checkArgument(txOutput != null, "Argument 'txOutput' is null");
-        cacheData.outputsCache.put(txOutput, Optional.of(txOutput));
+        cacheData.cacheMap.put(txOutput, Optional.of(txOutput));
         updateOutput.add(txOutput);
     }
 
     public void delete(TxOutput txOutput) {
         checkArgument(txOutput != null, "Argument 'txOutput' is null");
         updateOutput.delete(txOutput);
-        cacheData.outputsCache.invalidate(txOutput);
+        cacheData.cacheMap.invalidate(txOutput);
     }
 
     public void updateStatus(int transactionId, short pos, byte status) {
@@ -85,36 +85,40 @@ public class DbCachedOutput implements AutoCloseable {
     @NonNull
     @SneakyThrows(ExecutionException.class)
     public Optional<TxOutput> getOutput(InOutKey key) {
-        return cacheData.outputsCache.get(key, () -> optionalBuilder2o(cacheData.updateCachedData.getQueueMap().get(key), () -> queryOutput.getOutput(key)));
+        checkArgument(key != null, "Argument 'key' is null");
+        return cacheData.cacheMap.get(key, () -> optionalBuilder2o(cacheData.updateCachedData.getQueueMap().get(key), () -> queryOutput.getOutput(key)));
     }
 
     @NonNull
     public Optional<TxOutput> getIfPresentInCache(InOutKey key) {
-        return Optional.ofNullable(cacheData.outputsCache.getIfPresent(key)).filter(Optional::isPresent).map(Optional::get);
+        checkArgument(key != null, "Argument 'key' is null");
+        return cacheData.cacheMap.getIfPresent(key);
+    }
+
+    public boolean isPresentInCache(InOutKey key) {
+        checkArgument(key != null, "Argument 'key' is null");
+        return cacheData.cacheMap.isPresent(key);
     }
 
     @Override
     public void close() {
         log.debug("DbCachedOutput.close()");
         updateOutput.close();
-        cacheData.outputsCache.invalidateAll();
+        cacheData.cacheMap.invalidateAll();
     }
 
     private void updateCacheValue(InOutKey key, Function<TxOutputBuilder<?, ?>, TxOutputBuilder<?, ?>> updater) {
-        TxOutput txOutput = cacheData.outputsCache.getIfPresent(key).orElse(null);
-        if (txOutput != null) {
-            cacheData.outputsCache.put(txOutput, Optional.of(updater.apply(txOutput.toBuilder()).build()));
-        }
+        getIfPresentInCache(key).ifPresent(txOutput -> cacheData.cacheMap.put(txOutput, Optional.of(updater.apply(txOutput.toBuilder()).build())));
     }
 
     @Getter
     private static class CacheData {
 
-        private final Cache<InOutKey, Optional<TxOutput>> outputsCache = CacheBuilder.newBuilder()
+        private final CacheNullableWrapper<InOutKey, TxOutput> cacheMap = new CacheNullableWrapper<>(CacheBuilder.newBuilder()
                 .concurrencyLevel(Runtime.getRuntime().availableProcessors())
                 .maximumSize(MAX_CACHE_SIZE)
                 .recordStats()
-                .build();
+                .build());
         private final DbUpdateOutput.CacheData updateCachedData = new DbUpdateOutput.CacheData();
     }
 }

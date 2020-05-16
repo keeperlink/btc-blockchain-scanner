@@ -56,7 +56,6 @@ CREATE TABLE IF NOT EXISTS `output` (
   `pos` smallint(5) unsigned NOT NULL,
   `address_id` int(10) unsigned NOT NULL,
   `amount` bigint(16) NOT NULL,
-  `spent` tinyint(3) unsigned NOT NULL DEFAULT '0',
   PRIMARY KEY (`transaction_id`,`pos`)
 ) ENGINE=MyISAM;
 

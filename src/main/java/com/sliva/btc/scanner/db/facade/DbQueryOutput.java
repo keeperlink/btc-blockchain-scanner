@@ -49,30 +49,34 @@ public class DbQueryOutput {
     private static final String SQL_COUNT_OUTPUTS_IN_TX = "SELECT count(*) FROM `output` WHERE transaction_id=? LIMIT 1";
     private static final String SQL_QUERY_OUTPUT = "SELECT address_id,amount,spent"
             + " FROM `output` WHERE transaction_id=? AND pos=? LIMIT 1";
-    private static final String SQL_QUERY_OUTPUTS_WITH_INPUT = "SELECT O.pos,O.address_id,O.amount,O.spent"
-            + ",I.transaction_id,I.pos"
+    private static final String SQL_QUERY_OUTPUTS_WITH_INPUT = "SELECT O.pos,O.address_id,O.amount"
+            + ",I.transaction_id,I.pos,spent"
             + " FROM `output` O"
             + " LEFT JOIN `input` I ON I.in_transaction_id=O.transaction_id AND I.in_pos=O.pos"
             + " WHERE O.transaction_id=? LIMIT " + MAX_OUTS_IN_TXN;
     private static final String SQL_QUERY_OUTPUTS_IN_TXN_RANGE = "SELECT O.transaction_id,O.pos"
-            + ",O.address_id,O.amount,O.spent,A.wallet_id,W.name"
+            + ",O.address_id,O.amount,A.wallet_id,W.name,spent"
             + " FROM `output` O"
             + " INNER JOIN address_table_name A ON A.address_id=O.address_id"
             + " INNER JOIN wallet W ON W.wallet_id=A.wallet_id"
             + " WHERE transaction_id BETWEEN ? AND ?";
+    private final String tableName = "output";
     private final DBPreparedStatement psQueryOutputs;
     private final DBPreparedStatement psCountOutputsInTx;
     private final DBPreparedStatement psQueryOutput;
     private final DBPreparedStatement psQueryOutputsWithInput;
     private final Map<SrcAddressType, DBPreparedStatement> psQueryOutputsInTxnRange = new HashMap<>();
+    private final boolean hasSpentField;
 
     public DbQueryOutput(DBConnectionSupplier conn) {
-        this.psQueryOutputs = conn.prepareStatement(SQL_QUERY_OUTPUTS, "output.transaction_id");
+        checkArgument(conn != null, "Argument 'conn' is null");
+        this.hasSpentField = conn.getDBMetaData().hasField(tableName + ".spent");
+        this.psQueryOutputs = conn.prepareStatement(hasSpentField ? SQL_QUERY_OUTPUTS : SQL_QUERY_OUTPUTS.replace(",spent", ""), "output.transaction_id");
         this.psCountOutputsInTx = conn.prepareStatement(SQL_COUNT_OUTPUTS_IN_TX, "output.transaction_id");
-        this.psQueryOutput = conn.prepareStatement(SQL_QUERY_OUTPUT, "output.transaction_id");
-        this.psQueryOutputsWithInput = conn.prepareStatement(SQL_QUERY_OUTPUTS_WITH_INPUT, "output.transaction_id", "input.transaction_id");
+        this.psQueryOutput = conn.prepareStatement(hasSpentField ? SQL_QUERY_OUTPUT : SQL_QUERY_OUTPUT.replace(",spent", ""), "output.transaction_id");
+        this.psQueryOutputsWithInput = conn.prepareStatement(hasSpentField ? SQL_QUERY_OUTPUTS_WITH_INPUT : SQL_QUERY_OUTPUTS_WITH_INPUT.replace(",slent", ""), "output.transaction_id", "input.transaction_id");
         Stream.of(SrcAddressType.values()).filter(SrcAddressType::isReal).forEach(t -> psQueryOutputsInTxnRange.put(t,
-                conn.prepareStatement(updateQueryTableName(SQL_QUERY_OUTPUTS_IN_TXN_RANGE, t), "output.transaction_id", getAddressTableName(t) + ".address_id")));
+                conn.prepareStatement(updateQueryTableName(hasSpentField ? SQL_QUERY_OUTPUTS_IN_TXN_RANGE : SQL_QUERY_OUTPUTS_IN_TXN_RANGE.replace(",spent", ""), t), "output.transaction_id", getAddressTableName(t) + ".address_id", "wallet.wallet_id")));
     }
 
     @NonNull
@@ -83,7 +87,7 @@ public class DbQueryOutput {
                         .pos(rs.getShort(1))
                         .addressId(rs.getInt(2))
                         .amount(rs.getLong(3))
-                        .status(rs.getByte(4))
+                        .status(hasSpentField ? rs.getByte(4) : 0)
                         .build());
     }
 
@@ -103,7 +107,7 @@ public class DbQueryOutput {
                 .pos(pos)
                 .addressId(rs.getInt(1))
                 .amount(rs.getLong(2))
-                .status(rs.getByte(3))
+                .status(hasSpentField ? rs.getByte(3) : 0)
                 .build());
     }
 
@@ -116,12 +120,12 @@ public class DbQueryOutput {
                     .pos(rs.getShort(1))
                     .addressId(rs.getInt(2))
                     .amount(rs.getLong(3))
-                    .status(rs.getByte(4))
+                    .status(hasSpentField ? rs.getByte(6) : 0)
                     .build());
-            if (rs.getObject(5) != null) {
+            if (rs.getObject(4) != null) {
                 builder.input(TxInput.builder()
-                        .transactionId(rs.getInt(5))
-                        .pos(rs.getShort(6))
+                        .transactionId(rs.getInt(4))
+                        .pos(rs.getShort(5))
                         .inTransactionId(transactionId)
                         .inPos(rs.getShort(1))
                         .build());
@@ -140,9 +144,9 @@ public class DbQueryOutput {
                         .pos(rs.getShort(2))
                         .addressId(rs.getInt(3))
                         .amount(rs.getLong(4))
-                        .status(rs.getByte(5))
-                        .walletId(rs.getInt(6))
-                        .walletName(rs.getString(7))
+                        .walletId(rs.getInt(5))
+                        .walletName(rs.getString(6))
+                        .status(hasSpentField ? rs.getByte(7) : 0)
                         .build());
     }
 

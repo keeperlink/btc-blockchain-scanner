@@ -15,6 +15,7 @@
  */
 package com.sliva.btc.scanner.db.utils;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import static com.sliva.btc.scanner.db.utils.DbResultSetUtils.executeQueryToList;
 import java.sql.DatabaseMetaData;
@@ -51,14 +52,17 @@ public class DBMetaData {
     }
 
     public boolean hasTable(String tableName) {
-        return tables.containsKey(tableName);
+        checkArgument(tableName != null, "Argument 'tableName' is null");
+        return tables.containsKey(tableName.toLowerCase());
     }
 
     public boolean hasAllTables(String... tableNames) {
-        return Stream.of(tableNames).allMatch(tables::containsKey);
+        return Stream.of(tableNames).map(String::toLowerCase).allMatch(tables::containsKey);
     }
 
     public boolean hasField(String tableName, String fieldName) {
+        checkArgument(tableName != null, "Argument 'tableName' is null");
+        checkArgument(fieldName != null, "Argument 'fieldName' is null");
         return hasField(tableName + '.' + fieldName);
     }
 
@@ -70,10 +74,13 @@ public class DBMetaData {
      * @return true if table exists and has the field
      */
     public boolean hasField(String fullFieldName) {
-        return allFields.contains(fullFieldName);
+        checkArgument(fullFieldName != null, "Argument 'fullFieldName' is null");
+        return allFields.contains(fullFieldName.toLowerCase());
     }
 
     public boolean isIndexed(String tableName, String fieldName) {
+        checkArgument(tableName != null, "Argument 'tableName' is null");
+        checkArgument(fieldName != null, "Argument 'fieldName' is null");
         return isIndexed(tableName + '.' + fieldName);
     }
 
@@ -86,7 +93,8 @@ public class DBMetaData {
      * @return true if DB has an index on the field
      */
     public boolean isIndexed(String tableFieldName) {
-        return indexedFields.contains(tableFieldName);
+        checkArgument(tableFieldName != null, "Argument 'tableFieldName' is null");
+        return indexedFields.contains(tableFieldName.toLowerCase());
     }
 
     @SneakyThrows(SQLException.class)
@@ -101,11 +109,11 @@ public class DBMetaData {
                     .map(indexName -> new Index(indexName,
                     indexRecords.stream().filter(r -> indexName.equals(r.getIndexName()))
                             .sorted(Comparator.comparingInt(IndexRec::getFieldPosition))
-                            .map(r -> new IndexField(r.fieldName, r.ascending)).collect(Collectors.toList()))
+                            .map(r -> new IndexField(r.fieldName.toLowerCase(), r.ascending)).collect(Collectors.toList()))
                     ).collect(Collectors.toList());
             List<FieldRec> fieldRecords = loadFields(dbName, tableName, md);
-            List<String> fields = fieldRecords.stream().sorted(Comparator.comparingInt(FieldRec::getFieldPosition)).map(FieldRec::getFieldName).collect(Collectors.toList());
-            return new Table(tableName, fields, indexes);
+            List<String> fields = fieldRecords.stream().sorted(Comparator.comparingInt(FieldRec::getFieldPosition)).map(FieldRec::getFieldName).map(String::toLowerCase).collect(Collectors.toList());
+            return new Table(tableName.toLowerCase(), fields, indexes);
         }).collect(Collectors.toMap(Table::getName, Function.identity()));
     }
 
