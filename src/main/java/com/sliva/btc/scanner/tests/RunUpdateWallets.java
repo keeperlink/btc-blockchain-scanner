@@ -18,9 +18,11 @@ package com.sliva.btc.scanner.tests;
 import com.sliva.btc.scanner.Main;
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import com.sliva.btc.scanner.db.DBPreparedStatement;
-import com.sliva.btc.scanner.db.DBUtils;
-import com.sliva.btc.scanner.db.DbUpdateWallet;
-import com.sliva.btc.scanner.db.DbUpdateAddress;
+import com.sliva.btc.scanner.db.utils.DBUtils;
+import static com.sliva.btc.scanner.db.facade.DbQueryAddressOne.getAddressTableName;
+import static com.sliva.btc.scanner.db.facade.DbQueryAddressOne.updateQueryTableName;
+import com.sliva.btc.scanner.db.facade.DbUpdateAddress;
+import com.sliva.btc.scanner.db.facade.DbUpdateWallet;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.db.model.BtcWallet;
 import com.sliva.btc.scanner.src.SrcAddressType;
@@ -201,7 +203,6 @@ public class RunUpdateWallets {
     private final File stopFile;
     private final Set<Integer> addressesToUpdate = new HashSet<>();
     private final Set<Integer> unusedWallets = new HashSet<>();
-    private final SrcAddressType addressType;
     private final int readRowsBatch;
 
     /**
@@ -220,28 +221,28 @@ public class RunUpdateWallets {
     public RunUpdateWallets(CommandLine cmd) {
         stopFile = new File(cmd.getOptionValue("stop-file", DEFAULT_STOP_FILE_NAME));
         readRowsBatch = Integer.parseInt(cmd.getOptionValue("batch-size", Integer.toString(DEFAULT_READ_ROWS_BATCH)));
-        addressType = SrcAddressType.valueOf(cmd.getOptionValue("address-type", DEFAULT_ADDRESS_TYPE.name()));
+        SrcAddressType addressType = SrcAddressType.valueOf(cmd.getOptionValue("address-type", DEFAULT_ADDRESS_TYPE.name()));
         execQuery = Executors.newFixedThreadPool(Integer.parseInt(cmd.getOptionValue("threads", Integer.toString(DEFAULT_TXN_THREADS))));
         DBConnectionSupplier.applyArguments(cmd);
 
         dbCon = new DBConnectionSupplier();
-        psAddressesNoWallet = dbCon.prepareStatement(fixTableName(SQL_QUERY_ADDRESSES_NO_WALLET));
-        psRelatedAddresses = dbCon.prepareStatement(fixTableName(SQL_QUERY_RELATED_ADDRESSES));
-        psRelatedWallets = dbCon.prepareStatement(fixTableName(SQL_QUERY_RELATED_WALLETS));
-        psRelatedWalletsByAddress = dbCon.prepareStatement(fixTableName(SQL_QUERY_RELATED_WALLETS_BY_ADDRESS));
-//        psUpdateAddressWallet = dbCon.prepareStatement(fixTableName(SQL_UPDATE_ADDRESS_WALLET));
-        psQueryMergeTransaction = dbCon.prepareStatement(fixTableName(SQL_QUERY_MERGE_TRANSACTION));
-        psQueryAddressIdsByWallet = dbCon.prepareStatement(fixTableName(SQL_QUERY_ADDRESS_IDS_BY_WALLET));
-        psQueryAddressesByWallet = dbCon.prepareStatement(fixTableName(SQL_QUERY_ADDRESSES_BY_WALLET));
-        psQueryUnusedWallets = dbCon.prepareStatement(fixTableName(SQL_QUERY_UNUSED_WALLETS));
-        psQueryAllAddressesByWallet = dbCon.prepareStatement(fixTableName(SQL_QUERY_ALL_ADDRESSES_BY_WALLET));
-        psQueryMissingWalletRecords = dbCon.prepareStatement(fixTableName(SQL_QUERY_MISSING_WALLET_RECORDS));
-        psQueryTransactionsWithDifferentInputWallets = dbCon.prepareStatement(fixTableName(SQL_QUERY_TRANSACTIONS_WITH_DIFFERENT_INPUT_WALLETS));
-        psQueryWalletdByTransaction = dbCon.prepareStatement(fixTableName(SQL_QUERY_WALLETS_BY_TRANSACTION));
-        psQuerySpendTransactionsByAddress = dbCon.prepareStatement(fixTableName(SQL_QUERY_SPEND_TRANSACTIONS_BY_ADDRESS));
+        psAddressesNoWallet = dbCon.prepareStatement(updateQueryTableName(SQL_QUERY_ADDRESSES_NO_WALLET, addressType));
+        psRelatedAddresses = dbCon.prepareStatement(updateQueryTableName(SQL_QUERY_RELATED_ADDRESSES, addressType));
+        psRelatedWallets = dbCon.prepareStatement(updateQueryTableName(SQL_QUERY_RELATED_WALLETS, addressType));
+        psRelatedWalletsByAddress = dbCon.prepareStatement(updateQueryTableName(SQL_QUERY_RELATED_WALLETS_BY_ADDRESS, addressType));
+//        psUpdateAddressWallet = dbCon.prepareStatement(updateQueryTableName(SQL_UPDATE_ADDRESS_WALLET, addressType));
+        psQueryMergeTransaction = dbCon.prepareStatement(updateQueryTableName(SQL_QUERY_MERGE_TRANSACTION, addressType));
+        psQueryAddressIdsByWallet = dbCon.prepareStatement(updateQueryTableName(SQL_QUERY_ADDRESS_IDS_BY_WALLET, addressType));
+        psQueryAddressesByWallet = dbCon.prepareStatement(updateQueryTableName(SQL_QUERY_ADDRESSES_BY_WALLET, addressType));
+        psQueryUnusedWallets = dbCon.prepareStatement(updateQueryTableName(SQL_QUERY_UNUSED_WALLETS, addressType));
+        psQueryAllAddressesByWallet = dbCon.prepareStatement(updateQueryTableName(SQL_QUERY_ALL_ADDRESSES_BY_WALLET, addressType));
+        psQueryMissingWalletRecords = dbCon.prepareStatement(updateQueryTableName(SQL_QUERY_MISSING_WALLET_RECORDS, addressType));
+        psQueryTransactionsWithDifferentInputWallets = dbCon.prepareStatement(updateQueryTableName(SQL_QUERY_TRANSACTIONS_WITH_DIFFERENT_INPUT_WALLETS, addressType));
+        psQueryWalletdByTransaction = dbCon.prepareStatement(updateQueryTableName(SQL_QUERY_WALLETS_BY_TRANSACTION, addressType));
+        psQuerySpendTransactionsByAddress = dbCon.prepareStatement(updateQueryTableName(SQL_QUERY_SPEND_TRANSACTIONS_BY_ADDRESS, addressType));
 
         psUpdateAddressWalletPerTable = new ArrayList<>();
-        Stream.of(SrcAddressType.values()).filter(SrcAddressType::isReal).forEach((at) -> psUpdateAddressWalletPerTable.add(dbCon.prepareStatement(fixTableName(SQL_UPDATE_ADDRESS_WALLET, at))));
+        Stream.of(SrcAddressType.values()).filter(SrcAddressType::isReal).forEach(at -> psUpdateAddressWalletPerTable.add(dbCon.prepareStatement(updateQueryTableName(SQL_UPDATE_ADDRESS_WALLET, at), getAddressTableName(at) + ".wallet_id")));
     }
 
     private void runProcess() throws SQLException, InterruptedException {
@@ -471,18 +472,6 @@ public class RunUpdateWallets {
 
     private boolean isWalletUsed(int walletId) throws SQLException {
         return psQueryAllAddressesByWallet.setParameters(p -> p.setInt(walletId).setInt(walletId).setInt(walletId).setInt(walletId)).setMaxRows(1).querySingleRow(rs -> true).orElse(false);
-    }
-
-    private String getTableName(SrcAddressType addressType) {
-        return "address_" + addressType.name().toLowerCase();
-    }
-
-    private String fixTableName(String sql, SrcAddressType addressType) {
-        return sql.replaceAll("address_table_name", getTableName(addressType));
-    }
-
-    private String fixTableName(String sql) {
-        return fixTableName(sql, addressType);
     }
 
     private static void printHelpAndExit() {

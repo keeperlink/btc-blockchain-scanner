@@ -18,6 +18,7 @@ package com.sliva.btc.scanner.util;
 import static com.google.common.base.Preconditions.checkArgument;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
@@ -36,21 +37,22 @@ public final class BatchUtils {
      * @param <T> Element type in collection
      * @param source source Collection of elements
      * @param limit maximum number of elements to return
-     * @return Collection of pulled elements or null if source Collection is
-     * empty.
+     * @return Optional of Collection of pulled elements or empty if source
+     * Collection is empty.
      */
-    public static <T> Collection<T> pullData(Collection<T> source, int limit) {
+    public static <T> Optional<Collection<T>> pullData(Collection<T> source, int limit) {
         checkArgument(source != null, "Argument 'source' is null");
         checkArgument(limit > 0, "Argument 'limit' (%s) must be a positive number", limit);
-        Collection<T> result = null;
+        Optional<Collection<T>> result = Optional.empty();
         synchronized (source) {
             if (!source.isEmpty()) {
                 if (source.size() <= limit) {
-                    result = new ArrayList<>(source);
+                    result = Optional.of(new ArrayList<>(source));
                     source.clear();
                 } else {
-                    result = source.stream().limit(limit).collect(Collectors.toList());
-                    source.removeAll(result);
+                    Collection<T> pulled = source.stream().limit(limit).collect(Collectors.toList());
+                    source.removeAll(pulled);
+                    result = Optional.of(pulled);
                 }
             }
             source.notifyAll();

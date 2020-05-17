@@ -15,10 +15,11 @@
  */
 package com.sliva.btc.scanner.db;
 
+import com.sliva.btc.scanner.db.utils.DbResultSetUtils;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
-import com.sliva.btc.scanner.db.DbResultSetUtils.QueryConsumer;
-import com.sliva.btc.scanner.db.DbResultSetUtils.QueryResultProcessor;
+import com.sliva.btc.scanner.db.utils.DbResultSetUtils.QueryConsumer;
+import com.sliva.btc.scanner.db.utils.DbResultSetUtils.QueryResultProcessor;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -42,8 +43,10 @@ public class DBPreparedStatement {
 
     @Getter
     private final String query;
+    @Getter
     private final int paramsCount;
     private final ThreadLocal<PreparedStatement> psPool;
+    @Getter
     private final String cannotExecuteReason;
 
     /**
@@ -63,16 +66,44 @@ public class DBPreparedStatement {
         this.psPool = cannotExecuteReason != null ? null : ThreadLocal.withInitial(() -> buildPreparedStatement(conn));
     }
 
+    /**
+     * Return true if the statement can be executed, otherwise return false.
+     *
+     * @return true if the statement can be executed, otherwise return false
+     */
     public boolean canExecute() {
         return cannotExecuteReason == null;
     }
 
+    /**
+     * Check if the statement can be executed, if not - throw
+     * IlliegalStateException with the reason.
+     */
+    public void checkCanExecute() {
+        checkState(cannotExecuteReason == null, "Cannot execute query. %s. Query: %s", cannotExecuteReason, query);
+    }
+
+    /**
+     * Get parameters setter instance to be used to pass parameters to the
+     * statement.
+     *
+     * @return ParamSetter instance
+     */
     @NonNull
     public ParamSetter getParamSetter() {
         checkCanExecute();
         return new ParamSetter();
     }
 
+    /**
+     * Set statement parameters in batch mode.
+     *
+     * @param <T> Batch element type
+     * @param element batch element
+     * @param fillCallback Consumer with two arguments - batch element and
+     * ParamSetter instance
+     * @return this
+     */
     @NonNull
     public <T> DBPreparedStatement setParameters(T element, BiConsumer<T, ParamSetter> fillCallback) {
         checkCanExecute();
@@ -82,6 +113,12 @@ public class DBPreparedStatement {
         return this;
     }
 
+    /**
+     * Set statement parameters.
+     *
+     * @param fillCallback Consumer with ParamSetter instance
+     * @return this
+     */
     @NonNull
     public DBPreparedStatement setParameters(Consumer<ParamSetter> fillCallback) {
         checkCanExecute();
@@ -91,6 +128,12 @@ public class DBPreparedStatement {
         return this;
     }
 
+    /**
+     * Set maximum number of rows to return.
+     *
+     * @param maxRowsLimit maximum number of rows to return
+     * @return this
+     */
     @NonNull
     @SneakyThrows(SQLException.class)
     public DBPreparedStatement setMaxRows(int maxRowsLimit) {
@@ -98,6 +141,12 @@ public class DBPreparedStatement {
         return this;
     }
 
+    /**
+     * Set fetch size.
+     *
+     * @param rows fetch size
+     * @return this
+     */
     @NonNull
     @SneakyThrows(SQLException.class)
     public DBPreparedStatement setFetchSize(int rows) {
@@ -174,14 +223,11 @@ public class DBPreparedStatement {
         return conn.get().prepareStatement(query, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
     }
 
-    private void checkCanExecute() {
-        checkState(cannotExecuteReason == null, "Cannot execute query. %s. Query: %s", cannotExecuteReason, query);
-    }
-
     public class ParamSetter {
 
         private final PreparedStatement ps = getPreparedStatement();
         private final AtomicInteger paramCounter = new AtomicInteger();
+        private boolean ignoreExtraParam;
 
         private ParamSetter() {
         }
@@ -194,49 +240,67 @@ public class DBPreparedStatement {
             checkState(isReady(), "Missing parameters. Defined: %s out of %s. Statement: \"%s\"", paramCounter.get(), paramsCount, query);
         }
 
-        public void checkStateNotReady() {
-            checkState(!isReady(), "No more statement parameters to set. Number of parameters: %s. Statement: \"%s\"", paramsCount, query);
+        private boolean checkStateNotReady() {
+            if (!ignoreExtraParam) {
+                checkState(!isReady(), "No more statement parameters to set. Number of parameters: %s. Statement: \"%s\"", paramsCount, query);
+            }
+            return !isReady();
+        }
+
+        public int getParamsCount() {
+            return paramsCount;
+        }
+
+        public ParamSetter ignoreExtraParam() {
+            ignoreExtraParam = true;
+            return this;
         }
 
         @SneakyThrows(SQLException.class)
         public ParamSetter setString(String value) {
-            checkStateNotReady();
-            ps.setString(paramCounter.incrementAndGet(), value);
+            if (checkStateNotReady()) {
+                ps.setString(paramCounter.incrementAndGet(), value);
+            }
             return this;
         }
 
         @SneakyThrows(SQLException.class)
         public ParamSetter setShort(short value) {
-            checkStateNotReady();
-            ps.setShort(paramCounter.incrementAndGet(), value);
+            if (checkStateNotReady()) {
+                ps.setShort(paramCounter.incrementAndGet(), value);
+            }
             return this;
         }
 
         @SneakyThrows(SQLException.class)
         public ParamSetter setInt(int value) {
-            checkStateNotReady();
-            ps.setInt(paramCounter.incrementAndGet(), value);
+            if (checkStateNotReady()) {
+                ps.setInt(paramCounter.incrementAndGet(), value);
+            }
             return this;
         }
 
         @SneakyThrows(SQLException.class)
         public ParamSetter setLong(long value) {
-            checkStateNotReady();
-            ps.setLong(paramCounter.incrementAndGet(), value);
+            if (checkStateNotReady()) {
+                ps.setLong(paramCounter.incrementAndGet(), value);
+            }
             return this;
         }
 
         @SneakyThrows(SQLException.class)
         public ParamSetter setBytes(byte[] value) {
-            checkStateNotReady();
-            ps.setBytes(paramCounter.incrementAndGet(), value);
+            if (checkStateNotReady()) {
+                ps.setBytes(paramCounter.incrementAndGet(), value);
+            }
             return this;
         }
 
         @SneakyThrows(SQLException.class)
         public ParamSetter setBoolean(boolean value) {
-            checkStateNotReady();
-            ps.setBoolean(paramCounter.incrementAndGet(), value);
+            if (checkStateNotReady()) {
+                ps.setBoolean(paramCounter.incrementAndGet(), value);
+            }
             return this;
         }
     }

@@ -15,6 +15,7 @@
  */
 package com.sliva.btc.scanner.db;
 
+import com.sliva.btc.scanner.db.utils.DBMetaData;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;

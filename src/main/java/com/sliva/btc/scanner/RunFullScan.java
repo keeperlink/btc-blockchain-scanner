@@ -19,25 +19,29 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.LoadingCache;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
-import com.sliva.btc.scanner.db.DbCachedAddress;
-import com.sliva.btc.scanner.db.DbCachedOutput;
-import com.sliva.btc.scanner.db.DbCachedTransaction;
-import com.sliva.btc.scanner.db.DbQueryBlock;
-import com.sliva.btc.scanner.db.DbQueryInput;
-import com.sliva.btc.scanner.db.DbQueryInputSpecial;
 import com.sliva.btc.scanner.db.DbUpdate;
-import com.sliva.btc.scanner.db.DbUpdateBlock;
-import com.sliva.btc.scanner.db.DbUpdateInput;
-import com.sliva.btc.scanner.db.DbUpdateInputSpecial;
-import com.sliva.btc.scanner.db.DbValidationUtils;
+import com.sliva.btc.scanner.db.facade.DbCachedAddress;
+import com.sliva.btc.scanner.db.facade.DbCachedAddressOne;
+import com.sliva.btc.scanner.db.facade.DbCachedOutput;
+import com.sliva.btc.scanner.db.facade.DbCachedTransaction;
+import com.sliva.btc.scanner.db.facade.DbQueryBlock;
+import com.sliva.btc.scanner.db.facade.DbQueryInput;
+import com.sliva.btc.scanner.db.facade.DbQueryInputSpecial;
+import com.sliva.btc.scanner.db.facade.DbQueryOutput;
+import com.sliva.btc.scanner.db.facade.DbUpdateBlock;
+import com.sliva.btc.scanner.db.facade.DbUpdateInput;
+import com.sliva.btc.scanner.db.facade.DbUpdateInputSpecial;
+import com.sliva.btc.scanner.db.facade.DbUpdateOutput;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.db.model.BtcBlock;
 import com.sliva.btc.scanner.db.model.BtcTransaction;
 import com.sliva.btc.scanner.db.model.OutputStatus;
 import com.sliva.btc.scanner.db.model.SighashType;
+import com.sliva.btc.scanner.db.model.TXID;
 import com.sliva.btc.scanner.db.model.TxInput;
 import com.sliva.btc.scanner.db.model.TxInputSpecial;
 import com.sliva.btc.scanner.db.model.TxOutput;
+import com.sliva.btc.scanner.db.utils.DbValidationUtils;
 import com.sliva.btc.scanner.rpc.RpcClient;
 import com.sliva.btc.scanner.rpc.RpcClientDirect;
 import com.sliva.btc.scanner.src.BJBlockProvider;
@@ -57,6 +61,7 @@ import com.sliva.btc.scanner.util.Utils;
 import static com.sliva.btc.scanner.util.Utils.getNumberSupplier;
 import java.io.File;
 import java.sql.SQLException;
+import java.text.NumberFormat;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -94,7 +99,8 @@ public class RunFullScan {
 
     private static final CmdOptions CMD_OPTS = new CmdOptions().add(DBConnectionSupplier.class)
             .add(DbUpdate.class).add(RpcClient.class).add(RpcClientDirect.class)
-            .add(BJBlockProvider.class).add(DbValidationUtils.class);
+            .add(BJBlockProvider.class).add(DbValidationUtils.class)
+            .add(DbCachedAddressOne.class).add(DbCachedOutput.class).add(DbCachedTransaction.class);
     private static final CmdOption safeRunOpt = buildOption(CMD_OPTS, null, "safe-run", true, "Run in safe mode - check DB for existing records before adding new. Default: " + DEFAULT_SAFE_RUN);
     private static final CmdOption updateSpentOpt = buildOption(CMD_OPTS, null, "update-spent", true, "Update spent flag on outpus. For better performance of massive update you might want to disable it and run separate process after this update is done. Default: " + DEFAULT_UPDATE_SPENT);
     private static final CmdOption blocksBackOpt = buildOption(CMD_OPTS, null, "blocks-back", true, "Check last number of blocks. Process will run in safe mode (option --safe-run=true)");
@@ -119,6 +125,7 @@ public class RunFullScan {
     private final DbQueryBlock queryBlock;
     private final DbQueryInput queryInput;
     private final DbQueryInputSpecial queryInputSpecial;
+    private final DbQueryOutput queryOutput;
     private final BlockProvider<?> blockProvider;
     private final Optional<Integer> startBlock;
     private final Optional<Integer> lastBlock;
@@ -139,6 +146,7 @@ public class RunFullScan {
         log.info("MAIN STARTED");
         ShutdownHook shutdownHook = new ShutdownHook(() -> terminateLoop.set(true));
         try {
+            Thread.currentThread().setName("MAIN__________");
             Integer loopTime = cmd.getOption(loopOpt).map(Integer::parseInt).orElse(null);
             do {
                 new RunFullScan(cmd).runProcess();
@@ -156,12 +164,13 @@ public class RunFullScan {
     }
 
     public RunFullScan(CmdArguments cmd) throws Exception {
+        dbCon = new DBConnectionSupplier().checkTablesExist("block", "transaction", "input", "input_special", "output", "address_p2pkh", "address_p2sh", "address_p2wpkh", "address_p2wsh");
         safeRun = cmd.getOption(safeRunOpt).map(Boolean::valueOf)
                 .orElse(cmd.hasOption(startFromBlockOpt) || cmd.hasOption(blocksBackOpt) || DEFAULT_SAFE_RUN);
         startBlock = cmd.getOption(startFromBlockOpt).map(Integer::valueOf);
         lastBlock = cmd.getOption(runToBlockOpt).map(Integer::valueOf);
         blocksBack = cmd.getOption(blocksBackOpt).map(Integer::parseInt);
-        updateSpent = cmd.getOption(updateSpentOpt).map(Boolean::valueOf).orElse(DEFAULT_UPDATE_SPENT);
+        updateSpent = dbCon.getDBMetaData().hasField("output.spent") && cmd.getOption(updateSpentOpt).map(Boolean::valueOf).orElse(DEFAULT_UPDATE_SPENT);
         stopFile = new File(cmd.getOption(stopFileOpt).orElse(DEFAULT_STOP_FILE_NAME));
         nExecTxnThreads = cmd.getOption(threadsOpt).map(Integer::parseInt).orElse(DEFAULT_TXN_THREADS);
         runParallel = nExecTxnThreads != 0;
@@ -172,10 +181,12 @@ public class RunFullScan {
                 new ThreadFactoryBuilder().setDaemon(true).setNameFormat("ExecTxn-%02d").build()) : null;
         execInsOuts = runParallel ? Executors.newFixedThreadPool(Math.max(1, nExecTxnThreads * 2 / 3),
                 new ThreadFactoryBuilder().setDaemon(true).setNameFormat("execInsOuts-%02d").build()) : null;
-        dbCon = new DBConnectionSupplier();
+        DbCachedAddressOne.CACHE_BY_ID_ENABLED = false;
+        DbCachedTransaction.CACHE_BY_ID_ENABLED = false;
         queryBlock = new DbQueryBlock(dbCon);
         queryInput = new DbQueryInput(dbCon);
         queryInputSpecial = new DbQueryInputSpecial(dbCon);
+        queryOutput = new DbQueryOutput(dbCon);
         if (cmd.hasOption(BJBlockProvider.fullBlocksPathOpt)) {
             blockProvider = new BlockProviderWithBackup(new BJBlockProvider(), new RpcBlockProvider());
         } else {
@@ -185,7 +196,7 @@ public class RunFullScan {
                 .concurrencyLevel(Runtime.getRuntime().availableProcessors())
                 .maximumSize(200_000)
                 .recordStats()
-                .build(Utils.getCacheLoader(key -> queryInput.findInputsByTransactionId(key)));
+                .build(Utils.getCacheLoader(queryInput::findInputsByTransactionId));
     }
 
     public void runProcess() throws Exception {
@@ -193,14 +204,16 @@ public class RunFullScan {
             DbValidationUtils.checkAndFixDataTails(dbCon);
             Utils.sleep(50);
         }
+        boolean cacheOutput = safeRun || updateSpent;
         log.info("Execution STARTED");
         try (DbUpdateBlock addBlock = new DbUpdateBlock(dbCon);
                 DbUpdateInput updateInput = new DbUpdateInput(dbCon);
                 DbUpdateInputSpecial updateInputSpecial = new DbUpdateInputSpecial(dbCon);
                 DbCachedTransaction cachedTxn = new DbCachedTransaction(dbCon);
                 DbCachedAddress cachedAddress = new DbCachedAddress(dbCon);
-                DbCachedOutput cachedOutput = new DbCachedOutput(dbCon)) {
-            DbAccess db = new DbAccess(addBlock, updateInput, updateInputSpecial, cachedTxn, cachedAddress, cachedOutput);
+                DbCachedOutput cachedOutput = cacheOutput ? new DbCachedOutput(dbCon) : null;
+                DbUpdateOutput updateOutput = cacheOutput ? null : new DbUpdateOutput(dbCon)) {
+            DbAccess db = new DbAccess(addBlock, updateInput, updateInputSpecial, cachedTxn, cachedAddress, cachedOutput, updateOutput, queryOutput);
             int firstBlockToProcess = startBlock.orElseGet(() -> queryBlock.findLastHeight().orElse(-1) + 1 - blocksBack.orElse(0));
             int lastBlockToProcess = lastBlock.orElseGet(() -> new RpcClient().getBlocksNumber());
             log.info("firstBlockToProcess={}, lastBlockToProcess={}", firstBlockToProcess, lastBlockToProcess);
@@ -236,7 +249,8 @@ public class RunFullScan {
     private void processBlock(SrcBlock<?> block, DbAccess db) {
         int blockHeight = block.getHeight();
         String blockHash = block.getHash();
-        log.info("Block({}).hash: {}, nTxns={}", blockHeight, blockHash, block.getTransactions().size());
+        NumberFormat nf = NumberFormat.getIntegerInstance();
+        log.info("Block({}).hash: {}, nTxns={}", nf.format(blockHeight), blockHash, nf.format(block.getTransactions().size()));
         if (!queryBlock.findBlockByHash(blockHash).isPresent()) {
             db.addBlock.add(BtcBlock.builder()
                     .height(blockHeight)
@@ -263,20 +277,16 @@ public class RunFullScan {
     private TxnProcessOutput processTransaction(
             SrcTransaction<?, ?> t,
             int blockHeight, List<BtcTransaction> listTxn, DbAccess db) {
-        String txid = Utils.fixDupeTxid(t.getTxid(), blockHeight);
-        log.trace("Tx.hash: {}", txid);
-        BtcTransaction btcTx = findTx(listTxn, txid).orElse(null);
-        if (btcTx == null) {
-            btcTx = BtcTransaction.builder()
-                    .txid(Utils.id2binNonNull(txid))
-                    .blockHeight(blockHeight)
-                    .nInputs(t.getInputs().size())
-                    .nOutputs(t.getOutputs().size())
-                    .build();
-            btcTx = db.cachedTxn.add(btcTx);
-        } else {
-            //TODO validate
-        }
+        String txHash = Utils.fixDupeTxid(t.getTxid(), blockHeight);
+        log.trace("Tx.hash: {}", txHash);
+        TXID txid = TXID.build(txHash);
+        BtcTransaction btcTx = findTx(listTxn, txid).orElse(
+                db.cachedTxn.add(BtcTransaction.builder()
+                        .txid(txid.getData())
+                        .blockHeight(blockHeight)
+                        .nInputs(t.getInputs().size())
+                        .nOutputs(t.getOutputs().size())
+                        .build()));
         return TxnProcessOutput.builder()
                 .tx(btcTx)
                 .badInputs(processTransactionInputs(t, btcTx, db))
@@ -400,12 +410,13 @@ public class RunFullScan {
     private Collection<TxOutput> processTransactionOutputs(SrcTransaction<?, ?> t, BtcTransaction tx, DbAccess db) {
         final Collection<TxOutput> txOutputs;
         if (safeRun) {
-            txOutputs = new ArrayList<>(db.cachedOutput.getOutputs(tx.getTransactionId()));
+            //txOutputs = new ArrayList<>(db.cachedOutput.getOutputs(tx.getTransactionId()));
+            txOutputs = t.getOutputs().stream().map(to -> db.cachedOutput.getOutput(tx.getTransactionId(), to.getPos())).filter(Optional::isPresent).map(Optional::get).collect(Collectors.toSet());
         } else {
             txOutputs = null;
         }
         t.getOutputs().forEach(to -> {
-            int addressId = to.getAddress().map(addr -> db.cachedAddress.getOrAdd(addr, false)).orElse(0);
+            int addressId = to.getAddress().map(db.cachedAddress::getOrAdd).orElse(0);
             TxOutput txOutputToAdd = TxOutput.builder()
                     .transactionId(tx.getTransactionId())
                     .pos(to.getPos())
@@ -415,7 +426,11 @@ public class RunFullScan {
                     .build();
             TxOutput txOutput = findOutput(txOutputs, txOutputToAdd.getPos()).orElse(null);
             if (txOutput == null) {
-                db.cachedOutput.add(txOutputToAdd);
+                if (db.cachedOutput != null) {
+                    db.cachedOutput.add(txOutputToAdd);
+                } else {
+                    db.updateOutput.add(txOutputToAdd);
+                }
             } else {
                 if (txOutput.getAddressId() != txOutputToAdd.getAddressId()) {
                     log.debug("Address is different: {} <> {}({}) for output: {}. tx: {}", txOutput.getAddressId(), txOutputToAdd.getAddressId(), to.getAddress(), txOutputToAdd, tx);
@@ -430,7 +445,11 @@ public class RunFullScan {
         if (txOutputs != null) {
             txOutputs.forEach(txOut -> {
                 log.debug("processTransactionOutputs: Deleting record: {}", txOut);
-                db.cachedOutput.delete(txOut);
+                if (db.cachedOutput != null) {
+                    db.cachedOutput.delete(txOut);
+                } else {
+                    db.updateOutput.delete(txOut);
+                }
             });
         }
         return txOutputs;
@@ -463,7 +482,8 @@ public class RunFullScan {
             if (safeRun) {
                 String txid = Utils.fixDupeTxid(t.getTxid(), blockHeight);
                 db.cachedTxn.getTransactionSimple(txid).ifPresent(tx -> {
-                    db.cachedOutput.getOutputs(tx.getTransactionId());
+                    //db.cachedOutput.getOutputs(tx.getTransactionId());
+                    t.getOutputs().forEach(to -> db.cachedOutput.getOutput(tx.getTransactionId(), to.getPos()));
                     inputsCache.getUnchecked(tx.getTransactionId());
                 });
             }
@@ -472,7 +492,7 @@ public class RunFullScan {
                     .map(tr -> updateSpent ? db.cachedOutput.getOutput(tr.getTransactionId(), ti.getInPos()) : Optional.empty()), execInsOuts))
                     .collect(Collectors.toList());
             List<CompletableFuture<Void>> outFutures = t.getOutputs().stream()
-                    .map(to -> CompletableFuture.runAsync(() -> to.getAddress().map(adr -> db.cachedAddress.getOrAdd(adr, true)), execInsOuts))
+                    .map(to -> CompletableFuture.runAsync(() -> to.getAddress().map(db.cachedAddress::getOrAdd), execInsOuts))
                     .collect(Collectors.toList());
             inFutures.forEach(CompletableFuture::join);
             outFutures.forEach(CompletableFuture::join);
@@ -495,8 +515,8 @@ public class RunFullScan {
     private static String frmtInput(TxInput in, DbAccess db) {
         Optional<BtcTransaction> tx = db.cachedTxn.getTransaction(in.getTransactionId());
         Optional<BtcTransaction> intx = db.cachedTxn.getTransaction(in.getInTransactionId());
-        Optional<TxOutput> out = db.cachedOutput.getOutput(in.getInTransactionId(), in.getInPos());
-        BtcAddress adr = out.flatMap(o -> db.cachedAddress.getAddress(o.getAddressId(), true)).orElse(null);
+        Optional<TxOutput> out = db.cachedOutput != null ? db.cachedOutput.getOutput(in.getInTransactionId(), in.getInPos()) : db.queryOutput.getOutput(in.getInTransactionId(), in.getInPos());
+        BtcAddress adr = out.flatMap(o -> db.cachedAddress.getAddress(o.getAddressId())).orElse(null);
         return "Input#" + in.getPos() + " in tx " + tx.map(BtcTransaction::getTxid).orElse(null)
                 + " (" + tx.map(BtcTransaction::getBlockHeight).orElse(null) + "." + in.getTransactionId() + ")"
                 + " pointing to output " + intx.map(BtcTransaction::getTxid).orElse(null) + ":" + in.getInPos()
@@ -506,8 +526,8 @@ public class RunFullScan {
     }
 
     @NonNull
-    private static Optional<BtcTransaction> findTx(Collection<BtcTransaction> list, String hash) {
-        return list == null ? Optional.empty() : list.stream().filter(t -> t.getTxid().toString().equalsIgnoreCase(hash)).peek(t -> list.remove(t)).findFirst();
+    private static Optional<BtcTransaction> findTx(Collection<BtcTransaction> list, TXID txid) {
+        return list == null ? Optional.empty() : list.stream().filter(t -> t.getTxid().equals(txid)).peek(t -> list.remove(t)).findFirst();
     }
 
     @NonNull
@@ -529,6 +549,8 @@ public class RunFullScan {
         private final DbCachedTransaction cachedTxn;
         private final DbCachedAddress cachedAddress;
         private final DbCachedOutput cachedOutput;
+        private final DbUpdateOutput updateOutput;
+        private final DbQueryOutput queryOutput;
     }
 
     @Getter

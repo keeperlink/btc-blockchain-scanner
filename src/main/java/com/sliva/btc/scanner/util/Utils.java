@@ -24,7 +24,8 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
-import java.text.DecimalFormat;
+import java.text.NumberFormat;
+import java.text.ParseException;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Properties;
@@ -163,7 +164,7 @@ public final class Utils {
             case P2WSH:
                 return SrcAddressType.P2WSH;
         }
-        return null;
+        return SrcAddressType.UNKNOWN;
     }
 
     public static void logRuntime(String name, Runnable r) {
@@ -217,6 +218,38 @@ public final class Utils {
      *
      * @param <T> Element data type
      * @param value1 first value to evaluate
+     * @param value2supplier second value supplier
+     * @return Optional of element or empty if none found
+     */
+    @NonNull
+    public static <T> Optional<T> optionalBuilder2(T value1, Supplier<T> value2supplier) {
+        checkArgument(value2supplier != null, "Argument 'value2supplier' is null");
+        return Optional.ofNullable(value1 != null ? value1 : value2supplier.get());
+    }
+
+    /**
+     * Return Optional value of first non-null and non-empty elements from
+     * arguments.
+     *
+     * @param <A> Type of function argument
+     * @param <T> Element data type
+     * @param value1 first value to evaluate
+     * @param argument argument for second choice function
+     * @param value2supplier second choice optional value supplier
+     * @return Optional of element or empty if none found
+     */
+    @NonNull
+    public static <A, T> Optional<T> optionalBuilder2o(T value1, A argument, Function<A, Optional<T>> value2supplier) {
+        checkArgument(value2supplier != null, "Argument 'value2supplier' is null");
+        return value1 != null ? Optional.ofNullable(value1) : value2supplier.apply(argument);
+    }
+
+    /**
+     * Return Optional value of first non-null and non-empty elements from
+     * arguments.
+     *
+     * @param <T> Element data type
+     * @param value1 first value to evaluate
      * @param value2supplier second value supplier to evaluate
      * @param value3supplier third value supplier to evaluate
      * @return Optional of element or empty if none found
@@ -243,15 +276,17 @@ public final class Utils {
 
         private final File file;
         private final Long number;
+        private final NumberFormat nf = NumberFormat.getIntegerInstance();
 
         @SuppressWarnings("UseSpecificCatch")
+        @SneakyThrows(ParseException.class)
         public NumberFile(String param) {
             if (StringUtils.isBlank(param)) {
                 file = null;
                 number = 0L;
-            } else if (StringUtils.isNumeric(param)) {
+            } else if (StringUtils.isNumeric(param.replace(",", "").replace(".", ""))) {
                 file = null;
-                number = Long.valueOf(param);
+                number = nf.parse(param).longValue();
             } else {
                 file = new File(param);
                 if (file.exists()) {
@@ -269,7 +304,7 @@ public final class Utils {
         public void updateNumber(long n) {
             if (file != null) {
                 try {
-                    FileUtils.writeStringToFile(file, new DecimalFormat("#,###").format(n), StandardCharsets.ISO_8859_1);
+                    FileUtils.writeStringToFile(file, nf.format(n), StandardCharsets.ISO_8859_1);
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }

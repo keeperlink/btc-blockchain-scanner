@@ -20,6 +20,7 @@ import com.sliva.btc.scanner.util.BJBlockHandler;
 import com.sliva.btc.scanner.util.LazyInitializer;
 import com.sliva.btc.scanner.util.Utils;
 import java.util.Optional;
+import javax.annotation.Nullable;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -51,7 +52,7 @@ public class BtcAddress {
 
     @Getter
     private final int addressId;
-    @Getter
+    @NonNull
     private final byte[] address;
     @Getter
     private final int walletId;
@@ -67,6 +68,10 @@ public class BtcAddress {
         this.walletId = walletId;
         this.type = type != null && type.isReal() ? type : getTypeFromId(addressId);
         this.bjAddress = new LazyInitializer<>(() -> this.type.isReal() ? Optional.of(BJBlockHandler.getAddress(this.type, address)) : Optional.empty());
+    }
+
+    public BinaryAddress getAddress() {
+        return new BinaryAddress(address);
     }
 
     @NonNull
@@ -89,7 +94,7 @@ public class BtcAddress {
                                                         : SrcAddressType.UNKNOWN;
     }
 
-    @NonNull
+    @Nullable
     public static SrcAddressType getTypeFromAddress(String address) {
         Address a = BJBlockHandler.getAddress(address);
         return Utils.getBtcAddressType(a.getOutputScriptType());

@@ -16,8 +16,8 @@
 package com.sliva.btc.scanner;
 
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
-import com.sliva.btc.scanner.db.DbQueryAddress;
-import com.sliva.btc.scanner.db.DbQueryAddressCombo;
+import com.sliva.btc.scanner.db.facade.DbQueryAddress;
+import com.sliva.btc.scanner.db.facade.DbQueryAddressOne;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.src.SrcAddressType;
 import com.sliva.btc.scanner.util.BJBlockHandler;
@@ -38,7 +38,7 @@ public class RunAddress {
 
     private static final CommandLineUtils.CmdOptions CMD_OPTS = new CommandLineUtils.CmdOptions().add(DBConnectionSupplier.class);
 
-    private final DbQueryAddress queryAddress;
+    private final DbQueryAddressOne queryAddress;
 
     /**
      * @param args the command line arguments
@@ -52,7 +52,7 @@ public class RunAddress {
     @SuppressWarnings("UseSpecificCatch")
     public RunAddress() {
         DBConnectionSupplier c = new DBConnectionSupplier();
-        queryAddress = new DbQueryAddressCombo(c);
+        queryAddress = new DbQueryAddress(c);
 
     }
 
@@ -66,7 +66,7 @@ public class RunAddress {
             try {
                 BtcAddress btcAddress = queryAddress.findByAddressId(Integer.parseInt(a)).orElseThrow(() -> new IllegalArgumentException("Address not found: " + a));
                 System.out.println("Address for DB ID " + a + " is: " + btcAddress.getBjAddress()
-                        + ", type: " + btcAddress.getType() + ", hash: " + Hex.encodeHexString(btcAddress.getAddress(), true));
+                        + ", type: " + btcAddress.getType() + ", hash: " + btcAddress.getAddress().toString());
             } catch (Exception e) {
                 System.out.println("Error processing " + a + ": " + e.getMessage());
             }

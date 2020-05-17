@@ -17,8 +17,8 @@ package com.sliva.btc.scanner;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
-import com.sliva.btc.scanner.db.DbQueryOutput;
-import com.sliva.btc.scanner.db.DbQueryOutput.OutputAddressWallet;
+import com.sliva.btc.scanner.db.facade.DbQueryOutput;
+import com.sliva.btc.scanner.db.facade.DbQueryOutput.OutputAddressWallet;
 import com.sliva.btc.scanner.db.model.InOutKey;
 import com.sliva.btc.scanner.neo4j.NeoConnection;
 import com.sliva.btc.scanner.neo4j.NeoQueries;

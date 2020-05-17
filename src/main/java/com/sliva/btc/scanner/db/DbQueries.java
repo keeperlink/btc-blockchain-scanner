@@ -15,6 +15,8 @@
  */
 package com.sliva.btc.scanner.db;
 
+import com.sliva.btc.scanner.db.facade.DbQueryInput;
+import com.sliva.btc.scanner.db.facade.DbQueryTransaction;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import java.util.HashSet;
 import java.util.Set;

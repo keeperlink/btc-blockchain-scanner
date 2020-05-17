@@ -16,11 +16,11 @@
 package com.sliva.btc.scanner.tests;
 
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
-import com.sliva.btc.scanner.db.DbCachedAddress;
-import com.sliva.btc.scanner.db.DbQueryBlock;
-import com.sliva.btc.scanner.db.DbQueryInput;
-import com.sliva.btc.scanner.db.DbQueryOutput;
-import com.sliva.btc.scanner.db.DbQueryTransaction;
+import com.sliva.btc.scanner.db.facade.DbCachedAddress;
+import com.sliva.btc.scanner.db.facade.DbQueryBlock;
+import com.sliva.btc.scanner.db.facade.DbQueryInput;
+import com.sliva.btc.scanner.db.facade.DbQueryOutput;
+import com.sliva.btc.scanner.db.facade.DbQueryTransaction;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.db.model.BtcBlock;
 import com.sliva.btc.scanner.db.model.BtcTransaction;
@@ -120,7 +120,7 @@ public class TestRawBlock {
                             if (txOutput.getAmount() != to.getValue().longValue()) {
                                 throw new IllegalStateException("Value doesn't match with DB: " + to.getValue().longValue() + " <> " + txOutput.getAmount());
                             }
-                            BtcAddress btcAddress = queryAddress.getAddress(txOutput.getAddressId(), true).orElseThrow(() -> new IllegalStateException("Address not found in DB: " + txOutput.getAddressId()));
+                            BtcAddress btcAddress = queryAddress.getAddress(txOutput.getAddressId()).orElseThrow(() -> new IllegalStateException("Address not found in DB: " + txOutput.getAddressId()));
                             if (!btcAddress.getAddress().equals(addrStr)) { //TODO wrong comare
                                 throw new IllegalStateException("Address doesn't match with DB: " + addrStr + " <> " + btcAddress.getAddress());
                             }
