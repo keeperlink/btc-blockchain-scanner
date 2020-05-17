@@ -38,10 +38,6 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class DbUpdateOutput extends DbUpdate {
 
-    private static int MIN_BATCH_SIZE = 1000;
-    private static int MAX_BATCH_SIZE = 40000;
-    private static int MAX_INSERT_QUEUE_LENGTH = 120000;
-    private static int MAX_UPDATE_QUEUE_LENGTH = 100000;
     private static final String TABLE_NAME = "output";
     private static final String SQL_ADD = "INSERT INTO `output`(transaction_id,pos,address_id,amount,spent)VALUES(?,?,?,?,?)";
     private static final String SQL_DELETE = "DELETE FROM `output` WHERE transaction_id=? AND pos=?";
@@ -76,27 +72,27 @@ public class DbUpdateOutput extends DbUpdate {
 
     @Override
     public int getCacheFillPercent() {
-        return Math.max(cacheData.addQueue.size() * 100 / MAX_INSERT_QUEUE_LENGTH,
-                Math.max(cacheData.queueUpdateAddress.size() * 100 / MAX_UPDATE_QUEUE_LENGTH,
-                        Math.max(cacheData.queueUpdateAmount.size() * 100 / MAX_UPDATE_QUEUE_LENGTH,
-                                cacheData.queueUpdateSpent.size() * 100 / MAX_UPDATE_QUEUE_LENGTH)));
+        return Math.max(cacheData.addQueue.size() * 100 / getMaxInsertsQueueSize(),
+                Math.max(cacheData.queueUpdateAddress.size() * 100 / getMaxUpdatesQueueSize(),
+                        Math.max(cacheData.queueUpdateAmount.size() * 100 / getMaxUpdatesQueueSize(),
+                                cacheData.queueUpdateSpent.size() * 100 / getMaxUpdatesQueueSize())));
     }
 
     @Override
     public boolean isExecuteNeeded() {
-        return cacheData.addQueue.size() >= MIN_BATCH_SIZE || cacheData.queueUpdateAddress.size() >= MIN_BATCH_SIZE
-                || cacheData.queueUpdateAmount.size() >= MIN_BATCH_SIZE || cacheData.queueUpdateSpent.size() >= MIN_BATCH_SIZE;
+        return cacheData.addQueue.size() >= getMinBatchSize() || cacheData.queueUpdateAddress.size() >= getMinBatchSize()
+                || cacheData.queueUpdateAmount.size() >= getMinBatchSize() || cacheData.queueUpdateSpent.size() >= getMinBatchSize();
     }
 
     public void add(TxOutput txOutput) {
         log.trace("add(txOutput:{})", txOutput);
         checkState(isActive(), "Instance has been closed");
-        waitFullQueue(cacheData.addQueue, MAX_INSERT_QUEUE_LENGTH);
         synchronized (cacheData) {
             cacheData.addQueue.add(txOutput);
             cacheData.queueMap.put(txOutput, txOutput);
             cacheData.queueMapTx.computeIfAbsent(txOutput.getTransactionId(), id -> new ArrayList<>(2)).add(txOutput);
         }
+        waitFullQueue(cacheData.addQueue, getMaxInsertsQueueSize());
     }
 
     public boolean delete(TxOutput txOutput) {
@@ -132,7 +128,6 @@ public class DbUpdateOutput extends DbUpdate {
     public void updateSpent(int transactionId, short pos, byte status) {
         log.trace("updateSpent(transactionId:{},pos:{},status:{})", transactionId, pos, status);
         checkState(isActive(), "Instance has been closed");
-        waitFullQueue(cacheData.queueUpdateSpent, MAX_UPDATE_QUEUE_LENGTH);
         synchronized (cacheData) {
             InOutKey pk = new InOutKey(transactionId, pos);
             TxOutput txOutput = cacheData.queueMap.get(pk);
@@ -154,12 +149,12 @@ public class DbUpdateOutput extends DbUpdate {
                 cacheData.queueUpdateSpent.add(TxOutput.builder().transactionId(transactionId).pos(pos).status(status).build());
             }
         }
+        waitFullQueue(cacheData.queueUpdateSpent, getMaxUpdatesQueueSize());
     }
 
     public void updateAddress(int transactionId, short pos, int addressId) {
         log.trace("updateAddress(transactionId:{},pos:{},addressId:{})", transactionId, pos, addressId);
         checkState(isActive(), "Instance has been closed");
-        waitFullQueue(cacheData.queueUpdateAddress, MAX_UPDATE_QUEUE_LENGTH);
         synchronized (cacheData) {
             InOutKey pk = new InOutKey(transactionId, pos);
             TxOutput txOutput = cacheData.queueMap.get(pk);
@@ -181,12 +176,12 @@ public class DbUpdateOutput extends DbUpdate {
                 cacheData.queueUpdateAddress.add(TxOutput.builder().transactionId(transactionId).pos(pos).addressId(addressId).build());
             }
         }
+        waitFullQueue(cacheData.queueUpdateAddress, getMaxUpdatesQueueSize());
     }
 
     public void updateAmount(int transactionId, short pos, long amount) {
         log.trace("updateAmount(transactionId:{},pos:{},amount:{})", transactionId, pos, amount);
         checkState(isActive(), "Instance has been closed");
-        waitFullQueue(cacheData.queueUpdateAmount, MAX_UPDATE_QUEUE_LENGTH);
         synchronized (cacheData) {
             InOutKey pk = new InOutKey(transactionId, pos);
             TxOutput txOutput = cacheData.queueMap.get(pk);
@@ -208,11 +203,12 @@ public class DbUpdateOutput extends DbUpdate {
                 cacheData.queueUpdateAmount.add(TxOutput.builder().transactionId(transactionId).pos(pos).amount(amount).build());
             }
         }
+        waitFullQueue(cacheData.queueUpdateAmount, getMaxUpdatesQueueSize());
     }
 
     @Override
     public int executeInserts() {
-        return executeBatch(cacheData, cacheData.addQueue, psAdd, MAX_BATCH_SIZE,
+        return executeBatch(cacheData, cacheData.addQueue, psAdd, getMaxBatchSize(),
                 (t, p) -> p.setInt(t.getTransactionId()).setInt(t.getPos()).setInt(t.getAddressId()).setLong(t.getAmount()).ignoreExtraParam().setInt(t.getStatus()),
                 executed -> {
                     synchronized (cacheData) {
@@ -229,17 +225,17 @@ public class DbUpdateOutput extends DbUpdate {
     }
 
     private int _executeUpdateSpent() {
-        return executeBatch(cacheData, cacheData.queueUpdateSpent, psUpdateSpent, MAX_BATCH_SIZE,
+        return executeBatch(cacheData, cacheData.queueUpdateSpent, psUpdateSpent, getMaxBatchSize(),
                 (t, p) -> p.setInt(t.getStatus()).setInt(t.getTransactionId()).setInt(t.getPos()), null);
     }
 
     private int _executeUpdateAddress() {
-        return executeBatch(cacheData, cacheData.queueUpdateAddress, psUpdateAddress, MAX_BATCH_SIZE,
+        return executeBatch(cacheData, cacheData.queueUpdateAddress, psUpdateAddress, getMaxBatchSize(),
                 (t, p) -> p.setInt(t.getAddressId()).setInt(t.getTransactionId()).setInt(t.getPos()), null);
     }
 
     private int _executeUpdateAmount() {
-        return executeBatch(cacheData, cacheData.queueUpdateAmount, psUpdateAmount, MAX_BATCH_SIZE,
+        return executeBatch(cacheData, cacheData.queueUpdateAmount, psUpdateAmount, getMaxBatchSize(),
                 (t, p) -> p.setLong(t.getAmount()).setInt(t.getTransactionId()).setInt(t.getPos()), null);
     }
 

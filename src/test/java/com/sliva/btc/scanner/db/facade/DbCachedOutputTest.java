@@ -89,15 +89,14 @@ public class DbCachedOutputTest {
         //when(preparedStatement.getParamSetter(any())).thenReturn(new DBPreparedStatement.ParamSetter());
         //when(preparedStatement.setParameters(any())).thenReturn(preparedStatement);
         //when(preparedStatement.setParameters(any(), any())).thenReturn(preparedStatement);
-        given(statement.execute(any(String.class))).willReturn(Boolean.TRUE);
+        //given(statement.execute(any(String.class))).willReturn(Boolean.TRUE);
         //when(statement.executeUpdate(any(String.class))).thenReturn(1);
         given(connection.createStatement()).willReturn(statement);
         given(dbConn.get()).willReturn(connection);
         given(dbMetaData.hasField(any())).willReturn(Boolean.TRUE);
         given(dbConn.getDBMetaData()).willReturn(dbMetaData);
         //when(dbConn.prepareStatement(any(String.class))).thenReturn(preparedStatement);
-        given(dbConn.prepareStatement(any(String.class), any(String.class))).willReturn(preparedStatement);
-        given(dbConn.prepareStatement(any(String.class), any(String.class), any(String.class))).willReturn(preparedStatement);
+        given(dbConn.prepareStatement(any(), any())).willReturn(preparedStatement);
         given(updateOutput.getCacheData()).willReturn(updateOutputCacheData);
         given(updateOutput.isActive()).willReturn(Boolean.TRUE);
         instance = Mockito.spy(new DbCachedOutput(dbConn));

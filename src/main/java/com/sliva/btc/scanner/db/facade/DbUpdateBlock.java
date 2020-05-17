@@ -15,11 +15,11 @@
  */
 package com.sliva.btc.scanner.db.facade;
 
+import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkState;
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import com.sliva.btc.scanner.db.DBPreparedStatement;
 import com.sliva.btc.scanner.db.DbUpdate;
-import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Preconditions.checkState;
 import com.sliva.btc.scanner.db.model.BtcBlock;
 import java.util.Collection;
 import java.util.LinkedHashSet;
@@ -34,9 +34,6 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class DbUpdateBlock extends DbUpdate {
 
-    private static int MIN_BATCH_SIZE = 1;
-    private static int MAX_BATCH_SIZE = 10000;
-    private static int MAX_INSERT_QUEUE_LENGTH = 30000;
     private static final String TABLE_NAME = "block";
     private static final String SQL_ADD = "INSERT INTO `block`(`height`,`hash`,txn_count)VALUES(?,?,?)";
     private static final String SQL_DELETE = "DELETE FROM `block` WHERE height=?";
@@ -60,18 +57,18 @@ public class DbUpdateBlock extends DbUpdate {
 
     @Override
     public int getCacheFillPercent() {
-        return cacheData.addQueue.size() * 100 / MAX_INSERT_QUEUE_LENGTH;
+        return cacheData.addQueue.size() * 100 / getMaxInsertsQueueSize();
     }
 
     @Override
     public boolean isExecuteNeeded() {
-        return cacheData.addQueue.size() >= MIN_BATCH_SIZE;
+        return cacheData.addQueue.size() >= getMinBatchSize();
     }
 
     public void add(BtcBlock btcBlock) {
         log.trace("add(btcBlock:{})", btcBlock);
         checkState(isActive(), "Instance has been closed");
-        waitFullQueue(cacheData.addQueue, MAX_INSERT_QUEUE_LENGTH);
+        waitFullQueue(cacheData.addQueue, getMaxInsertsQueueSize());
         synchronized (cacheData) {
             cacheData.addQueue.add(btcBlock);
         }
@@ -92,7 +89,7 @@ public class DbUpdateBlock extends DbUpdate {
 
     @Override
     public int executeInserts() {
-        return executeBatch(cacheData, cacheData.addQueue, psAdd, MAX_BATCH_SIZE,
+        return executeBatch(cacheData, cacheData.addQueue, psAdd, getMaxBatchSize(),
                 (t, ps) -> ps.setInt(t.getHeight()).setBytes(t.getHash().getData()).setInt(t.getTxnCount()), null);
     }
 

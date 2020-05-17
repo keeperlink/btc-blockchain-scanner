@@ -89,13 +89,12 @@ public class DbCachedTransactionTest {
 
     @Before
     public void setUp() throws Exception {
-        given(statement.execute(any(String.class))).willReturn(Boolean.TRUE);
+//        given(statement.execute(any(String.class))).willReturn(Boolean.TRUE);
         given(connection.createStatement()).willReturn(statement);
         given(dbConn.get()).willReturn(connection);
 //        given(dbMetaData.hasField(any())).willReturn(Boolean.TRUE);
 //        given(dbConn.getDBMetaData()).willReturn(dbMetaData);
-        given(dbConn.prepareStatement(any(String.class), any(String.class))).willReturn(preparedStatement);
-        given(dbConn.prepareStatement(any(String.class), any(String.class), any(String.class))).willReturn(preparedStatement);
+        given(dbConn.prepareStatement(any(), any())).willReturn(preparedStatement);
 //        given(updateTransaction.getFromCache(any())).willReturn(null);
         given(updateTransaction.isActive()).willReturn(Boolean.TRUE);
         instance = Mockito.spy(new DbCachedTransaction(dbConn));

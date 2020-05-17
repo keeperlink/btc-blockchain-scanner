@@ -39,10 +39,6 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class DbUpdateInputSpecial extends DbUpdate {
 
-    private static int MIN_BATCH_SIZE = 1;
-    private static int MAX_BATCH_SIZE = 40000;
-    private static int MAX_INSERT_QUEUE_LENGTH = 10000;
-    private static int MAX_UPDATE_QUEUE_LENGTH = 10000;
     private static final String TABLE_NAME = "input";
     private static final String SQL_ADD = "INSERT INTO input_special(transaction_id,pos,sighash_type,segwit,multisig)VALUES(?,?,?,?,?)";
     private static final String SQL_UPDATE = "UPDATE input_special SET sighash_type=?,segwit=?,multisig=? WHERE transaction_id=? AND pos=?";
@@ -72,24 +68,24 @@ public class DbUpdateInputSpecial extends DbUpdate {
 
     @Override
     public int getCacheFillPercent() {
-        return Math.max(cacheData.addQueue.size() * 100 / MAX_INSERT_QUEUE_LENGTH, cacheData.queueUpdate.size() * 100 / MAX_UPDATE_QUEUE_LENGTH);
+        return Math.max(cacheData.addQueue.size() * 100 / getMaxInsertsQueueSize(), cacheData.queueUpdate.size() * 100 / getMaxUpdatesQueueSize());
     }
 
     @Override
     public boolean isExecuteNeeded() {
-        return cacheData.addQueue.size() >= MIN_BATCH_SIZE || cacheData.queueUpdate.size() >= MIN_BATCH_SIZE;
+        return cacheData.addQueue.size() >= getMinBatchSize() || cacheData.queueUpdate.size() >= getMinBatchSize();
     }
 
     public void add(TxInputSpecial txInput) {
         log.trace("add(txInput:{})", txInput);
         checkState(isActive(), "Instance has been closed");
-        waitFullQueue(cacheData.addQueue, MAX_INSERT_QUEUE_LENGTH);
         synchronized (cacheData) {
             cacheData.addQueue.add(txInput);
             cacheData.queueMap.put(txInput, txInput);
             List<TxInputSpecial> list = cacheData.queueMapTx.computeIfAbsent(txInput.getTransactionId(), k -> new ArrayList<>());
             list.add(txInput);
         }
+        waitFullQueue(cacheData.addQueue, getMaxInsertsQueueSize());
     }
 
     public void update(TxInputSpecial txInput) {
@@ -110,9 +106,7 @@ public class DbUpdateInputSpecial extends DbUpdate {
                 cacheData.queueUpdate.add(txInput);
             }
         }
-        if (cacheData.queueUpdate.size() >= MAX_UPDATE_QUEUE_LENGTH) {
-            executeUpdates();
-        }
+        waitFullQueue(cacheData.queueUpdate, getMaxUpdatesQueueSize());
     }
 
     public boolean delete(TxInputSpecial txInput) {
@@ -148,7 +142,7 @@ public class DbUpdateInputSpecial extends DbUpdate {
     @SuppressWarnings({"UseSpecificCatch"})
     @Override
     public int executeInserts() {
-        return executeBatch(cacheData, cacheData.addQueue, psAdd, MAX_BATCH_SIZE,
+        return executeBatch(cacheData, cacheData.addQueue, psAdd, getMaxBatchSize(),
                 (t, p) -> p.setInt(t.getTransactionId()).setInt(t.getPos()).setInt(Byte.toUnsignedInt(t.getSighashType())).setBoolean(t.isSegwit()).setBoolean(t.isMultisig()),
                 executed -> {
                     synchronized (cacheData) {
@@ -159,7 +153,7 @@ public class DbUpdateInputSpecial extends DbUpdate {
 
     @Override
     public int executeUpdates() {
-        return executeBatch(cacheData, cacheData.queueUpdate, psUpdate, MAX_BATCH_SIZE,
+        return executeBatch(cacheData, cacheData.queueUpdate, psUpdate, getMaxBatchSize(),
                 (t, p) -> p.setInt(Byte.toUnsignedInt(t.getSighashType())).setBoolean(t.isSegwit()).setBoolean(t.isMultisig()).setInt(t.getTransactionId()).setInt(t.getPos()), null);
     }
 

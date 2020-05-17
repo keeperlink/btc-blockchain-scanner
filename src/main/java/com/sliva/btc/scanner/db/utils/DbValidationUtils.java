@@ -15,6 +15,7 @@
  */
 package com.sliva.btc.scanner.db.utils;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import com.sliva.btc.scanner.db.facade.DbQueryAddress;
 import com.sliva.btc.scanner.db.facade.DbQueryBlock;
@@ -26,7 +27,6 @@ import com.sliva.btc.scanner.db.facade.DbUpdateInput;
 import com.sliva.btc.scanner.db.facade.DbUpdateInputSpecial;
 import com.sliva.btc.scanner.db.facade.DbUpdateOutput;
 import com.sliva.btc.scanner.db.facade.DbUpdateTransaction;
-import static com.google.common.base.Preconditions.checkArgument;
 import com.sliva.btc.scanner.db.model.BtcBlock;
 import com.sliva.btc.scanner.db.model.BtcTransaction;
 import com.sliva.btc.scanner.util.CommandLineUtils;
@@ -80,7 +80,7 @@ public final class DbValidationUtils {
         }
         StopWatch start = StopWatch.createStarted();
         ForkJoinPool execBlocks = new ForkJoinPool(4, new ThreadFactoryWithDBConnection(dbCon, "execBlocks", false), null, false);
-        ForkJoinPool execTrans = new ForkJoinPool(6, new ThreadFactoryWithDBConnection(dbCon, "execTrans", false), null, false);
+        ForkJoinPool execTrans = new ForkJoinPool(10, new ThreadFactoryWithDBConnection(dbCon, "execTrans", false), null, false);
         DbQueryBlock queryBlock = new DbQueryBlock(dbCon);
         DbQueryTransaction queryTransaction = new DbQueryTransaction(dbCon);
         DbQueryInput queryInput = new DbQueryInput(dbCon);

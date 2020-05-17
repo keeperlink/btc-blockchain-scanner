@@ -40,10 +40,6 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class DbUpdateInput extends DbUpdate {
 
-    private static int MIN_BATCH_SIZE = 1000;
-    private static int MAX_BATCH_SIZE = 60000;
-    private static int MAX_INSERT_QUEUE_LENGTH = 120000;
-    private static int MAX_UPDATE_QUEUE_LENGTH = 10000;
     private static final String TABLE_NAME = "input";
     private static final String SQL_ADD = "INSERT INTO `input`(transaction_id,pos,in_transaction_id,in_pos)VALUES(?,?,?,?)";
     private static final String SQL_UPDATE = "UPDATE `input` SET in_transaction_id=?,in_pos=? WHERE transaction_id=? AND pos=?";
@@ -73,30 +69,29 @@ public class DbUpdateInput extends DbUpdate {
 
     @Override
     public int getCacheFillPercent() {
-        return Math.max(cacheData.addQueue.size() * 100 / MAX_INSERT_QUEUE_LENGTH, cacheData.queueUpdate.size() * 100 / MAX_UPDATE_QUEUE_LENGTH);
+        return Math.max(cacheData.addQueue.size() * 100 / getMaxInsertsQueueSize(), cacheData.queueUpdate.size() * 100 / getMaxUpdatesQueueSize());
     }
 
     @Override
     public boolean isExecuteNeeded() {
-        return cacheData.addQueue.size() >= MIN_BATCH_SIZE || cacheData.queueUpdate.size() >= MIN_BATCH_SIZE;
+        return cacheData.addQueue.size() >= getMinBatchSize() || cacheData.queueUpdate.size() >= getMinBatchSize();
     }
 
     public void add(TxInput txInput) throws SQLException {
         log.trace("add(txInput:{})", txInput);
         checkState(isActive(), "Instance has been closed");
-        waitFullQueue(cacheData.addQueue, MAX_INSERT_QUEUE_LENGTH);
         synchronized (cacheData) {
             cacheData.addQueue.add(txInput);
             cacheData.queueMap.put(txInput, txInput);
             List<TxInput> list = cacheData.queueMapTx.computeIfAbsent(txInput.getTransactionId(), id -> new ArrayList<>(1));
             list.add(txInput);
         }
+        waitFullQueue(cacheData.addQueue, getMaxInsertsQueueSize());
     }
 
     public void update(TxInput txInput) throws SQLException {
         log.trace("update(txInput:{})", txInput);
         checkState(isActive(), "Instance has been closed");
-        waitFullQueue(cacheData.queueUpdate, MAX_UPDATE_QUEUE_LENGTH);
         synchronized (cacheData) {
             TxInput txInput2 = cacheData.queueMap.get(txInput);
             boolean updatedInQueue = false;
@@ -112,6 +107,7 @@ public class DbUpdateInput extends DbUpdate {
                 cacheData.queueUpdate.add(txInput);
             }
         }
+        waitFullQueue(cacheData.queueUpdate, getMaxUpdatesQueueSize());
     }
 
     public boolean delete(TxInput txInput) {
@@ -147,7 +143,7 @@ public class DbUpdateInput extends DbUpdate {
     @SuppressWarnings({"UseSpecificCatch"})
     @Override
     public int executeInserts() {
-        return executeBatch(cacheData, cacheData.addQueue, psAdd, MAX_BATCH_SIZE,
+        return executeBatch(cacheData, cacheData.addQueue, psAdd, getMaxBatchSize(),
                 (t, p) -> p.setInt(t.getTransactionId()).setInt(t.getPos()).setInt(t.getInTransactionId()).setInt(t.getInPos()),
                 executed -> {
                     synchronized (cacheData) {
@@ -158,7 +154,7 @@ public class DbUpdateInput extends DbUpdate {
 
     @Override
     public int executeUpdates() {
-        return executeBatch(cacheData, cacheData.queueUpdate, psUpdate, MAX_BATCH_SIZE,
+        return executeBatch(cacheData, cacheData.queueUpdate, psUpdate, getMaxBatchSize(),
                 (t, p) -> p.setInt(t.getInTransactionId()).setInt(t.getInPos()).setInt(t.getTransactionId()).setInt(t.getPos()), null);
     }
 

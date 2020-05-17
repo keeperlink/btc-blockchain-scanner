@@ -38,10 +38,6 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class DbUpdateTransaction extends DbUpdate {
 
-    private static int MIN_BATCH_SIZE = 1000;
-    private static int MAX_BATCH_SIZE = 60000;
-    private static int MAX_INSERT_QUEUE_LENGTH = 120000;
-    private static int MAX_UPDATE_QUEUE_LENGTH = 5000;
     private static final String TABLE_NAME = "transaction";
     private static final String SQL_ADD = "INSERT INTO `transaction`(transaction_id,txid,block_height,nInputs,nOutputs)VALUES(?,?,?,?,?)";
     private static final String SQL_DELETE = "DELETE FROM `transaction` WHERE transaction_id=?";
@@ -66,12 +62,12 @@ public class DbUpdateTransaction extends DbUpdate {
 
     @Override
     public int getCacheFillPercent() {
-        return Math.max(cacheData.addQueue.size() * 100 / MAX_INSERT_QUEUE_LENGTH, cacheData.updateInOutQueue.size() * 100 / MAX_UPDATE_QUEUE_LENGTH);
+        return Math.max(cacheData.addQueue.size() * 100 / getMaxInsertsQueueSize(), cacheData.updateInOutQueue.size() * 100 / getMaxUpdatesQueueSize());
     }
 
     @Override
     public boolean isExecuteNeeded() {
-        return cacheData.addQueue.size() >= MIN_BATCH_SIZE || cacheData.updateInOutQueue.size() >= MIN_BATCH_SIZE;
+        return cacheData.addQueue.size() >= getMinBatchSize() || cacheData.updateInOutQueue.size() >= getMinBatchSize();
     }
 
     public void add(BtcTransaction tx) {
@@ -82,7 +78,7 @@ public class DbUpdateTransaction extends DbUpdate {
             cacheData.addMap.put(tx.getTxid(), tx);
             cacheData.addMapId.put(tx.getTransactionId(), tx);
         }
-        waitFullQueue(cacheData.addQueue, MAX_INSERT_QUEUE_LENGTH);
+        waitFullQueue(cacheData.addQueue, getMaxInsertsQueueSize());
     }
 
     public boolean delete(BtcTransaction tx) {
@@ -104,7 +100,7 @@ public class DbUpdateTransaction extends DbUpdate {
     @SuppressWarnings({"UseSpecificCatch", "CallToPrintStackTrace"})
     @Override
     public int executeInserts() {
-        return executeBatch(cacheData, cacheData.addQueue, psAdd, MAX_BATCH_SIZE,
+        return executeBatch(cacheData, cacheData.addQueue, psAdd, getMaxBatchSize(),
                 (t, p) -> p.setInt(t.getTransactionId()).setBytes(t.getTxid().getData()).setInt(t.getBlockHeight()).setInt(t.getNInputs()).setInt(t.getNOutputs()),
                 executed -> {
                     synchronized (cacheData) {
@@ -132,7 +128,7 @@ public class DbUpdateTransaction extends DbUpdate {
 
     @SuppressWarnings({"UseSpecificCatch", "CallToPrintStackTrace"})
     private int _executeUpdateInOuts() {
-        return executeBatch(cacheData, cacheData.updateInOutQueue, psUpdateInOut, MAX_BATCH_SIZE,
+        return executeBatch(cacheData, cacheData.updateInOutQueue, psUpdateInOut, getMaxBatchSize(),
                 (t, p) -> p.setInt(t.getNInputs()).setInt(t.getNOutputs()).setInt(t.getTransactionId()), null);
     }
 

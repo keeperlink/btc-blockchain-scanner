@@ -69,10 +69,18 @@ public abstract class DbUpdate implements AutoCloseable {
     private static final Duration PRINT_STATS_PERIOD = Duration.ofSeconds(30);
     private static final int MYSQL_BULK_INSERT_BUFFER_SIZE = 256 * 1024 * 1024;
     private static final int DEFAULT_DB_WRITE_THREADS = 4;
+    private static final int DEFAULT_MIN_BATCH_SIZE = 10000;
+    private static final int DEFAULT_MAX_BATCH_SIZE = 60000;
+    private static final int DEFAULT_MAX_INSERT_QUEUE_LENGTH = 240000;
+    private static final int DEFAULT_MAX_UPDATE_QUEUE_LENGTH = 60000;
     private static final boolean DEFAULT_ALLOW_PARALLEL_WRITES = false;
 
     public static final CommandLineUtils.CmdOptions CMD_OPTS = new CommandLineUtils.CmdOptions();
     public static final CommandLineUtils.CmdOption dbWriteThreadsOpt = buildOption(CMD_OPTS, null, "db-write-threads", true, "Number of DB write threads. Default: " + DEFAULT_DB_WRITE_THREADS);
+    public static final CommandLineUtils.CmdOption dbMinBatchSizeOpt = buildOption(CMD_OPTS, null, "db-min-batch-size", true, "Minimum number of records in insert/update batch in auto flushes. Default: " + DEFAULT_MIN_BATCH_SIZE);
+    public static final CommandLineUtils.CmdOption dbMaxBatchSizeOpt = buildOption(CMD_OPTS, null, "db-max-batch-size", true, "Maximum number of records in insert/update batch. Default: " + DEFAULT_MAX_BATCH_SIZE);
+    public static final CommandLineUtils.CmdOption dbMaxInsertsQueueSizeOpt = buildOption(CMD_OPTS, null, "db-max-inserts-queue-size", true, "Maximum inserts queue size. Default: " + DEFAULT_MAX_INSERT_QUEUE_LENGTH);
+    public static final CommandLineUtils.CmdOption dbMaxUpdatesQueueSizeOpt = buildOption(CMD_OPTS, null, "db-max-updates-queue-size", true, "Maximum updates queue size. Default: " + DEFAULT_MAX_UPDATE_QUEUE_LENGTH);
     public static final CommandLineUtils.CmdOption allowParallelWritesOpt = buildOption(CMD_OPTS, null, "allow-parallel-writes", true, "Allow parallel writes to the same table. Default: " + DEFAULT_ALLOW_PARALLEL_WRITES);
 
     private static volatile ExecuteDbUpdate executeDbUpdateThread;
@@ -80,10 +88,17 @@ public abstract class DbUpdate implements AutoCloseable {
     private static final Set<String> executingInstances = new HashSet<>();
     private static final Map<String, ExecStats> execStats = new HashMap<>();
     private static final StopWatch startTime = StopWatch.createStarted();
-    private static final StopWatch lastPrintedTime = StopWatch.createStarted();
     private static int dbWriteThreads = DEFAULT_DB_WRITE_THREADS;
     private static boolean allowParallelWrites = DEFAULT_ALLOW_PARALLEL_WRITES;
     private static LazyInitializer<ExecutorService> executor;
+    @Getter
+    private static int minBatchSize;
+    @Getter
+    private static int maxBatchSize;
+    @Getter
+    private static int maxInsertsQueueSize;
+    @Getter
+    private static int maxUpdatesQueueSize;
 
     @Getter
     @NonNull
@@ -93,6 +108,10 @@ public abstract class DbUpdate implements AutoCloseable {
 
     public static void applyArguments(CommandLineUtils.CmdArguments cmdArguments) {
         dbWriteThreads = cmdArguments.getOption(dbWriteThreadsOpt).map(Integer::valueOf).orElse(DEFAULT_DB_WRITE_THREADS);
+        minBatchSize = cmdArguments.getOption(dbMinBatchSizeOpt).map(Integer::valueOf).orElse(DEFAULT_MIN_BATCH_SIZE);
+        maxBatchSize = Math.max(minBatchSize, cmdArguments.getOption(dbMaxBatchSizeOpt).map(Integer::valueOf).orElse(DEFAULT_MAX_BATCH_SIZE));
+        maxInsertsQueueSize = Math.max(minBatchSize, cmdArguments.getOption(dbMaxInsertsQueueSizeOpt).map(Integer::valueOf).orElse(DEFAULT_MAX_INSERT_QUEUE_LENGTH));
+        maxUpdatesQueueSize = Math.max(minBatchSize, cmdArguments.getOption(dbMaxUpdatesQueueSizeOpt).map(Integer::valueOf).orElse(DEFAULT_MAX_UPDATE_QUEUE_LENGTH));
         allowParallelWrites = cmdArguments.getOption(allowParallelWritesOpt).map(Boolean::valueOf).orElse(DEFAULT_ALLOW_PARALLEL_WRITES);
     }
 
@@ -182,7 +201,7 @@ public abstract class DbUpdate implements AutoCloseable {
                             StringUtils.leftPad(nf.format(s.getTotalRecords()), 13),
                             StringUtils.leftPad(nf.format(s.getTotalRecords() / runtimeInSec), 9),
                             Duration.ofSeconds(TimeUnit.NANOSECONDS.toSeconds(s.getTotalRuntimeNanos())),
-                            getPercentage(TimeUnit.NANOSECONDS.toSeconds(s.getTotalRuntimeNanos()), runtimeInSec * dbWriteThreads)
+                            getPercentage(TimeUnit.NANOSECONDS.toSeconds(s.getTotalRuntimeNanos()), runtimeInSec)
                     );
                 });
             }

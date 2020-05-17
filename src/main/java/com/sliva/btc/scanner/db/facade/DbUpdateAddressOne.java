@@ -15,11 +15,11 @@
  */
 package com.sliva.btc.scanner.db.facade;
 
+import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkState;
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import com.sliva.btc.scanner.db.DBPreparedStatement;
 import com.sliva.btc.scanner.db.DbUpdate;
-import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Preconditions.checkState;
 import static com.sliva.btc.scanner.db.facade.DbQueryAddressOne.getAddressTableName;
 import static com.sliva.btc.scanner.db.facade.DbQueryAddressOne.updateQueryTableName;
 import com.sliva.btc.scanner.db.model.BinaryAddress;
@@ -42,10 +42,6 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class DbUpdateAddressOne extends DbUpdate {
 
-    private static int MIN_BATCH_SIZE = 1000;
-    private static int MAX_BATCH_SIZE = 60000;
-    private static int MAX_INSERT_QUEUE_LENGTH = 120000;
-    private static int MAX_UPDATE_QUEUE_LENGTH = 10000;
     private static final String SQL_ADD = "INSERT INTO `address_table_name`(address_id,`address`,wallet_id)VALUES(?,?,?)";
     private static final String SQL_ADD_NO_WALLET_ID = "INSERT INTO `address_table_name`(address_id,`address`)VALUES(?,?)";
     private static final String SQL_UPDATE_WALLET = "UPDATE `address_table_name` SET wallet_id=? WHERE address_id=?";
@@ -74,18 +70,17 @@ public class DbUpdateAddressOne extends DbUpdate {
 
     @Override
     public int getCacheFillPercent() {
-        return Math.max(cacheData.addQueue.size() * 100 / MAX_INSERT_QUEUE_LENGTH, cacheData.updateWalletQueue.size() * 100 / MAX_UPDATE_QUEUE_LENGTH);
+        return Math.max(cacheData.addQueue.size() * 100 / getMaxInsertsQueueSize(), cacheData.updateWalletQueue.size() * 100 / getMaxUpdatesQueueSize());
     }
 
     @Override
     public boolean isExecuteNeeded() {
-        return cacheData.addQueue.size() >= MIN_BATCH_SIZE || cacheData.updateWalletQueue.size() >= MIN_BATCH_SIZE;
+        return cacheData.addQueue.size() >= getMinBatchSize() || cacheData.updateWalletQueue.size() >= getMinBatchSize();
     }
 
     public void add(BtcAddress addr) {
         log.trace("add(): addr={}", addr);
         checkState(isActive(), "Instance has been closed");
-        waitFullQueue(cacheData.addQueue, MAX_INSERT_QUEUE_LENGTH);
         synchronized (cacheData) {
             if (!cacheData.addMap.containsKey(addr.getAddress()) && !cacheData.addMapId.containsKey(addr.getAddressId())) {
                 cacheData.addMap.put(addr.getAddress(), addr);
@@ -96,6 +91,7 @@ public class DbUpdateAddressOne extends DbUpdate {
                         addr, cacheData.addMap.get(addr.getAddress()), cacheData.addMapId.get(addr.getAddressId()));
             }
         }
+        waitFullQueue(cacheData.addQueue, getMaxInsertsQueueSize());
     }
 
     public void updateWallet(BtcAddress btcAddress) {
@@ -118,14 +114,12 @@ public class DbUpdateAddressOne extends DbUpdate {
                 cacheData.updateWalletQueue.add(btcAddress);
             }
         }
-        if (cacheData.updateWalletQueue.size() >= MAX_UPDATE_QUEUE_LENGTH) {
-            _executeUpdateWallet();
-        }
+        waitFullQueue(cacheData.updateWalletQueue, getMaxUpdatesQueueSize());
     }
 
     @Override
     public int executeInserts() {
-        return executeBatch(cacheData, cacheData.addQueue, psAdd, MAX_BATCH_SIZE,
+        return executeBatch(cacheData, cacheData.addQueue, psAdd, getMaxBatchSize(),
                 (t, p) -> p.setInt(t.getAddressId()).setBytes(t.getAddress().getData()).ignoreExtraParam().setInt(t.getWalletId()),
                 executed -> {
                     synchronized (cacheData) {
@@ -142,7 +136,7 @@ public class DbUpdateAddressOne extends DbUpdate {
     }
 
     private int _executeUpdateWallet() {
-        return executeBatch(cacheData, cacheData.updateWalletQueue, psUpdateWallet, MAX_BATCH_SIZE,
+        return executeBatch(cacheData, cacheData.updateWalletQueue, psUpdateWallet, getMaxBatchSize(),
                 (t, p) -> p.setInt(t.getWalletId()).setInt(t.getAddressId()), null);
     }
 

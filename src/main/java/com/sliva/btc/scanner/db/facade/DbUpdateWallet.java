@@ -15,11 +15,11 @@
  */
 package com.sliva.btc.scanner.db.facade;
 
+import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkState;
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import com.sliva.btc.scanner.db.DBPreparedStatement;
 import com.sliva.btc.scanner.db.DbUpdate;
-import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Preconditions.checkState;
 import com.sliva.btc.scanner.db.model.BtcWallet;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -36,9 +36,6 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class DbUpdateWallet extends DbUpdate {
 
-    private static int MIN_BATCH_SIZE = 1;
-    private static int MAX_BATCH_SIZE = 5000;
-    private static int MAX_INSERT_QUEUE_LENGTH = 2000;
     private static final String TABLE_NAME = "wallet";
     private static final String SQL_ADD = "INSERT INTO wallet(wallet_id,name,details)VALUES(?,?,?)";
     private final DBPreparedStatement psAdd;
@@ -61,12 +58,12 @@ public class DbUpdateWallet extends DbUpdate {
 
     @Override
     public int getCacheFillPercent() {
-        return cacheData.addQueue.size() * 100 / MAX_INSERT_QUEUE_LENGTH;
+        return cacheData.addQueue.size() * 100 / getMaxInsertsQueueSize();
     }
 
     @Override
     public boolean isExecuteNeeded() {
-        return cacheData.addQueue.size() >= MIN_BATCH_SIZE;
+        return cacheData.addQueue.size() >= getMinBatchSize();
     }
 
     @NonNull
@@ -85,7 +82,6 @@ public class DbUpdateWallet extends DbUpdate {
         checkArgument(wallet != null, "Argument 'wallet' is null");
         log.trace("add(wallet:{})", wallet);
         checkState(isActive(), "Instance has been closed");
-        waitFullQueue(cacheData.addQueue, MAX_INSERT_QUEUE_LENGTH);
         BtcWallet wallet2 = wallet;
         if (wallet2.getWalletId() == 0) {
             wallet2 = wallet2.toBuilder().walletId(getNextWalletId()).build();
@@ -93,12 +89,13 @@ public class DbUpdateWallet extends DbUpdate {
         synchronized (cacheData) {
             cacheData.addQueue.add(wallet2);
         }
+        waitFullQueue(cacheData.addQueue, getMaxInsertsQueueSize());
         return wallet;
     }
 
     @Override
     public int executeInserts() {
-        return executeBatch(cacheData, cacheData.addQueue, psAdd, MAX_BATCH_SIZE,
+        return executeBatch(cacheData, cacheData.addQueue, psAdd, getMaxBatchSize(),
                 (t, ps) -> ps.setInt(t.getWalletId()).setString(t.getName()).setString(t.getDescription()), null);
     }
 
