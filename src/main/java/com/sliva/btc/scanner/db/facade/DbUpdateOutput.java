@@ -15,7 +15,6 @@
  */
 package com.sliva.btc.scanner.db.facade;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import com.sliva.btc.scanner.db.DBPreparedStatement;
@@ -59,16 +58,11 @@ public class DbUpdateOutput extends DbUpdate {
     private final DBPreparedStatement psUpdateAmount;
     @Getter
     @NonNull
-    private final CacheData cacheData;
+    private final CacheData cacheData = new CacheData();
     private final boolean hasSpentField;
 
     public DbUpdateOutput(DBConnectionSupplier conn) {
-        this(conn, new CacheData());
-    }
-
-    public DbUpdateOutput(DBConnectionSupplier conn, CacheData cacheData) {
         super(TABLE_NAME, conn);
-        checkArgument(cacheData != null, "Argument 'cacheData' is null");
         this.hasSpentField = conn.getDBMetaData().hasField(TABLE_NAME + ".spent");
         this.psAdd = conn.prepareStatement(hasSpentField ? SQL_ADD : SQL_ADD.replace(",spent", "").replace(",?)", ")"));
         this.psDelete = conn.prepareStatement(SQL_DELETE, "output.transaction_id");
@@ -78,7 +72,6 @@ public class DbUpdateOutput extends DbUpdate {
                 : conn.prepareNonExecutableStatement(SQL_UPDATE_SPENT, "No 'spent' field in table 'output'");
         this.psUpdateAddress = conn.prepareStatement(SQL_UPDATE_ADDRESS, "output.transaction_id");
         this.psUpdateAmount = conn.prepareStatement(SQL_UPDATE_AMOUNT, "output.transaction_id");
-        this.cacheData = cacheData;
     }
 
     @Override

@@ -29,7 +29,6 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import lombok.Getter;
-import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -50,8 +49,6 @@ public class DbUpdateTransaction extends DbUpdate {
     private final DBPreparedStatement psAdd;
     private final DBPreparedStatement psDelete;
     private final DBPreparedStatement psUpdateInOut;
-    @Getter
-    @NonNull
     private final CacheData cacheData;
 
     public DbUpdateTransaction(DBConnectionSupplier conn) {
@@ -80,12 +77,12 @@ public class DbUpdateTransaction extends DbUpdate {
     public void add(BtcTransaction tx) {
         log.trace("add(t:{})", tx);
         checkState(isActive(), "Instance has been closed");
-        waitFullQueue(cacheData.addQueue, MAX_INSERT_QUEUE_LENGTH);
         synchronized (cacheData) {
             cacheData.addQueue.add(tx);
             cacheData.addMap.put(tx.getTxid(), tx);
             cacheData.addMapId.put(tx.getTransactionId(), tx);
         }
+        waitFullQueue(cacheData.addQueue, MAX_INSERT_QUEUE_LENGTH);
     }
 
     public boolean delete(BtcTransaction tx) {
@@ -121,6 +118,18 @@ public class DbUpdateTransaction extends DbUpdate {
         return _executeUpdateInOuts();
     }
 
+    BtcTransaction getFromCache(TXID txid) {
+        synchronized (cacheData) {
+            return cacheData.addMap.get(txid);
+        }
+    }
+
+    BtcTransaction getFromCache(int transactionId) {
+        synchronized (cacheData) {
+            return cacheData.addMapId.get(transactionId);
+        }
+    }
+
     @SuppressWarnings({"UseSpecificCatch", "CallToPrintStackTrace"})
     private int _executeUpdateInOuts() {
         return executeBatch(cacheData, cacheData.updateInOutQueue, psUpdateInOut, MAX_BATCH_SIZE,
@@ -128,7 +137,7 @@ public class DbUpdateTransaction extends DbUpdate {
     }
 
     @Getter
-    public static class CacheData {
+    private static class CacheData {
 
         private final Collection<BtcTransaction> addQueue = new LinkedHashSet<>();
         private final Map<TXID, BtcTransaction> addMap = new HashMap<>();

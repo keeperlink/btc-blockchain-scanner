@@ -15,14 +15,15 @@
  */
 package com.sliva.btc.scanner.db;
 
-import com.sliva.btc.scanner.db.utils.BatchExecutor;
 import static com.google.common.base.Preconditions.checkArgument;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.sliva.btc.scanner.db.DBPreparedStatement.ParamSetter;
+import com.sliva.btc.scanner.db.utils.BatchExecutor;
 import com.sliva.btc.scanner.util.BatchUtils;
 import com.sliva.btc.scanner.util.CommandLineUtils;
 import static com.sliva.btc.scanner.util.CommandLineUtils.buildOption;
 import com.sliva.btc.scanner.util.LazyInitializer;
+import com.sliva.btc.scanner.util.TimerTaskWrapper;
 import com.sliva.btc.scanner.util.Utils;
 import static com.sliva.btc.scanner.util.Utils.getPercentage;
 import static com.sliva.btc.scanner.util.Utils.synchronize;
@@ -39,6 +40,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.Timer;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -54,6 +56,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import static org.apache.commons.lang3.StringUtils.rightPad;
 import org.apache.commons.lang3.time.StopWatch;
 
 /**
@@ -76,6 +79,7 @@ public abstract class DbUpdate implements AutoCloseable {
     private static final Collection<DbUpdate> dbUpdateInstances = new ArrayList<>();
     private static final Set<String> executingInstances = new HashSet<>();
     private static final Map<String, ExecStats> execStats = new HashMap<>();
+    private static final StopWatch startTime = StopWatch.createStarted();
     private static final StopWatch lastPrintedTime = StopWatch.createStarted();
     private static int dbWriteThreads = DEFAULT_DB_WRITE_THREADS;
     private static boolean allowParallelWrites = DEFAULT_ALLOW_PARALLEL_WRITES;
@@ -108,20 +112,6 @@ public abstract class DbUpdate implements AutoCloseable {
         staticInit();
     }
 
-    private static void staticInit() {
-        synchronized (ExecuteDbUpdate.class) {
-            if (executeDbUpdateThread == null) {
-                executor = new LazyInitializer<>(() -> new ThreadPoolExecutor(dbWriteThreads, dbWriteThreads,
-                        0L, TimeUnit.MILLISECONDS,
-                        new LinkedBlockingQueue<>(1),
-                        new ThreadFactoryBuilder().setDaemon(true).setNameFormat("DBWriteThread-%d").build()));
-                ExecuteDbUpdate t = new ExecuteDbUpdate(executor);
-                t.start();
-                executeDbUpdateThread = t;
-            }
-        }
-    }
-
     public void flushCache() {
         log.trace("flushCache() Called");
         while (executingInstances.contains(getTableName())) {
@@ -150,15 +140,6 @@ public abstract class DbUpdate implements AutoCloseable {
 
     public abstract int executeUpdates();
 
-    @SneakyThrows(InterruptedException.class)
-    protected static void waitFullQueue(Collection<?> queue, int maxQueueLength) {
-        while (queue.size() >= maxQueueLength) {
-            synchronized (queue) {
-                queue.wait(100);
-            }
-        }
-    }
-
     /**
      * Execute batch of statements.
      *
@@ -186,6 +167,49 @@ public abstract class DbUpdate implements AutoCloseable {
             }
         });
         return batchToRun.map(Collection::size).orElse(0);
+    }
+
+    public static void printStats() {
+        if (log.isDebugEnabled()) {
+            NumberFormat nf = NumberFormat.getIntegerInstance();
+            long runtimeInSec = Math.max(TimeUnit.NANOSECONDS.toSeconds(startTime.getNanoTime()), 1);
+            synchronized (execStats) {
+                execStats.entrySet().forEach((e) -> {
+                    ExecStats s = e.getValue();
+                    log.debug("{} Executions: {} Records:{}, speed:{} rec/sec, runtime: {} ({}%)",
+                            rightPad(e.getKey(), 15),
+                            StringUtils.leftPad(nf.format(s.getExecutions()), 13),
+                            StringUtils.leftPad(nf.format(s.getTotalRecords()), 13),
+                            StringUtils.leftPad(nf.format(s.getTotalRecords() / runtimeInSec), 9),
+                            Duration.ofSeconds(TimeUnit.NANOSECONDS.toSeconds(s.getTotalRuntimeNanos())),
+                            getPercentage(TimeUnit.NANOSECONDS.toSeconds(s.getTotalRuntimeNanos()), runtimeInSec * dbWriteThreads)
+                    );
+                });
+            }
+        }
+    }
+
+    @SneakyThrows(InterruptedException.class)
+    protected static void waitFullQueue(Collection<?> queue, int maxQueueLength) {
+        while (queue.size() >= maxQueueLength) {
+            synchronized (queue) {
+                queue.wait(100);
+            }
+        }
+    }
+
+    private static void staticInit() {
+        synchronized (ExecuteDbUpdate.class) {
+            if (executeDbUpdateThread == null) {
+                executor = new LazyInitializer<>(() -> new ThreadPoolExecutor(dbWriteThreads, dbWriteThreads,
+                        0L, TimeUnit.MILLISECONDS,
+                        new LinkedBlockingQueue<>(1),
+                        new ThreadFactoryBuilder().setDaemon(true).setNameFormat("DBWriteThread-%d").build()));
+                ExecuteDbUpdate t = new ExecuteDbUpdate(executor);
+                t.start();
+                executeDbUpdateThread = t;
+            }
+        }
     }
 
     private int executeSync(String execId) {
@@ -240,34 +264,16 @@ public abstract class DbUpdate implements AutoCloseable {
         }
     }
 
-    public static void printStats() {
-        if (log.isDebugEnabled() && executeDbUpdateThread != null) {
-            NumberFormat nf = NumberFormat.getIntegerInstance();
-            long runtimeInSec = Math.max(TimeUnit.NANOSECONDS.toSeconds(executeDbUpdateThread.startTime.getNanoTime()), 1);
-            synchronized (execStats) {
-                execStats.entrySet().forEach((e) -> {
-                    ExecStats s = e.getValue();
-                    log.debug("{}\t Executions: {},\t Records: {},\t speed: {} rec/sec,\t runtime: {}\t ({}%)",
-                            StringUtils.rightPad(e.getKey(), 16),
-                            nf.format(s.getExecutions()),
-                            nf.format(s.getTotalRecords()),
-                            nf.format(s.getTotalRecords() / runtimeInSec),
-                            Duration.ofMillis(TimeUnit.NANOSECONDS.toMillis(s.getTotalRuntimeNanos())),
-                            getPercentage(TimeUnit.NANOSECONDS.toSeconds(s.getTotalRuntimeNanos()), runtimeInSec * dbWriteThreads)
-                    );
-                });
-            }
-        }
-    }
-
-    private static final class ExecuteDbUpdate extends Thread {
+    private static class ExecuteDbUpdate extends Thread {
 
         private final LazyInitializer<ExecutorService> executor;
-        private final StopWatch startTime = StopWatch.createStarted();
+        private final Timer timer = new Timer();
 
         private ExecuteDbUpdate(LazyInitializer<ExecutorService> executor) {
             super("ExecuteDbUpdate");
             this.executor = executor;
+            long msec = PRINT_STATS_PERIOD.toMillis();
+            timer.scheduleAtFixedRate(new TimerTaskWrapper(DbUpdate::printStats), msec, msec);
         }
 
         @Override
@@ -293,7 +299,6 @@ public abstract class DbUpdate implements AutoCloseable {
                         }
                         dbUpdateMaxFilled.ifPresent(DbUpdate::executeAsync);
                         executed = dbUpdateMaxFilled.isPresent();
-                        printStatsCheckPeriod();
                     } catch (Exception e) {
                         log.error(e.getMessage(), e);
                     } finally {
@@ -308,14 +313,7 @@ public abstract class DbUpdate implements AutoCloseable {
                     log.info(getName() + ": FINISHED");
                     executeDbUpdateThread = null;
                 }
-            }
-        }
-
-        private static void printStatsCheckPeriod() {
-            if (lastPrintedTime.getNanoTime() > PRINT_STATS_PERIOD.toNanos()) {
-                lastPrintedTime.reset();
-                lastPrintedTime.start();
-                printStats();
+                timer.cancel();
             }
         }
     }

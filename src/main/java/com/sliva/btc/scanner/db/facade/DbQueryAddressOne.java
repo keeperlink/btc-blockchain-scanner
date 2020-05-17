@@ -15,12 +15,13 @@
  */
 package com.sliva.btc.scanner.db.facade;
 
-import com.sliva.btc.scanner.db.DBConnectionSupplier;
-import com.sliva.btc.scanner.db.DBPreparedStatement;
-import com.sliva.btc.scanner.db.utils.DBUtils;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
+import com.sliva.btc.scanner.db.DBConnectionSupplier;
+import com.sliva.btc.scanner.db.DBPreparedStatement;
+import com.sliva.btc.scanner.db.model.BinaryAddress;
 import com.sliva.btc.scanner.db.model.BtcAddress;
+import com.sliva.btc.scanner.db.utils.DBUtils;
 import com.sliva.btc.scanner.src.SrcAddressType;
 import java.util.Optional;
 import lombok.Getter;
@@ -84,6 +85,7 @@ public class DbQueryAddressOne {
 
     @NonNull
     public Optional<BtcAddress> findByAddress(byte[] address) {
+        checkArgument(address != null, "Argument 'address' is null");
         checkState(addressType != null, "Method not supported due to instance created with no-arguments constructor");
         return DBUtils.readInteger(psFindByAddress.setParameters(ps -> ps.setBytes(address)))
                 .map(addressId -> BtcAddress.builder()
@@ -91,6 +93,12 @@ public class DbQueryAddressOne {
                 .addressId(addressId)
                 .address(address)
                 .build());
+    }
+
+    @NonNull
+    public Optional<BtcAddress> findByAddress(BinaryAddress address) {
+        checkArgument(address != null, "Argument 'address' is null");
+        return findByAddress(address.getData());
     }
 
     @NonNull
@@ -111,6 +119,7 @@ public class DbQueryAddressOne {
 
     @NonNull
     private String fixTableName(String query) {
+        checkArgument(query != null, "Argument 'query' is null");
         return query.replaceAll(ADDRESS_TABLE_NAME, getTableName());
     }
 

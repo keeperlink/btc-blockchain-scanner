@@ -63,6 +63,7 @@ public class DbCachedOutputTest {
     private Statement statement;
     //@Spy
     private DbCachedOutput instance;
+    private DbUpdateOutput.CacheData updateOutputCacheData = new DbUpdateOutput.CacheData();
 
     private final int transactionId = 1;
     private final short pos = 2;
@@ -97,6 +98,8 @@ public class DbCachedOutputTest {
         //when(dbConn.prepareStatement(any(String.class))).thenReturn(preparedStatement);
         given(dbConn.prepareStatement(any(String.class), any(String.class))).willReturn(preparedStatement);
         given(dbConn.prepareStatement(any(String.class), any(String.class), any(String.class))).willReturn(preparedStatement);
+        given(updateOutput.getCacheData()).willReturn(updateOutputCacheData);
+        given(updateOutput.isActive()).willReturn(Boolean.TRUE);
         instance = Mockito.spy(new DbCachedOutput(dbConn));
         FieldSetter.setField(instance, DbCachedOutput.class.getDeclaredField("queryOutput"), queryOutput);
         FieldSetter.setField(instance, DbCachedOutput.class.getDeclaredField("updateOutput"), updateOutput);

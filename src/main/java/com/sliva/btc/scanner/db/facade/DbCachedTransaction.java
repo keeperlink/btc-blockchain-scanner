@@ -17,19 +17,22 @@ package com.sliva.btc.scanner.db.facade;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
-import com.google.common.cache.Cache;
-import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.RemovalNotification;
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import com.sliva.btc.scanner.db.model.BtcTransaction;
 import com.sliva.btc.scanner.db.model.TXID;
+import com.sliva.btc.scanner.util.CacheDualKeyNullable;
+import com.sliva.btc.scanner.util.CommandLineUtils;
+import static com.sliva.btc.scanner.util.CommandLineUtils.buildOption;
 import com.sliva.btc.scanner.util.LazyInitializer;
+import static com.sliva.btc.scanner.util.LogUtils.printCacheStats;
+import com.sliva.btc.scanner.util.TimerTaskWrapper;
 import static com.sliva.btc.scanner.util.Utils.optionalBuilder2o;
 import java.util.List;
 import java.util.Optional;
+import java.util.Timer;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import lombok.Getter;
 import lombok.NonNull;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -41,26 +44,44 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class DbCachedTransaction implements AutoCloseable {
 
-    private static final int MAX_CACHE_SIZE = 500_000;
+    private static final int DEFAULT_MAX_CACHE_SIZE = 300_000;
+    public static final CommandLineUtils.CmdOptions CMD_OPTS = new CommandLineUtils.CmdOptions();
+    public static final CommandLineUtils.CmdOption transactionCacheSizeOpt = buildOption(CMD_OPTS, null, "transaction-cache-size", true, "Transactions cache size. Default: " + DEFAULT_MAX_CACHE_SIZE);
+    public static final CommandLineUtils.CmdOption printCacheStatsOpt = buildOption(CMD_OPTS, null, "print-cache-stats", true, "Print cache stats period in seconds. Default: 0 (off)");
+    private static int transactionCacheSize = DEFAULT_MAX_CACHE_SIZE;
+    private static int printCacheStatsPeriodSec;
+    public static boolean CACHE_BY_ID_ENABLED = true;
+    public static boolean CACHE_BY_TXID_ENABLED = true;
+
     private final DbUpdateTransaction updateTransaction;
     private final DbQueryTransaction queryTransaction;
     private final LazyInitializer<AtomicInteger> lastTransactionId;
     private final Object syncAdd = new Object();
-    @Getter
-    @NonNull
-    private final CacheData cacheData;
+    private final CacheDualKeyNullable<Integer, TXID, BtcTransaction> cache = new CacheDualKeyNullable<>(
+            CACHE_BY_ID_ENABLED, CACHE_BY_TXID_ENABLED,
+            b -> b.concurrencyLevel(Runtime.getRuntime().availableProcessors()).maximumSize(transactionCacheSize).recordStats(),
+            BtcTransaction::getTransactionId, BtcTransaction::getTxid);
+    private final Timer timer = new Timer();
 
-    public DbCachedTransaction(DBConnectionSupplier conn) {
-        this(conn, new CacheData());
+    public static void applyArguments(CommandLineUtils.CmdArguments cmdArguments) {
+        transactionCacheSize = cmdArguments.getOption(transactionCacheSizeOpt).map(Integer::valueOf).orElse(DEFAULT_MAX_CACHE_SIZE);
+        printCacheStatsPeriodSec = cmdArguments.getOption(printCacheStatsOpt).map(Integer::valueOf).orElse(0);
     }
 
-    public DbCachedTransaction(DBConnectionSupplier conn, CacheData cacheData) {
+    public DbCachedTransaction(DBConnectionSupplier conn) {
         checkArgument(conn != null, "Argument 'conn' is null");
-        checkArgument(cacheData != null, "Argument 'cacheData' is null");
-        this.cacheData = cacheData;
-        updateTransaction = new DbUpdateTransaction(conn, cacheData.updateCachedData);
+        updateTransaction = new DbUpdateTransaction(conn);
         queryTransaction = new DbQueryTransaction(conn);
         lastTransactionId = new LazyInitializer<>(() -> new AtomicInteger(queryTransaction.getLastTransactionId().orElse(0)));
+        if (printCacheStatsPeriodSec > 0) {
+            long msec = TimeUnit.SECONDS.toMillis(printCacheStatsPeriodSec);
+            if (CACHE_BY_ID_ENABLED) {
+                timer.scheduleAtFixedRate(new TimerTaskWrapper(() -> printCacheStats("transactions-1", cache.getStats1())), msec, msec);
+            }
+            if (CACHE_BY_TXID_ENABLED) {
+                timer.scheduleAtFixedRate(new TimerTaskWrapper(() -> printCacheStats("transactions-2", cache.getStats2())), msec, msec);
+            }
+        }
     }
 
     @NonNull
@@ -70,12 +91,12 @@ public class DbCachedTransaction implements AutoCloseable {
         boolean txExist;
         BtcTransaction result = btcTransaction;
         synchronized (syncAdd) {
-            txExist = getIfPresentInCache(btcTransaction.getTxid()).isPresent();
+            txExist = getIfPresentInCache(result.getTxid()).isPresent();
             if (!txExist) {
                 if (result.getTransactionId() == 0) {
-                    result = result.toBuilder().transactionId(getNextTransactionId()).build();
+                    result = result.toBuilder().transactionId(lastTransactionId.get().incrementAndGet()).build();
                 }
-                updateCache(result);
+                cache.put(result);
             }
         }
         if (!txExist) {
@@ -86,16 +107,15 @@ public class DbCachedTransaction implements AutoCloseable {
 
     public void delete(BtcTransaction tx) {
         checkArgument(tx != null, "Argument 'tx' is null");
-        removeFromCache(tx);
+        checkState(updateTransaction.isActive(), "Instance has been closed");
+        cache.invalidate(tx);
         updateTransaction.delete(tx);
     }
 
     @NonNull
     @SneakyThrows(ExecutionException.class)
     public Optional<BtcTransaction> getTransaction(int transactionId) {
-        return cacheData.cacheMapId.get(transactionId, () -> updateMapId(optionalBuilder2o(
-                updateTransaction.getCacheData().getAddMapId().get(transactionId),
-                () -> queryTransaction.findTransaction(transactionId))));
+        return cache.get1(transactionId, this::_getTransactionNoCache);
     }
 
     /**
@@ -109,9 +129,7 @@ public class DbCachedTransaction implements AutoCloseable {
     public Optional<BtcTransaction> getTransaction(String txid) {
         checkArgument(txid != null, "Argument 'txid' is null");
         TXID ttxid = TXID.build(txid);
-        return cacheData.cacheMap.get(ttxid, () -> updateMap(optionalBuilder2o(
-                updateTransaction.getCacheData().getAddMap().get(ttxid),
-                () -> queryTransaction.findTransaction(txid))));
+        return cache.get2(ttxid, this::_getTransactionNoCache);
     }
 
     /**
@@ -127,27 +145,25 @@ public class DbCachedTransaction implements AutoCloseable {
     public Optional<BtcTransaction> getTransactionSimple(String txid) {
         checkArgument(txid != null, "Argument 'txid' is null");
         TXID ttxid = TXID.build(txid);
-        return cacheData.cacheMap.get(ttxid, () -> updateMap(optionalBuilder2o(
-                updateTransaction.getCacheData().getAddMap().get(ttxid),
-                () -> queryTransaction.findTransactionId(txid).map(id -> BtcTransaction.builder().transactionId(id).txid(ttxid.getData()).build()))));
+        return cache.get2(ttxid, this::_getTransactionSimpleNoCache);
     }
 
     @NonNull
     public List<BtcTransaction> getTransactionsInBlock(int blockHeight) {
         List<BtcTransaction> result = queryTransaction.getTransactionsInBlock(blockHeight);
-        result.forEach(this::updateCache);
+        result.forEach(cache::put);
         return result;
     }
 
     @NonNull
     public Optional<BtcTransaction> getIfPresentInCache(int transactionId) {
-        return Optional.ofNullable(cacheData.cacheMapId.getIfPresent(transactionId)).filter(Optional::isPresent).map(Optional::get);
+        return Optional.ofNullable(cache.getIfPresent1(transactionId)).filter(Optional::isPresent).map(Optional::get);
     }
 
     @NonNull
     public Optional<BtcTransaction> getIfPresentInCache(TXID txid) {
         checkArgument(txid != null, "Argument 'txid' is null");
-        return Optional.ofNullable(cacheData.cacheMap.getIfPresent(txid)).filter(Optional::isPresent).map(Optional::get);
+        return Optional.ofNullable(cache.getIfPresent2(txid)).filter(Optional::isPresent).map(Optional::get);
     }
 
     @NonNull
@@ -156,66 +172,46 @@ public class DbCachedTransaction implements AutoCloseable {
         return getIfPresentInCache(new TXID(txid));
     }
 
+    public boolean isPresentInCache(int transactionId) {
+        return cache.isPresent1(transactionId);
+    }
+
+    public boolean isPresentInCache(TXID txid) {
+        checkArgument(txid != null, "Argument 'txid' is null");
+        return cache.isPresent2(txid);
+    }
+
     @Override
     public void close() {
         log.debug("DbCachedTransaction.close()");
         updateTransaction.close();
-        cacheData.reset();
+        cache.invalidateAll();
+        timer.cancel();
     }
 
-    private void updateCache(BtcTransaction btcTransaction) {
-        checkArgument(btcTransaction != null, "Argument 'btcTransaction' is null");
-        cacheData.cacheMap.put(btcTransaction.getTxid(), Optional.of(btcTransaction));
-        cacheData.cacheMapId.put(btcTransaction.getTransactionId(), Optional.of(btcTransaction));
+    @NonNull
+    private Optional<BtcTransaction> _getTransactionNoCache(int transactionId) {
+        return optionalBuilder2o(
+                updateTransaction.getFromCache(transactionId),
+                transactionId, queryTransaction::findTransaction);
     }
 
-    private void removeFromCache(BtcTransaction tx) {
-        cacheData.cacheMap.invalidate(tx.getTxid());
-        cacheData.cacheMapId.invalidate(tx.getTransactionId());
+    @NonNull
+    private Optional<BtcTransaction> _getTransactionNoCache(TXID txid) {
+        return optionalBuilder2o(
+                updateTransaction.getFromCache(txid),
+                txid, queryTransaction::findTransaction);
     }
 
-    private Optional<BtcTransaction> updateMap(Optional<BtcTransaction> ot) {
-        ot.ifPresent(t -> cacheData.cacheMap.put(t.getTxid(), ot));
-        return ot;
+    @NonNull
+    private Optional<BtcTransaction> _getTransactionSimpleNoCache(TXID txid) {
+        return optionalBuilder2o(
+                updateTransaction.getFromCache(txid),
+                txid, this::_loadTransactionSimple);
     }
 
-    private Optional<BtcTransaction> updateMapId(Optional<BtcTransaction> ot) {
-        ot.ifPresent(t -> cacheData.cacheMapId.put(t.getTransactionId(), ot));
-        return ot;
-    }
-
-    private int getNextTransactionId() {
-        return lastTransactionId.get().incrementAndGet();
-    }
-
-    @Getter
-    private static class CacheData {
-
-        private boolean active = true;
-        private final Cache<TXID, Optional<BtcTransaction>> cacheMap = CacheBuilder.newBuilder()
-                .concurrencyLevel(Runtime.getRuntime().availableProcessors())
-                .maximumSize(MAX_CACHE_SIZE)
-                .recordStats()
-                .removalListener((RemovalNotification<TXID, Optional<BtcTransaction>> notification)
-                        -> notification.getValue().filter(a -> active).map(BtcTransaction::getTransactionId).ifPresent(this::remove)
-                ).build();
-        private final Cache<Integer, Optional<BtcTransaction>> cacheMapId = CacheBuilder.newBuilder()
-                .concurrencyLevel(Runtime.getRuntime().availableProcessors())
-                .maximumSize(MAX_CACHE_SIZE)
-                .recordStats()
-                .removalListener((RemovalNotification<Integer, Optional<BtcTransaction>> notification)
-                        -> notification.getValue().filter(a -> active).map(BtcTransaction::getTxid).ifPresent(cacheMap::invalidate)
-                ).build();
-        private final DbUpdateTransaction.CacheData updateCachedData = new DbUpdateTransaction.CacheData();
-
-        private void remove(Integer key) {
-            cacheMapId.invalidate(key);
-        }
-
-        private void reset() {
-            active = false;
-            cacheMap.invalidateAll();
-            cacheMapId.invalidateAll();
-        }
+    @NonNull
+    private Optional<BtcTransaction> _loadTransactionSimple(TXID txid) {
+        return queryTransaction.findTransactionId(txid).map(id -> BtcTransaction.builder().transactionId(id).txid(txid.getData()).build());
     }
 }

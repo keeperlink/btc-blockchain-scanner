@@ -231,15 +231,17 @@ public final class Utils {
      * Return Optional value of first non-null and non-empty elements from
      * arguments.
      *
+     * @param <A> Type of function argument
      * @param <T> Element data type
      * @param value1 first value to evaluate
-     * @param value2supplier second optional value supplier
+     * @param argument argument for second choice function
+     * @param value2supplier second choice optional value supplier
      * @return Optional of element or empty if none found
      */
     @NonNull
-    public static <T> Optional<T> optionalBuilder2o(T value1, Supplier<Optional<T>> value2supplier) {
+    public static <A, T> Optional<T> optionalBuilder2o(T value1, A argument, Function<A, Optional<T>> value2supplier) {
         checkArgument(value2supplier != null, "Argument 'value2supplier' is null");
-        return value1 != null ? Optional.ofNullable(value1) : value2supplier.get();
+        return value1 != null ? Optional.ofNullable(value1) : value2supplier.apply(argument);
     }
 
     /**

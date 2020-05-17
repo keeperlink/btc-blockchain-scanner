@@ -44,6 +44,7 @@ public class CacheDualKeyNullableTest {
     }
     private static final int MAX_CACHE_SIZE = 1;
     CacheDualKeyNullable<String, Integer, DualKeyClass> instance = new CacheDualKeyNullable<>(
+            true, true,
             b -> b.maximumSize(MAX_CACHE_SIZE),
             DualKeyClass::getKey1, DualKeyClass::getKey2);
     private final String key1 = "key1";
@@ -191,7 +192,7 @@ public class CacheDualKeyNullableTest {
     @Test
     public void testGet1() throws Exception {
         Optional<DualKeyClass> expResult = Optional.of(value);
-        Optional<DualKeyClass> result = instance.get1(key1, () -> Optional.of(value));
+        Optional<DualKeyClass> result = instance.get1(key1, k -> Optional.of(value));
         assertEquals(expResult, result);
         assertTrue(instance.isPresent1(key1));
         assertTrue(instance.isPresent2(key2));
@@ -200,7 +201,7 @@ public class CacheDualKeyNullableTest {
     @Test
     public void testGet1_otherKey_null() throws Exception {
         Optional<DualKeyClass> expResult = Optional.of(new DualKeyClass(key1, null));
-        Optional<DualKeyClass> result = instance.get1(key1, () -> Optional.of(new DualKeyClass(key1, null)));
+        Optional<DualKeyClass> result = instance.get1(key1, k -> Optional.of(new DualKeyClass(key1, null)));
         assertEquals(expResult, result);
         assertTrue(instance.isPresent1(key1));
         assertFalse(instance.isPresent2(key2));
@@ -209,7 +210,7 @@ public class CacheDualKeyNullableTest {
     @Test
     public void testGet1_empty() throws Exception {
         Optional<DualKeyClass> expResult = Optional.empty();
-        Optional<DualKeyClass> result = instance.get1(key1, () -> Optional.empty());
+        Optional<DualKeyClass> result = instance.get1(key1, k -> Optional.empty());
         assertEquals(expResult, result);
         assertTrue(instance.isPresent1(key1));
         assertFalse(instance.isPresent2(key2));
@@ -218,7 +219,7 @@ public class CacheDualKeyNullableTest {
     @Test
     public void testGet2() throws Exception {
         Optional<DualKeyClass> expResult = Optional.of(value);
-        Optional<DualKeyClass> result = instance.get2(key2, () -> Optional.of(value));
+        Optional<DualKeyClass> result = instance.get2(key2, k -> Optional.of(value));
         assertEquals(expResult, result);
         assertTrue(instance.isPresent1(key1));
         assertTrue(instance.isPresent2(key2));
@@ -227,7 +228,7 @@ public class CacheDualKeyNullableTest {
     @Test
     public void testGet2_otherKey_null() throws Exception {
         Optional<DualKeyClass> expResult = Optional.of(new DualKeyClass(null, key2));
-        Optional<DualKeyClass> result = instance.get2(key2, () -> Optional.of(new DualKeyClass(null, key2)));
+        Optional<DualKeyClass> result = instance.get2(key2, k -> Optional.of(new DualKeyClass(null, key2)));
         assertEquals(expResult, result);
         assertFalse(instance.isPresent1(key1));
         assertTrue(instance.isPresent2(key2));
@@ -236,7 +237,7 @@ public class CacheDualKeyNullableTest {
     @Test
     public void testGet2_empty() throws Exception {
         Optional<DualKeyClass> expResult = Optional.empty();
-        Optional<DualKeyClass> result = instance.get2(key2, () -> Optional.empty());
+        Optional<DualKeyClass> result = instance.get2(key2, k -> Optional.empty());
         assertEquals(expResult, result);
         assertFalse(instance.isPresent1(key1));
         assertTrue(instance.isPresent2(key2));

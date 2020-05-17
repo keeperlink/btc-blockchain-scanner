@@ -17,8 +17,9 @@ package com.sliva.btc.scanner.db.facade;
 
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import com.sliva.btc.scanner.db.DBPreparedStatement;
-import com.sliva.btc.scanner.db.utils.DBUtils;
 import com.sliva.btc.scanner.db.model.BtcTransaction;
+import com.sliva.btc.scanner.db.model.TXID;
+import com.sliva.btc.scanner.db.utils.DBUtils;
 import com.sliva.btc.scanner.util.Utils;
 import java.util.Collection;
 import java.util.List;
@@ -73,13 +74,17 @@ public class DbQueryTransaction {
 
     @NonNull
     public Optional<BtcTransaction> findTransaction(String txid) {
-        byte[] binTxid = Utils.id2binNonNull(txid);
+        return findTransaction(TXID.build(txid));
+    }
+
+    @NonNull
+    public Optional<BtcTransaction> findTransaction(TXID binTxid) {
         return psFindTransactionByTxid
-                .setParameters(ps -> ps.setBytes(binTxid))
+                .setParameters(ps -> ps.setBytes(binTxid.getData()))
                 .querySingleRow(
                         rs -> BtcTransaction.builder()
                                 .transactionId(rs.getInt(1))
-                                .txid(binTxid)
+                                .txid(binTxid.getData())
                                 .blockHeight(rs.getInt(2))
                                 .nInputs(rs.getInt(3))
                                 .nOutputs(rs.getInt(4))
@@ -89,6 +94,11 @@ public class DbQueryTransaction {
     @NonNull
     public Optional<Integer> findTransactionId(String txid) {
         return DBUtils.readInteger(psFindTransactionIdByTxid.setParameters(ps -> ps.setBytes(Utils.id2binNonNull(txid))));
+    }
+
+    @NonNull
+    public Optional<Integer> findTransactionId(TXID ttxid) {
+        return DBUtils.readInteger(psFindTransactionIdByTxid.setParameters(ps -> ps.setBytes(ttxid.getData())));
     }
 
     @NonNull
