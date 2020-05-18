@@ -21,6 +21,7 @@ import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import com.sliva.btc.scanner.db.DBPreparedStatement;
 import com.sliva.btc.scanner.db.DbUpdate;
 import com.sliva.btc.scanner.db.model.BtcBlock;
+import static com.sliva.btc.scanner.util.Utils.getPercentage;
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import lombok.Getter;
@@ -57,7 +58,7 @@ public class DbUpdateBlock extends DbUpdate {
 
     @Override
     public int getCacheFillPercent() {
-        return cacheData.addQueue.size() * 100 / getMaxInsertsQueueSize();
+        return getPercentage(cacheData.addQueue.size(), getMaxInsertsQueueSize());
     }
 
     @Override

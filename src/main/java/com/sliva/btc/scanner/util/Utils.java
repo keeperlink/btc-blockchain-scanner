@@ -180,6 +180,7 @@ public final class Utils {
             try (Reader in = new FileReader(file)) {
                 prop.load(in);
             } catch (Exception e) {
+                throw new IllegalArgumentException("File not found: " + file);
             }
         }
         return prop;
@@ -194,6 +195,17 @@ public final class Utils {
     }
 
     public static long getPercentage(long obtained, long total) {
+        if (obtained == 0) {
+            return 0;
+        }
+        checkArgument(total > 0, "Argument 'total' has to be a positive number: %s", total);
+        return obtained * 100 / total;
+    }
+
+    public static int getPercentage(int obtained, int total) {
+        if (obtained == 0) {
+            return 0;
+        }
         checkArgument(total > 0, "Argument 'total' has to be a positive number: %s", total);
         return obtained * 100 / total;
     }

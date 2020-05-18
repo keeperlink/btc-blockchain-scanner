@@ -18,8 +18,10 @@ package com.sliva.btc.scanner.db;
 import com.sliva.btc.scanner.rpc.*;
 import com.sliva.btc.scanner.util.CommandLineUtils;
 import static com.sliva.btc.scanner.util.CommandLineUtils.buildCmdArguments;
+import java.io.File;
 import lombok.SneakyThrows;
 import org.apache.commons.cli.ParseException;
+import static org.junit.Assume.assumeTrue;
 
 /**
  *
@@ -32,6 +34,7 @@ public class DbSetup {
 
     @SneakyThrows(ParseException.class)
     public static void init() {
+        assumeTrue(new File(CONF_FILE).exists());
         buildCmdArguments(new String[]{"--db-config=" + CONF_FILE}, "", null, null, CMD_OPTS);
     }
 }

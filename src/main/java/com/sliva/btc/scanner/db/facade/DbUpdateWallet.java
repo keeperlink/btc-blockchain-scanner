@@ -21,6 +21,7 @@ import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import com.sliva.btc.scanner.db.DBPreparedStatement;
 import com.sliva.btc.scanner.db.DbUpdate;
 import com.sliva.btc.scanner.db.model.BtcWallet;
+import static com.sliva.btc.scanner.util.Utils.getPercentage;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -58,7 +59,7 @@ public class DbUpdateWallet extends DbUpdate {
 
     @Override
     public int getCacheFillPercent() {
-        return cacheData.addQueue.size() * 100 / getMaxInsertsQueueSize();
+        return getPercentage(cacheData.addQueue.size(), getMaxInsertsQueueSize());
     }
 
     @Override

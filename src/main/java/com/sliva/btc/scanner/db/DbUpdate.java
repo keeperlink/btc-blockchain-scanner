@@ -108,7 +108,9 @@ public abstract class DbUpdate implements AutoCloseable {
 
     public static void applyArguments(CommandLineUtils.CmdArguments cmdArguments) {
         dbWriteThreads = cmdArguments.getOption(dbWriteThreadsOpt).map(Integer::valueOf).orElse(DEFAULT_DB_WRITE_THREADS);
+        checkArgument(dbWriteThreads > 0, "Argument '%s' must be a positive integer value", dbWriteThreadsOpt.getLongOpt());
         minBatchSize = cmdArguments.getOption(dbMinBatchSizeOpt).map(Integer::valueOf).orElse(DEFAULT_MIN_BATCH_SIZE);
+        checkArgument(minBatchSize > 0, "Argument '%s' must be a positive integer value", dbMinBatchSizeOpt.getLongOpt());
         maxBatchSize = Math.max(minBatchSize, cmdArguments.getOption(dbMaxBatchSizeOpt).map(Integer::valueOf).orElse(DEFAULT_MAX_BATCH_SIZE));
         maxInsertsQueueSize = Math.max(minBatchSize, cmdArguments.getOption(dbMaxInsertsQueueSizeOpt).map(Integer::valueOf).orElse(DEFAULT_MAX_INSERT_QUEUE_LENGTH));
         maxUpdatesQueueSize = Math.max(minBatchSize, cmdArguments.getOption(dbMaxUpdatesQueueSizeOpt).map(Integer::valueOf).orElse(DEFAULT_MAX_UPDATE_QUEUE_LENGTH));
@@ -175,9 +177,12 @@ public abstract class DbUpdate implements AutoCloseable {
     public <T> int executeBatch(Object syncObject, Collection<T> source, DBPreparedStatement ps, int batchMaxSize, BiConsumer<T, ParamSetter> fillCallback, Consumer<Collection<T>> postExecutor) {
         checkArgument(syncObject != null, "Argument 'syncObject' is null");
         checkArgument(source != null, "Argument 'source' is null");
-        checkArgument(batchMaxSize > 0, "Argument 'batchMaxSize' (%s) must be a positive number", batchMaxSize);
         checkArgument(ps != null, "Argument 'ps' is null");
         checkArgument(fillCallback != null, "Argument 'fillCallback' is null");
+        if (source.isEmpty()) {
+            return 0;
+        }
+        checkArgument(batchMaxSize > 0, "Argument 'batchMaxSize' (%s) must be a positive number", batchMaxSize);
         Optional<Collection<T>> batchToRun = synchronize(syncObject, () -> BatchUtils.pullData(source, batchMaxSize));
         batchToRun.ifPresent(batch -> {
             BatchExecutor.executeBatch(batch, ps, fillCallback);
