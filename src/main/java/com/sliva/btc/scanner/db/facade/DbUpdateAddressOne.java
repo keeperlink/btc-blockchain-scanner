@@ -25,6 +25,7 @@ import static com.sliva.btc.scanner.db.facade.DbQueryAddressOne.updateQueryTable
 import com.sliva.btc.scanner.db.model.BinaryAddress;
 import com.sliva.btc.scanner.db.model.BtcAddress;
 import com.sliva.btc.scanner.src.SrcAddressType;
+import static com.sliva.btc.scanner.util.Utils.getPercentage;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -70,7 +71,7 @@ public class DbUpdateAddressOne extends DbUpdate {
 
     @Override
     public int getCacheFillPercent() {
-        return Math.max(cacheData.addQueue.size() * 100 / getMaxInsertsQueueSize(), cacheData.updateWalletQueue.size() * 100 / getMaxUpdatesQueueSize());
+        return Math.max(getPercentage(cacheData.addQueue.size(), getMaxInsertsQueueSize()), getPercentage(cacheData.updateWalletQueue.size(), getMaxUpdatesQueueSize()));
     }
 
     @Override

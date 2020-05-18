@@ -20,6 +20,7 @@ import static com.sliva.btc.scanner.rpc.RpcMethod.getblock;
 import com.sliva.btc.scanner.util.BJBlockHandler;
 import java.util.ArrayList;
 import java.util.List;
+import org.apache.commons.codec.binary.Hex;
 import org.bitcoinj.core.Block;
 import org.bitcoinj.core.Transaction;
 import org.bitcoinj.core.TransactionInput;
@@ -31,7 +32,6 @@ import static org.junit.Assert.*;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.spongycastle.util.encoders.Hex;
 
 /**
  *
@@ -104,7 +104,7 @@ public class RpcClientDirectTest {
         System.out.println("result=" + result);
         assertNotNull(result);
         assertEquals(expResult, result);
-        Block block = BJBlockHandler.parseBlcok(Hex.decode(result));
+        Block block = BJBlockHandler.parseBlcok(Hex.decodeHex(result));
         System.out.println("block=" + block);
     }
 
@@ -121,7 +121,7 @@ public class RpcClientDirectTest {
         String result = instance.getRawBlock(hash);
         System.out.println("result.size=" + result.length());
         assertNotNull(result);
-        Block block = BJBlockHandler.parseBlcok(Hex.decode(result));
+        Block block = BJBlockHandler.parseBlcok(Hex.decodeHex(result));
         //System.out.println("block=" + block);
         Transaction tran = block.getTransactions().stream().filter(t -> "ed6ad1f896ff8221cfca585acf365c64b346dfc124fd9105de48e9fd22148d7b".equalsIgnoreCase(t.getHashAsString())).findAny().get();
         printTx(tran);
@@ -145,12 +145,12 @@ public class RpcClientDirectTest {
                 System.out.println("witness=" + witness);
                 System.out.println("witness.pushCount=" + witness.getPushCount());
                 byte[] hashsig = findHashsig(witness);
-                System.out.println("witness.hashsig=" + Hex.toHexString(hashsig));
+                System.out.println("witness.hashsig=" + Hex.encodeHexString(hashsig));
                 System.out.println("sighashType=" + SighashType.toHexString(hashsig[hashsig.length - 1]));
             } else {
                 System.out.println("scriptSig.chunks=" + scriptSig.getChunks());
                 findHashsig(scriptSig).forEach(hashsig -> {
-                    System.out.println("witness.hashsig=" + Hex.toHexString(hashsig));
+                    System.out.println("witness.hashsig=" + Hex.encodeHexString(hashsig));
                     System.out.println("sighashType=" + SighashType.toHexString(hashsig[hashsig.length - 1]));
                 });
             }

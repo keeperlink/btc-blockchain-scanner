@@ -23,9 +23,11 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import lombok.SneakyThrows;
 import lombok.ToString;
+import org.apache.commons.codec.DecoderException;
+import org.apache.commons.codec.binary.Hex;
 import org.bitcoinj.core.Block;
-import org.spongycastle.util.encoders.Hex;
 
 /**
  *
@@ -54,9 +56,10 @@ public class RpcBlock<T extends RpcTransaction<RpcInput, RpcOutput<RpcAddress>>>
         this.transactions = new LazyInitializer<>(this::_getTransactions);
     }
 
+    @SneakyThrows(DecoderException.class)
     private Block getBlock(String hash) {
         try {
-            return BJBlockHandler.parseBlcok(Hex.decode(RpcClientDirect.getInstance().getRawBlock(hash)));
+            return BJBlockHandler.parseBlcok(Hex.decodeHex(RpcClientDirect.getInstance().getRawBlock(hash)));
         } catch (IOException e) {
             throw new RuntimeException("blockHash=" + hash, e);
         }

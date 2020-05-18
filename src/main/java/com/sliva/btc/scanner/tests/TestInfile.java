@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2018 Sliva Co.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,6 +18,7 @@ package com.sliva.btc.scanner.tests;
 import com.sliva.btc.scanner.db.DBConnectionSupplier;
 import java.lang.reflect.Field;
 import java.util.Arrays;
+import org.apache.commons.codec.binary.Hex;
 import org.bitcoinj.core.Address;
 import org.bitcoinj.core.Base58;
 import org.bitcoinj.core.Bech32;
@@ -27,7 +28,6 @@ import org.bitcoinj.core.NetworkParameters;
 import org.bitcoinj.core.SegwitAddress;
 import org.bitcoinj.params.MainNetParams;
 import org.bitcoinj.script.Script;
-import org.spongycastle.util.encoders.Hex;
 
 /**
  *
@@ -72,7 +72,7 @@ public class TestInfile {
         byte[] b = Base58.decodeChecked(src);
         System.out.println("Version byte: " + b[0]);
         byte[] data = Arrays.copyOfRange(b, 1, b.length);
-        System.out.println("Hex: " + Hex.toHexString(data));
+        System.out.println("Hex: " + Hex.encodeHexString(data));
         System.out.println("len=" + data.length);
         String s = Base58.encodeChecked(b[0], data);
         System.out.println("s=" + s);
@@ -93,7 +93,7 @@ public class TestInfile {
         Field f = Bech32Data.class.getDeclaredField("data");
         f.setAccessible(true);
         byte[] bedata = (byte[]) f.get(be);
-        System.out.println("be=" + Hex.toHexString(bedata));
+        System.out.println("be=" + Hex.encodeHexString(bedata));
         System.out.println("len=" + bedata.length);
         System.out.println("src=" + src + ", size=" + src.length());
     }
